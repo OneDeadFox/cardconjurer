@@ -1009,6 +1009,20 @@ textarea.input {
 .csv-mapping-source {
 	overflow-wrap: anywhere;
 }
+.csv-mapping-row > *,
+.csv-preview-controls > * {
+	min-width: 0;
+	max-width: 100%;
+}
+.csv-preview-controls {
+	display: grid;
+	grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+	gap: 0.5rem;
+}
+.csv-preview-controls button {
+	grid-column: 1 / -1;
+	white-space: normal;
+}
 .csv-preview {
 	max-height: 24rem;
 	overflow: auto;
@@ -1038,7 +1052,11 @@ textarea.input {
 	margin-left: 1.5rem;
 }
 @media only screen and (max-width: 650px) {
-	.csv-mapping-row {
-		grid-template-columns: 1fr;
+	.csv-mapping-row,
+	.csv-preview-controls {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.csv-preview-controls button {
+		grid-column: auto;
 	}
 }
