@@ -4,6 +4,7 @@
 	var templateCard = null;
 	var artDirectoryHandle = null;
 	var activeArtObjectUrl = '';
+	var activeImageFieldObjectUrls = {};
 	var activeTransformLayout = false;
 
 	function cloneSerializableCard(sourceCard) {
@@ -408,6 +409,7 @@
 		var fields = {};
 		var metadata = {};
 		var textboxes = {};
+		var imageFields = {};
 		var features = {};
 
 		csvState.mappings.forEach(function (target, columnIndex) {
@@ -429,6 +431,10 @@
 				features[target] = value;
 				return;
 			}
+			if (target.indexOf('imagefield:') === 0) {
+				imageFields[target.substring('imagefield:'.length)] = value;
+				return;
+			}
 			if (target.indexOf('textbox:') === 0) {
 				var textboxKey = target.substring(8);
 				if (!textboxes[textboxKey]) {
@@ -444,6 +450,7 @@
 			fields: fields,
 			metadata: metadata,
 			textboxes: textboxes,
+			imageFields: imageFields,
 			features: features,
 			sourceRow: rowIndex + 2
 		};
@@ -680,6 +687,7 @@
 			alternateCard: alternateCard,
 			fields: mapped.fields,
 			alternateFields: alternateFields,
+			imageFields: Object.assign({}, mapped.imageFields),
 			features: Object.assign({}, mapped.features),
 			warnings: warnings,
 			transform: transform,
@@ -695,6 +703,7 @@
 			return {
 				card: cloneSerializableCard(result.alternateCard),
 				fields: Object.assign({}, result.alternateFields),
+				imageFields: Object.assign({}, result.imageFields),
 				features: Object.assign({}, result.features),
 				warnings: result.warnings.slice(),
 				transformFace: 'back',
@@ -705,6 +714,7 @@
 		return {
 			card: cloneSerializableCard(result.card),
 			fields: Object.assign({}, result.fields),
+			imageFields: Object.assign({}, result.imageFields),
 			features: Object.assign({}, result.features),
 			warnings: result.warnings.slice(),
 			transformFace: result.transform ? 'front' : '',
@@ -911,6 +921,112 @@
 		setInputValue('#art-rotate', card.artRotate || 0);
 	}
 
+
+	function isDirectImageSource(value) {
+		return /^(?:https?:|data:image\/|blob:|\/)/i.test(String(value || '').trim());
+	}
+
+	async function resolveMappedImageField(value, label) {
+		var requested = String(value || '').trim();
+		if (!requested) {
+			return {
+				source: '/img/blank.png',
+				objectUrl: false,
+				label: label + ' (blank)'
+			};
+		}
+		if (isDirectImageSource(requested)) {
+			return {
+				source: requested,
+				objectUrl: false,
+				label: label + ': ' + requested
+			};
+		}
+		var file;
+		try {
+			file = await getSelectedArtFile(requested);
+		} catch (error) {
+			if (error && error.name === 'NotFoundError' && artDirectoryHandle) {
+				throw new Error('Image file "' + requested + '" for "' + label + '" was not found in "' + artDirectoryHandle.name + '".');
+			}
+			if (!artDirectoryHandle) {
+				throw new Error('Select an art folder before using the file "' + requested + '" for "' + label + '".');
+			}
+			throw error;
+		}
+		if (file.type && file.type.indexOf('image/') !== 0) {
+			throw new Error('Image file "' + requested + '" for "' + label + '" is not a recognized image.');
+		}
+		return {
+			source: URL.createObjectURL(file),
+			objectUrl: true,
+			label: label + ': ' + requested
+		};
+	}
+
+	async function addMissingImageFieldFrame(templateFrame) {
+		if (!templateFrame || typeof addFrame !== 'function') {
+			return null;
+		}
+		var restoredFrame = JSON.parse(JSON.stringify(templateFrame));
+		restoredFrame.masks = restoredFrame.masks || [];
+		card.frames = card.frames || [];
+		card.frames.unshift(restoredFrame);
+		await addFrame([], restoredFrame);
+		return restoredFrame;
+	}
+
+	async function applyMappedImageFields(result) {
+		var applied = [];
+		var mappings = result.imageFields || {};
+		for (var key of Object.keys(mappings)) {
+			var frame = (card.frames || []).find(function (item) {
+				return item.csvImageFieldKey === key;
+			});
+			if (!frame) {
+				var templateFrame = (result.card.frames || []).find(function (item) {
+					return item.csvImageFieldKey === key;
+				});
+				frame = await addMissingImageFieldFrame(templateFrame);
+			}
+			if (!frame) {
+				result.warnings.push('The custom image field "' + key + '" is not present in the captured template.');
+				continue;
+			}
+
+			var label = frame.csvFieldLabel || frame.name || key;
+			var resolved = await resolveMappedImageField(mappings[key], label);
+			if (activeImageFieldObjectUrls[key]) {
+				URL.revokeObjectURL(activeImageFieldObjectUrls[key]);
+				delete activeImageFieldObjectUrls[key];
+			}
+			if (resolved.objectUrl) {
+				activeImageFieldObjectUrls[key] = resolved.source;
+			}
+
+			frame.src = resolved.source;
+			frame.noThumb = true;
+			if (!frame.image) {
+				frame.image = new Image();
+				frame.image.crossOrigin = 'anonymous';
+			}
+			frame.image.src = typeof fixUri === 'function' ? fixUri(resolved.source) : resolved.source;
+			await waitForImage(frame.image, label);
+
+			var frameIndex = card.frames.indexOf(frame);
+			var frameElement = document.querySelector('#frame-list')?.children[frameIndex];
+			var thumbnail = frameElement?.querySelector('img');
+			if (thumbnail) {
+				thumbnail.src = frame.image.src;
+			}
+			applied.push(label);
+		}
+		if (applied.length && typeof drawFrames === 'function') {
+			await drawFrames();
+		}
+		return applied;
+	}
+
 	function parseFeatureBoolean(value) {
 		var normalized = String(value || '').trim().toLowerCase();
 		if (['true', 'yes', 'y', '1', 'x', 'on'].includes(normalized)) {
@@ -1096,6 +1212,7 @@
 		await applyMappedArt(result);
 		await waitForCardFonts();
 		result.appliedFrameType = await applyMappedFrame(result);
+		result.appliedImageFields = await applyMappedImageFields(result);
 		applyMappedFeatures(result);
 
 		if (typeof bottomInfoEdited === 'function') {
@@ -1403,6 +1520,7 @@
 				'P/T: ' + ((card.text.pt && card.text.pt.text) || '(blank)'),
 				'Frame: ' + (renderResult.appliedFrameType || 'Captured template'),
 				'Art: ' + (renderResult.appliedArt || 'Captured template art'),
+				'Custom images: ' + ((renderResult.appliedImageFields || []).length),
 				'Feature controls: ' + ((renderResult.appliedFeatures || []).length)
 			];
 			var faceDescription = result.transform ? (face === 'back' ? 'back face of ' : 'front face of ') : '';
@@ -1414,6 +1532,14 @@
 			status.textContent = error.message || 'The selected row could not be previewed.';
 		}
 	}
+
+
+	window.addEventListener('beforeunload', function () {
+		Object.keys(activeImageFieldObjectUrls).forEach(function (key) {
+			URL.revokeObjectURL(activeImageFieldObjectUrls[key]);
+		});
+		activeImageFieldObjectUrls = {};
+	});
 
 	window.CSVCardBuilder = {
 		csvChanged: csvChanged,
