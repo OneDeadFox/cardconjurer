@@ -486,8 +486,28 @@
 		for (var index = 0; index < parts.length - 1; index++) {
 			currentDirectory = await currentDirectory.getDirectoryHandle(parts[index]);
 		}
-		var fileHandle = await currentDirectory.getFileHandle(parts[parts.length - 1]);
-		return fileHandle.getFile();
+
+		var requestedName = parts[parts.length - 1];
+		var candidateNames = [requestedName];
+		if (!/\.[a-z0-9]+$/i.test(requestedName)) {
+			['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.svg'].forEach(function (extension) {
+				candidateNames.push(requestedName + extension);
+			});
+		}
+
+		var lastError = null;
+		for (var candidateName of candidateNames) {
+			try {
+				var fileHandle = await currentDirectory.getFileHandle(candidateName);
+				return fileHandle.getFile();
+			} catch (error) {
+				if (!error || error.name !== 'NotFoundError') {
+					throw error;
+				}
+				lastError = error;
+			}
+		}
+		throw lastError || new DOMException('Artwork file not found.', 'NotFoundError');
 	}
 
 	async function resolveMappedArt(fields, fallbackSource) {
