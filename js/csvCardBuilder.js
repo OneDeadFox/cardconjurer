@@ -125,6 +125,23 @@
 		return colors;
 	}
 
+	async function waitForCardFonts() {
+		if (!document.fonts || typeof document.fonts.load !== 'function') {
+			return;
+		}
+		var fonts = ['belerenb', 'belerenbsc', 'mplantin', 'gothammedium'];
+		Object.keys(card.text || {}).forEach(function (key) {
+			var font = card.text[key] && card.text[key].font;
+			if (font && !fonts.includes(font)) {
+				fonts.push(font);
+			}
+		});
+		await Promise.all(fonts.map(function (font) {
+			return document.fonts.load('16px "' + font + '"');
+		}));
+		await document.fonts.ready;
+	}
+
 	async function waitForFrameImages(callback) {
 		if (typeof ImageLoadTracker !== 'undefined') {
 			ImageLoadTracker.start();
@@ -452,6 +469,7 @@
 			uploadArt(artUrl, 'autoFit');
 		}
 
+		await waitForCardFonts();
 		result.appliedFrameType = await applyMappedFrame(result);
 
 		if (typeof bottomInfoEdited === 'function') {
