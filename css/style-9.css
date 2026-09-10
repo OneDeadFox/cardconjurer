@@ -962,7 +962,7 @@ textarea.input {
 	max-width: calc(50vw - 2rem);
 	max-height: calc(100vh - 2rem);
 	top: 1rem;
-	right: 1rem;
+	right: 6rem;
 	left: auto;
 	transform: none;
 	overflow-y: auto;
