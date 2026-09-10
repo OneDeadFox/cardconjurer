@@ -2725,6 +2725,118 @@ async function addTextbox(textboxType) {
 		loadTextOptions({dateStamp: {name:'Date Stamp', text:'', x:0.11, y:0.5072, width:0.78, height:0.0286, size:0.0286, font:'belerenb', oneLine:true, align:'right', color:'#ffd35b', shadowX:-0.0007, shadowY:-0.001}}, false);
 	}
 }
+function setCustomTemplateFieldStatus(message, isError) {
+	var status = document.querySelector('#custom-template-field-status');
+	if (!status) {
+		return;
+	}
+	status.textContent = message;
+	status.classList.toggle('csv-import-error', !!isError);
+}
+
+function customTemplateFieldLabelExists(label) {
+	var normalized = String(label || '').trim().toLowerCase();
+	var textMatch = Object.keys(card.text || {}).some(function (key) {
+		var field = card.text[key] || {};
+		return field.customField && String(field.csvFieldLabel || field.name || key).trim().toLowerCase() === normalized;
+	});
+	var imageMatch = (card.frames || []).some(function (frame) {
+		return frame.csvImageFieldKey &&
+			String(frame.csvFieldLabel || frame.name || frame.csvImageFieldKey).trim().toLowerCase() === normalized;
+	});
+	return textMatch || imageMatch;
+}
+
+function customTemplateFieldKey(label, prefix, existingKeys) {
+	var slug = String(label || '').trim().toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '') || 'field';
+	var base = prefix + '-' + slug;
+	var key = base;
+	var number = 2;
+	while (existingKeys.indexOf(key) !== -1) {
+		key = base + '-' + number;
+		number++;
+	}
+	return key;
+}
+
+async function addCustomTemplateField(kind) {
+	var input = document.querySelector('#custom-template-field-label');
+	var label = String(input ? input.value : '').trim();
+	if (!label) {
+		setCustomTemplateFieldStatus('Enter a field label first.', true);
+		return;
+	}
+	if (customTemplateFieldLabelExists(label)) {
+		setCustomTemplateFieldStatus('A custom field named "' + label + '" already exists.', true);
+		return;
+	}
+
+	try {
+		if (kind === 'text') {
+			card.text = card.text || {};
+			var textKey = customTemplateFieldKey(label, 'custom-text', Object.keys(card.text));
+			var definition = {};
+			definition[textKey] = {
+				name: label,
+				csvFieldLabel: label,
+				customField: true,
+				text: '',
+				x: 0.1,
+				y: 0.1,
+				width: 0.8,
+				height: 0.06,
+				size: 0.035,
+				fontSize: 0,
+				font: 'mplantin',
+				color: 'black',
+				align: 'left'
+			};
+			loadTextOptions(definition, false);
+			var textIndex = Object.keys(card.text).indexOf(textKey);
+			var textOptions = document.querySelectorAll('#text-options .text-option');
+			if (textOptions[textIndex]) {
+				textOptions[textIndex].click();
+			}
+			setCustomTemplateFieldStatus('Added text field "' + label + '". Open the Text tab to edit its text and bounds.', false);
+		} else if (kind === 'image') {
+			var imageKeys = (card.frames || []).map(function (frame) { return frame.csvImageFieldKey || ''; });
+			var imageKey = customTemplateFieldKey(label, 'custom-image', imageKeys);
+			var frame = {
+				name: 'Image Field: ' + label,
+				csvFieldLabel: label,
+				csvImageFieldKey: imageKey,
+				customField: true,
+				src: '/img/blank.png',
+				noThumb: true,
+				masks: [],
+				bounds: {x: 0.1, y: 0.1, width: 0.25, height: 0.25},
+				opacity: 100
+			};
+			card.frames = card.frames || [];
+			card.frames.unshift(frame);
+			await addFrame([], frame);
+			selectedFrame = frame;
+			var frameElement = document.querySelector('#frame-list')?.firstElementChild;
+			if (frameElement) {
+				frameElementClicked({target: frameElement});
+			}
+			setCustomTemplateFieldStatus('Added image field "' + label + '". Use the Frame Image Editor to set its position and size.', false);
+		} else {
+			throw new Error('Unknown custom field type.');
+		}
+		if (input) {
+			input.value = '';
+		}
+		if (window.CSVImporter) {
+			CSVImporter.refreshTextFields();
+		}
+	} catch (error) {
+		setCustomTemplateFieldStatus(error.message || 'The custom field could not be added.', true);
+	}
+}
+
 //ART TAB
 function uploadArt(imageSource, otherParams) {
 	ImageLoadTracker.track(imageSource);
