@@ -670,6 +670,20 @@
 					</div>
 					<div id='creator-menu-import' class='hidden'>
 						<div class='readable-background margin-bottom padding'>
+							<h5 class='padding margin-bottom input-description'>Import custom cards from a CSV file</h5>
+							<input id='csv-import-file' type='file' accept='.csv,text/csv' class='input margin-bottom' onchange='CSVImporter.loadFile(event);' aria-label='Upload CSV file'>
+							<h5 id='csv-import-status' class='padding input-description'>No CSV loaded.</h5>
+							<div id='csv-import-errors' class='csv-import-errors hidden padding'></div>
+							<div id='csv-import-details' class='hidden'>
+								<h5 class='padding margin-bottom input-description'>Map each CSV column to a built-in field, a current-template text field, custom metadata, or Ignore.</h5>
+								<button class='input margin-bottom' onclick='CSVImporter.refreshTextFields();'>Refresh Current Template Text Fields</button>
+								<div id='csv-mapping-rows' class='margin-bottom'></div>
+								<h5 class='padding margin-bottom input-description'>Preview of the first three card rows</h5>
+								<div id='csv-preview' class='csv-preview margin-bottom'></div>
+								<h5 class='padding input-description'>This milestone validates parsing and mappings only. Batch generation will be enabled after the mapping workflow is verified.</h5>
+							</div>
+						</div>
+						<div class='readable-background margin-bottom padding'>
 							<h5 class='padding margin-bottom input-description'>Import a real card by name</h5>
 							<input id='import-name' class='input margin-bottom' type='text' onchange='importChanged();' placeholder='Enter Card Name'>
 							<label class='checkbox-container input margin-bottom'>Include all unique prints as options
@@ -981,5 +995,6 @@
 	</div>
 	<script defer src='/js/autoFrame.js'></script>
 	<script defer src='/js/creator-23.js'></script>
+	<script defer src='/js/csvImport.js'></script>
 	<script defer src='/js/frameSearch.js'></script>
 <!-- END OF CONTENT -->
