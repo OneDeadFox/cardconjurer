@@ -687,7 +687,11 @@
 									<select id='csv-card-preview-row' class='input' aria-label='Select CSV card row to preview'></select>
 									<button class='input' onclick='CSVCardBuilder.previewSelectedRow();'>Preview Selected Card</button>
 								</div>
-								<h5 id='csv-card-preview-status' class='padding input-description'>Preview uses session memory and does not save the card.</h5>
+								<h5 id='csv-card-preview-status' class='padding margin-bottom input-description'>Preview uses session memory and does not save the card.</h5>
+								<h5 class='padding margin-bottom input-description'>Generate all included rows and download one ZIP file per Player/Chunk value</h5>
+								<button id='csv-batch-export' class='input margin-bottom' onclick='CSVCardBuilder.exportBatch();'>Generate and Download CSV Batch</button>
+								<progress id='csv-batch-progress' class='margin-bottom' max='1' value='0' style='width:100%;'></progress>
+								<h5 id='csv-batch-status' class='padding input-description'>Batch generation uses session memory and does not add cards to local storage.</h5>
 							</div>
 						</div>
 						<div class='readable-background margin-bottom padding'>
@@ -1003,6 +1007,7 @@
 	<script defer src='/js/autoFrame.js'></script>
 	<script defer src='/js/creator-23.js'></script>
 	<script defer src='/js/csvImport.js'></script>
+	<script defer src='/js/vendor/jszip.min.js'></script>
 	<script defer src='/js/csvCardBuilder.js'></script>
 	<script defer src='/js/frameSearch.js'></script>
 <!-- END OF CONTENT -->
