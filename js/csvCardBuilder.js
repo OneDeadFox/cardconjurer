@@ -247,7 +247,15 @@
 	}
 
 	async function applyPreviewToCurrentCard(result) {
-		card.text = JSON.parse(JSON.stringify(result.card.text));
+		var previewText = JSON.parse(JSON.stringify(result.card.text));
+		card.text = card.text || {};
+		Object.keys(previewText).forEach(function (key) {
+			if (card.text[key]) {
+				card.text[key].text = previewText[key].text;
+			} else {
+				card.text[key] = previewText[key];
+			}
+		});
 		card.csvImport = JSON.parse(JSON.stringify(result.card.csvImport));
 
 		['infoNumber', 'infoRarity', 'infoSet', 'infoLanguage', 'infoYear', 'infoArtist'].forEach(function (key) {
@@ -340,8 +348,17 @@
 		try {
 			var result = buildCard(Number(selector.value));
 			await applyPreviewToCurrentCard(result);
+			window.lastCSVPreview = result;
+			var appliedValues = [
+				'Title: ' + ((card.text.title && card.text.title.text) || '(blank)'),
+				'Mana: ' + ((card.text.mana && card.text.mana.text) || '(blank)'),
+				'Type: ' + ((card.text.type && card.text.type.text) || '(blank)'),
+				'Rules: ' + ((card.text.rules && card.text.rules.text) || '(blank)'),
+				'P/T: ' + ((card.text.pt && card.text.pt.text) || '(blank)')
+			];
 			status.textContent = 'Previewed ' + (result.fields.name || 'row ' + (Number(selector.value) + 2)) +
-				(result.warnings.length ? '. ' + result.warnings.join(' ') : '.');
+				'. Applied ' + appliedValues.join('; ') + '.' +
+				(result.warnings.length ? ' ' + result.warnings.join(' ') : '');
 		} catch (error) {
 			status.textContent = error.message || 'The selected row could not be previewed.';
 		}
