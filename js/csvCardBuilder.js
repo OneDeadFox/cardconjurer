@@ -2,6 +2,8 @@
 	'use strict';
 
 	var templateCard = null;
+	var artDirectoryHandle = null;
+	var activeArtObjectUrl = '';
 
 	function cloneSerializableCard(sourceCard) {
 		var cloned = JSON.parse(JSON.stringify(sourceCard));
@@ -432,33 +434,135 @@
 		}
 	}
 
-	function localArtSource(fileName) {
-		var normalized = String(fileName || '').trim().replace(/\\/g, '/').replace(/^\/+/, '');
-		return normalized ? '/local_art/' + normalized.split('/').map(encodeURIComponent).join('/') : '';
+	function setArtFolderStatus(message) {
+		var status = document.querySelector('#csv-art-folder-status');
+		if (status) {
+			status.textContent = message;
+		}
 	}
 
-	async function waitForImage(image) {
+	async function selectArtFolder() {
+		if (typeof window.showDirectoryPicker !== 'function') {
+			setArtFolderStatus('This browser does not support folder selection. Use a current version of Edge or Chrome.');
+			return;
+		}
+		try {
+			var selectedHandle = await window.showDirectoryPicker({mode: 'read'});
+			artDirectoryHandle = selectedHandle;
+			setArtFolderStatus('Selected art folder: ' + selectedHandle.name + '. This permission lasts for this browser session.');
+		} catch (error) {
+			if (error && error.name === 'AbortError') {
+				setArtFolderStatus(artDirectoryHandle ?
+					'Folder selection canceled. Still using: ' + artDirectoryHandle.name + '.' :
+					'Folder selection canceled. No art folder selected.');
+				return;
+			}
+			console.error('Unable to select the CSV art folder:', error);
+			setArtFolderStatus('The art folder could not be opened: ' + (error.message || 'unknown error') + '.');
+		}
+	}
+
+	function normalizeArtPath(fileName) {
+		var normalized = String(fileName || '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+		if (!normalized) {
+			return [];
+		}
+		var parts = normalized.split('/').filter(Boolean);
+		if (parts.some(function (part) { return part === '.' || part === '..'; })) {
+			throw new Error('Art File paths cannot contain "." or ".." folders.');
+		}
+		return parts;
+	}
+
+	async function getSelectedArtFile(fileName) {
+		if (!artDirectoryHandle) {
+			throw new Error('Select an art folder before using the Art File column.');
+		}
+		var parts = normalizeArtPath(fileName);
+		if (!parts.length) {
+			throw new Error('The Art File value is blank.');
+		}
+		var currentDirectory = artDirectoryHandle;
+		for (var index = 0; index < parts.length - 1; index++) {
+			currentDirectory = await currentDirectory.getDirectoryHandle(parts[index]);
+		}
+		var fileHandle = await currentDirectory.getFileHandle(parts[parts.length - 1]);
+		return fileHandle.getFile();
+	}
+
+	async function resolveMappedArt(fields, fallbackSource) {
+		var artUrl = String(fields.artUrl || '').trim();
+		if (artUrl) {
+			return {
+				source: artUrl,
+				autoFit: true,
+				objectUrl: false,
+				label: 'Art URL'
+			};
+		}
+
+		var artFileName = String(fields.artFile || '').trim();
+		if (artFileName) {
+			var file;
+			try {
+				file = await getSelectedArtFile(artFileName);
+			} catch (error) {
+				if (error && error.name === 'NotFoundError') {
+					throw new Error('Art file "' + artFileName + '" was not found in "' + artDirectoryHandle.name + '".');
+				}
+				throw error;
+			}
+			if (file.type && file.type.indexOf('image/') !== 0) {
+				throw new Error('Art file "' + artFileName + '" is not a recognized image.');
+			}
+			return {
+				source: URL.createObjectURL(file),
+				autoFit: true,
+				objectUrl: true,
+				label: 'Art File: ' + artFileName
+			};
+		}
+
+		return {
+			source: fallbackSource || '/img/blank.png',
+			autoFit: false,
+			objectUrl: false,
+			label: 'Captured template art'
+		};
+	}
+
+	async function waitForImage(image, label) {
 		if (!image) {
 			return;
 		}
-		if (image.complete && image.naturalWidth) {
+		if (image.complete) {
+			if (!image.naturalWidth) {
+				throw new Error((label || 'Artwork') + ' could not be loaded.');
+			}
 			if (typeof image.decode === 'function') {
 				try {
 					await image.decode();
 				} catch (error) {
-					// The normal image error handler supplies the fallback image.
+					throw new Error((label || 'Artwork') + ' could not be decoded.');
 				}
 			}
 			return;
 		}
-		await new Promise(function (resolve) {
-			var finished = function () {
-				image.removeEventListener('load', finished);
-				image.removeEventListener('error', finished);
+		await new Promise(function (resolve, reject) {
+			var cleanup = function () {
+				image.removeEventListener('load', loaded);
+				image.removeEventListener('error', failed);
+			};
+			var loaded = function () {
+				cleanup();
 				resolve();
 			};
-			image.addEventListener('load', finished, {once: true});
-			image.addEventListener('error', finished, {once: true});
+			var failed = function () {
+				cleanup();
+				reject(new Error((label || 'Artwork') + ' could not be loaded.'));
+			};
+			image.addEventListener('load', loaded);
+			image.addEventListener('error', failed);
 		});
 	}
 
@@ -471,12 +575,25 @@
 				card[key] = JSON.parse(JSON.stringify(result.card[key]));
 			}
 		});
-		var rowArtSource = String(result.fields.artUrl || '').trim() ||
-			localArtSource(result.fields.artFile) ||
-			result.card.artSource || '/img/blank.png';
-		var shouldAutoFit = String(result.fields.artUrl || result.fields.artFile || '').trim() !== '';
-		uploadArt(rowArtSource, shouldAutoFit ? 'autoFit' : '');
-		await waitForImage(art);
+
+		var resolvedArt = await resolveMappedArt(result.fields, result.card.artSource);
+		var nextObjectUrl = resolvedArt.objectUrl ? resolvedArt.source : '';
+		try {
+			uploadArt(resolvedArt.source, resolvedArt.autoFit ? 'autoFit' : '');
+			await waitForImage(art, resolvedArt.label);
+		} catch (error) {
+			if (nextObjectUrl) {
+				URL.revokeObjectURL(nextObjectUrl);
+			}
+			throw error;
+		}
+
+		if (activeArtObjectUrl && activeArtObjectUrl !== nextObjectUrl) {
+			URL.revokeObjectURL(activeArtObjectUrl);
+		}
+		activeArtObjectUrl = nextObjectUrl;
+		result.appliedArt = resolvedArt.label;
+
 		setInputValue('#art-x', scaleX(card.artX) - scaleWidth(card.marginX || 0));
 		setInputValue('#art-y', scaleY(card.artY) - scaleHeight(card.marginY || 0));
 		setInputValue('#art-zoom', (card.artZoom || 1) * 100);
@@ -695,7 +812,7 @@
 						addedCards++;
 					} catch (error) {
 						console.error('CSV batch row failed:', job.rowIndex + 2, error);
-						failedCards.push(displayName);
+						failedCards.push(displayName + ': ' + (error.message || 'render failed'));
 					}
 					completed++;
 					progress.value = completed;
@@ -795,7 +912,8 @@
 				'Type: ' + ((card.text.type && card.text.type.text) || '(blank)'),
 				'Rules: ' + ((card.text.rules && card.text.rules.text) || '(blank)'),
 				'P/T: ' + ((card.text.pt && card.text.pt.text) || '(blank)'),
-				'Frame: ' + (result.appliedFrameType || 'Captured template')
+				'Frame: ' + (result.appliedFrameType || 'Captured template'),
+				'Art: ' + (result.appliedArt || 'Captured template art')
 			];
 			status.textContent = 'Previewed ' + (result.fields.name || 'row ' + (Number(selector.value) + 2)) +
 				'. Applied ' + appliedValues.join('; ') + '.' +
@@ -808,6 +926,7 @@
 	window.CSVCardBuilder = {
 		csvChanged: csvChanged,
 		captureTemplate: captureTemplate,
+		selectArtFolder: selectArtFolder,
 		previewSelectedRow: previewSelectedRow,
 		exportBatch: exportBatch,
 		buildCard: buildCard
