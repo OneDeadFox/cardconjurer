@@ -18,7 +18,7 @@ The existing top-level **Frame** tab contains two internal workspaces that share
 - **Design Frame:** saved projects, the persistent asset library, and access to layer editing.
 - **Current Frame Layers:** shared between both workspaces. Layers can be reordered in either workspace, but clicking a layer opens its editor only in Design Frame.
 
-General display options remain visible beneath both workspaces. The Frame Image Editor is a compact movable panel limited to less than half the viewport width. Drag its title to reposition it. Scrolling a numeric layer input changes the value and redraws immediately; typed values apply only after Enter or leaving the field.
+General display options remain visible beneath both workspaces. The Frame Image Editor is a compact movable panel limited to less than half the viewport width. Its six primary numeric controls use a 3-by-2 grid, the HSL sliders are labeled, and mask/action controls sit beside the HSL section. Drag the title to reposition it. Scrolling a numeric layer input changes the value and redraws immediately; typed values apply only after Enter or leaving the field.
 
 ## Current foundation
 
@@ -75,6 +75,18 @@ All of these properties are serialized with Frame Designer projects. Reset resto
 IndexedDB data belongs to the exact browser site origin. Continue opening the app from the same Live Server address and port (currently `http://127.0.0.1:5500`). Opening `localhost`, another port, another browser profile, or a file-system URL creates a separate storage area.
 
 Local image assets remain available offline. Assets saved as remote URLs still depend on that URL remaining accessible.
+
+## Frame construction resource library
+
+The Design Frame workspace will provide the ingredients needed to build a frame from scratch:
+
+- A user-imported texture library stored in IndexedDB.
+- A curated built-in mask catalog assembled from Card Conjurer's existing frame assets.
+- Categories for title bars, type lines, rules boxes, borders, pinlines, power/toughness boxes, art windows, split regions, Transform layouts, and general shapes.
+- A non-destructive **Texture + Mask → New Layer** action.
+- Search, previews, reusable favorites, and custom mask import.
+
+The existing M15 asset tree contains hundreds of mask/section-related candidate files, including duplicates and thumbnail images. A manifest will expose only usable source masks with readable names and categories. Texture files stored on the user's computer must be bulk-imported into the persistent library before they can be used.
 
 ## Next V1 phases
 
