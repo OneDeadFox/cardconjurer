@@ -108,6 +108,11 @@
 				</div>
 				<div id='creator-menu-sections' class='margin-bottom'>
 					<div id='creator-menu-frame'>
+						<div id='frame-workspace-tabs' class='creator-menu-tabs' role='tablist' aria-label='Frame workspace'>
+							<h3 class='selectable readable-background selected' role='tab' aria-selected='true' data-frame-workspace='browse' onclick='toggleFrameWorkspace(event, "browse");'>Browse Frames</h3>
+							<h3 class='selectable readable-background' role='tab' aria-selected='false' data-frame-workspace='design' onclick='toggleFrameWorkspace(event, "design");'>Design Frame</h3>
+						</div>
+						<div id='frame-workspace-browse' role='tabpanel'>
 						<div class='readable-background margin-bottom padding'>
 							<h5 class='margin-bottom padding input-description'>
 								Select a Frame Group and a Frame Pack, or type to search. Then you may Load the selected Frame Version (loading the frame version configures text placement, art size, etc...)</h5>
@@ -167,6 +172,8 @@
 								</div>
 							<h5 id='selectedPreview' class='padding input-description'>(Selected: White Frame, No Mask)</h5>
 						</div>
+						</div>
+						<div id='frame-workspace-design' class='hidden' role='tabpanel'>
 						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Drag to reorder frame images</h5>
 							<div id='frame-list' class='frame-list margin-bottom'></div>
@@ -201,6 +208,7 @@
 								<button class='input' onclick='FrameProjectStore.deleteSelectedAsset();'>Delete Asset</button>
 							</div>
 							<h5 id='frame-asset-status' class='padding input-description'>Opening the frame asset library...</h5>
+						</div>
 						</div>
 						<div class='readable-background padding'>
 							<h5 class='input-description margin-bottom'>Rounded Corners (When Downloaded)</h5>
