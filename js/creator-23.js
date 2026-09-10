@@ -1050,16 +1050,40 @@ function frameElementMaskRemoved() {
 		});
 	}
 }
-function uploadMaskOption(imageSource) {
-	const uploadedMask = {name:`Uploaded Image (${customCount})`, src:imageSource, noThumb:true, image: new Image()};
+async function uploadMaskOption(imageSource, otherParams) {
+	const fallbackName = `Uploaded Mask (${customCount})`;
+	const assetName = window.FrameProjectStore
+		? FrameProjectStore.sourceFromParams(otherParams, fallbackName)
+		: fallbackName;
+	const uploadedMask = {name:assetName, src:imageSource, noThumb:true, image:new Image()};
 	customCount ++;
+	if (window.FrameProjectStore) {
+		try {
+			const savedAsset = await FrameProjectStore.saveSourceAsset(imageSource, assetName, 'mask');
+			uploadedMask.assetId = savedAsset.id;
+		} catch (error) {
+			console.warn('The uploaded mask could not be added to the persistent asset library.', error);
+		}
+	}
 	selectedFrame.masks.push(uploadedMask);
 	uploadedMask.image.onload = drawFrames;
 	uploadedMask.image.src = imageSource;
 }
-function uploadFrameOption(imageSource) {
-	const uploadedFrame = {name:`Uploaded Image (${customCount})`, src:imageSource, noThumb:true};
+async function uploadFrameOption(imageSource, otherParams) {
+	const fallbackName = `Uploaded Image (${customCount})`;
+	const assetName = window.FrameProjectStore
+		? FrameProjectStore.sourceFromParams(otherParams, fallbackName)
+		: fallbackName;
+	const uploadedFrame = {name:assetName, src:imageSource, noThumb:true, masks:[]};
 	customCount ++;
+	if (window.FrameProjectStore) {
+		try {
+			const savedAsset = await FrameProjectStore.saveSourceAsset(imageSource, assetName, 'frame');
+			uploadedFrame.assetId = savedAsset.id;
+		} catch (error) {
+			console.warn('The uploaded frame could not be added to the persistent asset library.', error);
+		}
+	}
 	availableFrames.push(uploadedFrame);
 	loadFramePack();
 }
@@ -4527,73 +4551,91 @@ function saveCard(saveFromFile) {
 		notify('You have exceeded your 5MB of local storage, and your card has failed to save. If you would like to continue saving cards, please download all saved cards, then delete all saved cards to free up space.<br><br>Local storage is most often exceeded by uploading large images directly from your computer. If possible/convenient, using a URL avoids the need to save these large images.<br><br>Apologies for the inconvenience.');
 	}
 }
-async function loadCard(selectedCardKey) {
-	//clear the draggable frames
+async function loadCardData(cardData, failureLabel) {
+	// Clear the draggable frames, then restore a fresh copy of the supplied card data.
 	document.querySelector('#frame-list').innerHTML = null;
-	//clear the existing card, then replace it with the new JSON
-	card = {};
-	card = JSON.parse(localStorage.getItem(selectedCardKey));
-	//if the card was loaded properly...
-	if (card) {
-		//load values from card into html inputs
-		document.querySelector('#info-number').value = card.infoNumber;
-		document.querySelector('#info-rarity').value = card.infoRarity;
-		document.querySelector('#info-set').value = card.infoSet;
-		document.querySelector('#info-language').value = card.infoLanguage;
-		document.querySelector('#info-note').value = card.infoNote;
-		document.querySelector('#info-year').value = card.infoYear || date.getFullYear();
-		artistEdited(card.infoArtist);
-		document.querySelector('#text-editor').value = card.text[Object.keys(card.text)[selectedTextIndex]].text;
-		document.querySelector('#text-editor-font-size').value = card.text[Object.keys(card.text)[selectedTextIndex]].fontSize || 0;
-		loadTextOptions(card.text);
-		document.querySelector('#art-x').value = scaleX(card.artX) - scaleWidth(card.marginX);
-		document.querySelector('#art-y').value = scaleY(card.artY) - scaleHeight(card.marginY);
-		document.querySelector('#art-zoom').value = card.artZoom * 100;
-		document.querySelector('#art-rotate').value = card.artRotate || 0;
-		uploadArt(card.artSource);
-		document.querySelector('#setSymbol-x').value = scaleX(card.setSymbolX) - scaleWidth(card.marginX);
-		document.querySelector('#setSymbol-y').value = scaleY(card.setSymbolY) - scaleHeight(card.marginY);
-		document.querySelector('#setSymbol-zoom').value = card.setSymbolZoom * 100;
-		uploadSetSymbol(card.setSymbolSource);
-		document.querySelector('#watermark-x').value = scaleX(card.watermarkX) - scaleWidth(card.marginX);
-		document.querySelector('#watermark-y').value = scaleY(card.watermarkY) - scaleHeight(card.marginY);
-		document.querySelector('#watermark-zoom').value = card.watermarkZoom * 100;
-		// document.querySelector('#watermark-left').value = card.watermarkLeft;
-		// document.querySelector('#watermark-right').value = card.watermarkRight;
-		document.querySelector('#watermark-opacity').value = card.watermarkOpacity * 100;
-		document.getElementById("rounded-corners").checked = !card.noCorners;
-		uploadWatermark(card.watermarkSource);
-		document.querySelector('#serial-number').value = card.serialNumber;
-		document.querySelector('#serial-total').value = card.serialTotal;
-		document.querySelector('#serial-x').value = card.serialX;
-		document.querySelector('#serial-y').value = card.serialY;
-		document.querySelector('#serial-scale').value = card.serialScale;
-		serialInfoEdited();
-
-		card.frames.reverse();
-		await card.frames.forEach(item => addFrame([], item));
-		card.frames.reverse();
-		if (card.onload) {
-			await loadScript(card.onload);
-		}
-		card.manaSymbols.forEach(item => loadScript(item));
-		//canvases
-		var canvasesResized = false;
-		canvasList.forEach(name => {
-			if (window[name + 'Canvas'].width != card.width * (1 + card.marginX) || window[name + 'Canvas'].height != card.height * (1 + card.marginY)) {
-				sizeCanvas(name);
-				canvasesResized = true;
-			}
-		});
-		if (canvasesResized) {
-			drawTextBuffer();
-			drawFrames();
-			bottomInfoEdited();
-			watermarkEdited();
-		}
-	} else {
-		notify(selectedCardKey + ' failed to load.', 5)
+	card = cardData ? JSON.parse(JSON.stringify(cardData)) : null;
+	if (!card) {
+		notify((failureLabel || 'The saved card') + ' failed to load.', 5);
+		return false;
 	}
+
+	card.frames = card.frames || [];
+	card.text = card.text || {};
+	card.manaSymbols = card.manaSymbols || [];
+
+	// Load values from the card into the editor inputs.
+	document.querySelector('#info-number').value = card.infoNumber || '';
+	document.querySelector('#info-rarity').value = card.infoRarity || '';
+	document.querySelector('#info-set').value = card.infoSet || '';
+	document.querySelector('#info-language').value = card.infoLanguage || '';
+	document.querySelector('#info-note').value = card.infoNote || '';
+	document.querySelector('#info-year').value = card.infoYear || date.getFullYear();
+	artistEdited(card.infoArtist || '');
+
+	const textKeys = Object.keys(card.text);
+	if (textKeys.length) {
+		const selectedKey = textKeys[selectedTextIndex] || textKeys[0];
+		document.querySelector('#text-editor').value = card.text[selectedKey].text || '';
+		document.querySelector('#text-editor-font-size').value = card.text[selectedKey].fontSize || 0;
+		loadTextOptions(card.text);
+	}
+
+	document.querySelector('#art-x').value = scaleX(card.artX || 0) - scaleWidth(card.marginX || 0);
+	document.querySelector('#art-y').value = scaleY(card.artY || 0) - scaleHeight(card.marginY || 0);
+	document.querySelector('#art-zoom').value = (card.artZoom || 1) * 100;
+	document.querySelector('#art-rotate').value = card.artRotate || 0;
+	uploadArt(card.artSource || '/img/blank.png');
+	document.querySelector('#setSymbol-x').value = scaleX(card.setSymbolX || 0) - scaleWidth(card.marginX || 0);
+	document.querySelector('#setSymbol-y').value = scaleY(card.setSymbolY || 0) - scaleHeight(card.marginY || 0);
+	document.querySelector('#setSymbol-zoom').value = (card.setSymbolZoom || 1) * 100;
+	uploadSetSymbol(card.setSymbolSource || '/img/blank.png');
+	document.querySelector('#watermark-x').value = scaleX(card.watermarkX || 0) - scaleWidth(card.marginX || 0);
+	document.querySelector('#watermark-y').value = scaleY(card.watermarkY || 0) - scaleHeight(card.marginY || 0);
+	document.querySelector('#watermark-zoom').value = (card.watermarkZoom || 1) * 100;
+	document.querySelector('#watermark-opacity').value = (card.watermarkOpacity === undefined ? 0.4 : card.watermarkOpacity) * 100;
+	document.getElementById('rounded-corners').checked = !card.noCorners;
+	uploadWatermark(card.watermarkSource || '/img/blank.png');
+	document.querySelector('#serial-number').value = card.serialNumber || '';
+	document.querySelector('#serial-total').value = card.serialTotal || '';
+	document.querySelector('#serial-x').value = card.serialX || 0;
+	document.querySelector('#serial-y').value = card.serialY || 0;
+	document.querySelector('#serial-scale').value = card.serialScale || 1;
+	serialInfoEdited();
+
+	// addFrame mutates each supplied frame with its runtime Image objects.
+	const framesInLoadOrder = card.frames.slice().reverse();
+	for (const frame of framesInLoadOrder) {
+		await addFrame([], frame);
+	}
+	if (card.onload) {
+		await loadScript(card.onload);
+	}
+	for (const manaSymbolScript of card.manaSymbols) {
+		await loadScript(manaSymbolScript);
+	}
+
+	var canvasesResized = false;
+	canvasList.forEach(name => {
+		if (window[name + 'Canvas'].width != card.width * (1 + card.marginX) || window[name + 'Canvas'].height != card.height * (1 + card.marginY)) {
+			sizeCanvas(name);
+			canvasesResized = true;
+		}
+	});
+	if (canvasesResized) {
+		drawTextBuffer();
+		drawFrames();
+		bottomInfoEdited();
+		watermarkEdited();
+	} else {
+		drawFrames();
+		bottomInfoEdited();
+		watermarkEdited();
+	}
+	return true;
+}
+async function loadCard(selectedCardKey) {
+	return loadCardData(JSON.parse(localStorage.getItem(selectedCardKey)), selectedCardKey);
 }
 function deleteCard() {
 	var keyToDelete = document.querySelector('#load-card-options').value;
