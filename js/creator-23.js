@@ -335,10 +335,12 @@ function toggleCreatorTabs(event, target) {
 	document.querySelector('#creator-menu-' + target).classList.remove('hidden');
 	selectSelectable(event);
 }
+var activeFrameWorkspace = 'browse';
 function toggleFrameWorkspace(event, target) {
 	if (!['browse', 'design'].includes(target)) {
 		return;
 	}
+	activeFrameWorkspace = target;
 	['browse', 'design'].forEach(workspace => {
 		const panel = document.querySelector('#frame-workspace-' + workspace);
 		if (panel) {
@@ -350,12 +352,82 @@ function toggleFrameWorkspace(event, target) {
 		tab.classList.toggle('selected', selected);
 		tab.setAttribute('aria-selected', selected ? 'true' : 'false');
 	});
+	const description = document.querySelector('#frame-list-description');
+	if (description) {
+		description.textContent = target == 'design'
+			? 'Drag layers to reorder them, or click a layer to open its editor.'
+			: 'Drag layers to reorder them. Switch to Design Frame to edit a layer.';
+	}
+	if (target != 'design') {
+		document.querySelector('#frame-element-editor')?.classList.remove('opened');
+	}
 }
 function selectSelectable(event) {
 	var eventTarget = event.target.closest('.selectable');
 	Array.from(eventTarget.parentElement.children).forEach(element => element.classList.remove('selected'));
 	eventTarget.classList.add('selected');
 }
+function initializeFrameEditorInteractions() {
+	const editor = document.querySelector('#frame-element-editor');
+	const handle = editor?.querySelector('.frame-element-editor-title');
+	if (editor && handle && !handle.dataset.dragReady) {
+		handle.dataset.dragReady = 'true';
+		handle.addEventListener('pointerdown', event => {
+			if (event.button !== undefined && event.button !== 0) {
+				return;
+			}
+			const rectangle = editor.getBoundingClientRect();
+			const offsetX = event.clientX - rectangle.left;
+			const offsetY = event.clientY - rectangle.top;
+			editor.style.left = rectangle.left + 'px';
+			editor.style.top = rectangle.top + 'px';
+			editor.style.right = 'auto';
+			editor.style.transform = 'none';
+			const moveEditor = moveEvent => {
+				const maximumLeft = Math.max(0, window.innerWidth - editor.offsetWidth);
+				const maximumTop = Math.max(0, window.innerHeight - editor.offsetHeight);
+				editor.style.left = Math.max(0, Math.min(maximumLeft, moveEvent.clientX - offsetX)) + 'px';
+				editor.style.top = Math.max(0, Math.min(maximumTop, moveEvent.clientY - offsetY)) + 'px';
+			};
+			const stopMoving = () => {
+				document.removeEventListener('pointermove', moveEditor);
+				document.removeEventListener('pointerup', stopMoving);
+				document.removeEventListener('pointercancel', stopMoving);
+			};
+			document.addEventListener('pointermove', moveEditor);
+			document.addEventListener('pointerup', stopMoving);
+			document.addEventListener('pointercancel', stopMoving);
+			event.preventDefault();
+		});
+	}
+
+	document.querySelectorAll('#frame-element-editor input[type="number"]').forEach(input => {
+		if (input.dataset.wheelReady) {
+			return;
+		}
+		input.dataset.wheelReady = 'true';
+		input.addEventListener('wheel', event => {
+			event.preventDefault();
+			const step = Number(input.step) > 0 ? Number(input.step) : 1;
+			const minimum = input.min === '' ? -Infinity : Number(input.min);
+			const maximum = input.max === '' ? Infinity : Number(input.max);
+			const direction = event.deltaY < 0 ? 1 : -1;
+			let value = (Number(input.value) || 0) + direction * step;
+			value = Math.max(minimum, Math.min(maximum, value));
+			const decimalPlaces = String(step).includes('.') ? String(step).split('.')[1].length : 0;
+			input.value = decimalPlaces ? value.toFixed(decimalPlaces) : String(Math.round(value));
+			input.dispatchEvent(new Event('change', {bubbles: true}));
+		}, {passive: false});
+		input.addEventListener('keydown', event => {
+			if (event.key === 'Enter') {
+				event.preventDefault();
+				input.blur();
+			}
+		});
+	});
+}
+initializeFrameEditorInteractions();
+
 function dragStart(event) {
 	Array.from(document.querySelectorAll('.dragging')).forEach(element => element.classList.remove('dragging'));
 	event.target.closest('.draggable').classList.add('dragging');
@@ -1099,6 +1171,9 @@ function removeFrame(event) {
 	bottomInfoEdited();
 }
 function frameElementClicked(event) {
+	if (activeFrameWorkspace != 'design') {
+		return;
+	}
 	if (!event.target.classList.contains('frame-element-close')) {
 		var selectedFrameElement = event.target.closest('.frame-element');
 		selectedFrame = card.frames[Array.from(selectedFrameElement.parentElement.children).indexOf(selectedFrameElement)];
