@@ -46,8 +46,10 @@ Import flexible CSV files, map their columns to Card Conjurer fields, generate c
 - Alt Power
 - Alt Toughness
 - Alt Flavor Text
-- Transform (boolean)
-- Flip (boolean)
+- Transform (boolean): use a double-faced transform layout
+- Flip (boolean): use the classic Kamigawa-style 180-degree flip layout
+
+Transform and Flip are distinct layout modes and should not both be true for the same row. The importer must report that combination as a validation error.
 
 Complete two-face support should also provide:
 
