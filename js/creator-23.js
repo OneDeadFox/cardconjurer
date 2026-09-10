@@ -614,6 +614,21 @@ function drawFrameLayerImage(context, image, x, y, width, height, frame) {
 	context.drawImage(image, -width / 2, -height / 2, width, height);
 	context.restore();
 }
+function drawFrameLayerMask(context, image, x, y, width, height, frame, pivotX, pivotY) {
+	const rotation = Number(frame.rotation) || 0;
+	const scaleHorizontal = frame.flipX ? -1 : 1;
+	const scaleVertical = frame.flipY ? -1 : 1;
+	if (!rotation && scaleHorizontal == 1 && scaleVertical == 1) {
+		context.drawImage(image, x, y, width, height);
+		return;
+	}
+	context.save();
+	context.translate(pivotX, pivotY);
+	context.rotate(rotation * Math.PI / 180);
+	context.scale(scaleHorizontal, scaleVertical);
+	context.drawImage(image, x - pivotX, y - pivotY, width, height);
+	context.restore();
+}
 function syncFrameElementVisibility(frame) {
 	const index = card.frames.indexOf(frame);
 	const element = document.querySelector('#frame-list')?.children[index];
@@ -697,7 +712,13 @@ function drawFrames() {
 			frameMaskingContext.globalCompositeOperation = 'source-over';
 			frameMaskingContext.drawImage(black, 0, 0, frameMaskingCanvas.width, frameMaskingCanvas.height);
 			frameMaskingContext.globalCompositeOperation = 'source-in';
-			item.masks.forEach(mask => frameMaskingContext.drawImage(mask.image, scaleX((bounds.x || 0) - (ogBounds.x || 0) - ((ogBounds.x || 0) * ((bounds.width || 1) / (ogBounds.width || 1) - 1))), scaleY((bounds.y || 0) - (ogBounds.y || 0) - ((ogBounds.y || 0) * ((bounds.height || 1) / (ogBounds.height || 1) - 1))), scaleWidth((bounds.width || 1) / (ogBounds.width || 1)), scaleHeight((bounds.height || 1) / (ogBounds.height || 1))));
+			item.masks.forEach(mask => {
+				const maskX = scaleX((bounds.x || 0) - (ogBounds.x || 0) - ((ogBounds.x || 0) * ((bounds.width || 1) / (ogBounds.width || 1) - 1)));
+				const maskY = scaleY((bounds.y || 0) - (ogBounds.y || 0) - ((ogBounds.y || 0) * ((bounds.height || 1) / (ogBounds.height || 1) - 1)));
+				const maskWidth = scaleWidth((bounds.width || 1) / (ogBounds.width || 1));
+				const maskHeight = scaleHeight((bounds.height || 1) / (ogBounds.height || 1));
+				drawFrameLayerMask(frameMaskingContext, mask.image, maskX, maskY, maskWidth, maskHeight, item, frameX + frameWidth / 2, frameY + frameHeight / 2);
+			});
 			if (item.preserveAlpha) { //preserves alpha, and blends colors using an alpha that only cares about the mask(s), and the user-set opacity value
 				//draw the image onto a separate canvas to view its unaltered state
 				frameCompositingContext.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
