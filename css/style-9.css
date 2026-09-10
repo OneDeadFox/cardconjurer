@@ -956,6 +956,22 @@ textarea.input {
 	grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 	grid-gap: 1rem;
 }
+.frame-element-editor {
+	width: 42rem;
+	max-width: calc(50vw - 2rem);
+	max-height: calc(100vh - 2rem);
+	top: 1rem;
+	right: 1rem;
+	left: auto;
+	transform: none;
+	overflow-y: auto;
+}
+.frame-element-editor > .frame-element-editor-title {
+	cursor: move;
+	touch-action: none;
+	user-select: none;
+}
+
 .frame-element-editor.opened, .textbox-editor.opened {
 	display: grid;
 }
