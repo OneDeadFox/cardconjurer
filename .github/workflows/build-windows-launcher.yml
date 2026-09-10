@@ -1,0 +1,41 @@
+name: Build Windows Launcher
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v1-development
+    paths:
+      - launcher.py
+      - launcher.spec
+      - .github/workflows/build-windows-launcher.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-launcher:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install --disable-pip-version-check pyinstaller
+
+      - name: Build launcher
+        run: pyinstaller --clean launcher.spec
+
+      - name: Upload Windows launcher
+        uses: actions/upload-artifact@v4
+        with:
+          name: CardConjurer-Windows-Launcher
+          path: dist/launcher.exe
+          if-no-files-found: error
+          retention-days: 30
