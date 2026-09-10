@@ -274,7 +274,11 @@
 		}
 		try {
 			var source = await getAssetSource(asset.id);
-			if (asset.kind === 'mask' && selectedFrame) {
+			if (asset.kind === 'mask') {
+				if (!selectedFrame) {
+					setStatus('#frame-asset-status', 'Select a frame layer before adding this saved mask.', true);
+					return;
+				}
 				var mask = {name: asset.name, src: source, noThumb: true, assetId: asset.id, image: new Image()};
 				mask.image.onload = drawFrames;
 				mask.image.src = source;
