@@ -675,6 +675,9 @@
 							<h5 id='csv-import-status' class='padding input-description'>No CSV loaded.</h5>
 							<div id='csv-import-errors' class='csv-import-errors hidden padding'></div>
 							<div id='csv-import-details' class='hidden'>
+								<h5 class='padding margin-bottom input-description'>If the CSV uses Art File, select the folder containing those images. Filenames may include subfolders.</h5>
+								<button class='input margin-bottom' onclick='CSVCardBuilder.selectArtFolder();'>Select Art Folder</button>
+								<h5 id='csv-art-folder-status' class='padding margin-bottom input-description'>No art folder selected. The folder and its files remain on this computer.</h5>
 								<h5 class='padding margin-bottom input-description'>Map each CSV column to a built-in field, a current-template text field, custom metadata, or Ignore.</h5>
 								<button class='input margin-bottom' onclick='CSVImporter.refreshTextFields();'>Refresh Current Template Text Fields</button>
 								<div id='csv-mapping-rows' class='margin-bottom'></div>
