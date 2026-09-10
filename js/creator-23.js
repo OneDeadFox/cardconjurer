@@ -335,6 +335,22 @@ function toggleCreatorTabs(event, target) {
 	document.querySelector('#creator-menu-' + target).classList.remove('hidden');
 	selectSelectable(event);
 }
+function toggleFrameWorkspace(event, target) {
+	if (!['browse', 'design'].includes(target)) {
+		return;
+	}
+	['browse', 'design'].forEach(workspace => {
+		const panel = document.querySelector('#frame-workspace-' + workspace);
+		if (panel) {
+			panel.classList.toggle('hidden', workspace != target);
+		}
+	});
+	Array.from(document.querySelectorAll('[data-frame-workspace]')).forEach(tab => {
+		const selected = tab.dataset.frameWorkspace == target;
+		tab.classList.toggle('selected', selected);
+		tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+	});
+}
 function selectSelectable(event) {
 	var eventTarget = event.target.closest('.selectable');
 	Array.from(eventTarget.parentElement.children).forEach(element => element.classList.remove('selected'));
