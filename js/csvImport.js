@@ -394,6 +394,9 @@
 			select.addEventListener('change', function () {
 				state.mappings[index] = select.value;
 				validateAndRenderStatus();
+				if (window.CSVCardBuilder) {
+					CSVCardBuilder.csvChanged();
+				}
 			});
 
 			mappingRow.appendChild(source);
@@ -572,6 +575,9 @@
 			renderPreview();
 			document.querySelector('#csv-import-details').classList.remove('hidden');
 			validateAndRenderStatus();
+			if (window.CSVCardBuilder) {
+				CSVCardBuilder.csvChanged();
+			}
 		} catch (error) {
 			state.structuralErrors = [error.message || 'The CSV file could not be read.'];
 			document.querySelector('#csv-import-details').classList.add('hidden');
@@ -590,6 +596,9 @@
 	window.CSVImporter = {
 		loadFile: loadFile,
 		refreshTextFields: refreshTextFields,
+		getValidationErrors: function () {
+			return getValidationErrors().slice();
+		},
 		getState: function () {
 			return JSON.parse(JSON.stringify(state));
 		}
