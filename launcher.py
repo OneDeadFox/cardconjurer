@@ -1,7 +1,7 @@
 """
 IMPORTS
 """
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import webbrowser
 import os
 
@@ -9,7 +9,7 @@ import os
 SETTINGS
 """
 
-NAME = "localhost"
+NAME = "127.0.0.1"
 PORT = 8080
 DIRECTORY = os.getcwd()
 
@@ -27,11 +27,11 @@ START APP
 """
 
 if __name__ == "__main__":
-    webServer = HTTPServer((NAME, PORT), Handler)
+    webServer = ThreadingHTTPServer((NAME, PORT), Handler)
     print("Server started http://%s:%s" % (NAME, PORT))
 
     try:
-        webbrowser.open('http://localhost:8080', new=2)
+        webbrowser.open('http://127.0.0.1:8080', new=2)
         webServer.serve_forever()
     except KeyboardInterrupt:
         pass
