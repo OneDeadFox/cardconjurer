@@ -80,6 +80,7 @@ Local image assets remain available offline. Assets saved as remote URLs still d
 
 The Design Frame workspace now provides the first usable construction library:
 
+- Nine built-in M15 base textures: artifact, black, blue, colorless, green, land, multicolor, red, and white.
 - User-imported textures stored in IndexedDB.
 - Bulk import for textures and custom masks.
 - A curated built-in catalog of general shapes, split regions, M15 Battle sections, Commander Legends sections, and legendary crowns.
@@ -90,7 +91,7 @@ The Design Frame workspace now provides the first usable construction library:
 
 Frame images already in the persistent asset library can also be selected as texture sources. The curated manifest intentionally exposes usable source masks rather than the hundreds of duplicates and thumbnails in the raw asset tree. Additional frame families, favorites, art-window masks, power/toughness masks, and Transform masks can be added to the catalog incrementally.
 
-To build a layer, import a texture, choose it from the Texture list, filter and select a mask, then choose **Create Layer from Texture + Mask**. The resulting layer appears under **Current Frame Layers** and uses the existing non-destructive position, size, rotation, flip, opacity, color, HSL, mask, duplicate, visibility, and reset controls.
+To build a layer, choose a built-in texture or import your own, select it from the Texture list, filter and select a mask, then choose **Create Layer from Texture + Mask**. The resulting layer appears under **Current Frame Layers** and uses the existing non-destructive position, size, rotation, flip, opacity, color, HSL, mask, duplicate, visibility, and reset controls.
 
 ## Next V1 phases
 
