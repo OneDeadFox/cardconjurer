@@ -65,10 +65,11 @@ Complete two-face support should also provide:
 ### Generation controls
 
 - Frame Type
+- Frame Variant
 - Template
 - Output Filename
 
-`Frame Type` selects Card Conjurer's layout or frame family. `Template` selects a saved user configuration within that frame type.
+`Frame Type` selects Card Conjurer's layout or frame family. `Frame Variant` refines that choice (for example, `M15` + `Regular`). If both are blank, the row inherits the captured template frame. `Color` selects the frame color; when `Color` is `Multi`, `Color Identity` supplies its component colors. `Template` selects a saved user configuration within that frame type.
 
 ## Ability assembly
 
