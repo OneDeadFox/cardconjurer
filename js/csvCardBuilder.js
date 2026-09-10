@@ -4,6 +4,7 @@
 	var templateCard = null;
 	var artDirectoryHandle = null;
 	var activeArtObjectUrl = '';
+	var activeTransformLayout = false;
 
 	function cloneSerializableCard(sourceCard) {
 		var cloned = JSON.parse(JSON.stringify(sourceCard));
@@ -168,18 +169,23 @@
 			return;
 		}
 		await waitForFrameImages(async function () {
-			card.frames = [];
+			card.frames = (serializedFrames || []).map(function (frame) {
+				return JSON.parse(JSON.stringify(frame));
+			});
 			var frameList = document.querySelector('#frame-list');
 			if (frameList) {
 				frameList.innerHTML = '';
 			}
-			for (var frame of (serializedFrames || [])) {
-				await addFrame([], JSON.parse(JSON.stringify(frame)));
+			for (var frame of card.frames.slice().reverse()) {
+				await addFrame([], frame);
 			}
 		});
 	}
 
 	async function applyMappedFrame(result) {
+		if (result.transformFace === 'front' || result.transformFace === 'back') {
+			return applyTransformFrame(result);
+		}
 		var fields = result.fields;
 		var hasFrameRequest = String(fields.frameType || '').trim() || String(fields.frameVariant || '').trim();
 		if (!hasFrameRequest) {
@@ -214,6 +220,186 @@
 		});
 		result.card.csvImport.resolvedFrameType = resolvedFrameType;
 		result.card.csvImport.frameColors = colors;
+		return resolvedFrameType;
+	}
+
+	function transformFrameLetter(fields) {
+		var colors = parseFrameColors(fields.color, fields.colorIdentity,
+			(card.text.mana && card.text.mana.text) || '');
+		var typeLine = String((card.text.type && card.text.type.text) || '');
+		if (typeLine.toLowerCase().includes('land')) {
+			if (!colors.length) {
+				return 'L';
+			}
+			return colors.length > 2 ? 'ML' : colors[0] + 'L';
+		}
+		if (typeLine.toLowerCase().includes('vehicle')) {
+			return 'V';
+		}
+		if (typeLine.toLowerCase().includes('artifact')) {
+			return 'A';
+		}
+		if (colors.length >= 2) {
+			return 'M';
+		}
+		return colors[0] || 'C';
+	}
+
+	function transformPTLetter(fields) {
+		var colors = parseFrameColors(fields.color, fields.colorIdentity,
+			(card.text.mana && card.text.mana.text) || '');
+		var typeLine = String((card.text.type && card.text.type.text) || '').toLowerCase();
+		if (typeLine.includes('vehicle')) {
+			return 'V';
+		}
+		if (typeLine.includes('artifact')) {
+			return 'A';
+		}
+		if (colors.length >= 2) {
+			return 'M';
+		}
+		return colors[0] || 'A';
+	}
+
+	function transformTextDefinitions(face, reversePT) {
+		var back = face === 'back';
+		var definitions = {
+			mana: {name:'Mana Cost', text:'', y:0.0613, width:0.9292, height:71/2100, oneLine:true, size:71/1638, align:'right', shadowX:-0.001, shadowY:0.0029, manaCost:true, manaSpacing:0},
+			title: {name:'Title', text:'', x:back ? 0.0854 : 0.16, y:0.0522, width:0.7547, height:0.0543, oneLine:true, font:'belerenb', size:0.0381},
+			type: {name:'Type', text:'', x:0.0854, y:0.5664, width:0.8292, height:0.0543, oneLine:true, font:'belerenb', size:0.0324},
+			rules: {name:'Rules Text', text:'', x:0.086, y:0.6303, width:0.828, height:0.2875, size:0.0362},
+			pt: {name:'Power/Toughness', text:'', x:0.7928, y:0.902, width:0.1367, height:0.0372, size:0.0372, font:'belerenbsc', oneLine:true, align:'center'}
+		};
+		if (!back) {
+			definitions.reminder = {name:'Reverse PT', text:reversePT || '', x:0.086, y:0.842, width:0.838, height:0.0362, size:0.0291, oneLine:true, color:'#666', align:'right', font:'belerenbsc'};
+		} else {
+			definitions.title.color = 'white';
+			definitions.type.color = 'white';
+			definitions.pt.color = 'white';
+		}
+		return definitions;
+	}
+
+	function replaceLiveTextObjects(definitions, values, keepCustom) {
+		card.text = card.text || {};
+		var standardKeys = ['mana', 'title', 'type', 'rules', 'reminder', 'pt'];
+		standardKeys.forEach(function (key) {
+			if (!hasOwn(definitions, key) && hasOwn(card.text, key)) {
+				delete card.text[key];
+			}
+		});
+		Object.keys(definitions).forEach(function (key) {
+			var definition = JSON.parse(JSON.stringify(definitions[key]));
+			if (hasOwn(values || {}, key)) {
+				definition.text = values[key];
+			}
+			if (card.text[key]) {
+				Object.keys(card.text[key]).forEach(function (property) {
+					delete card.text[key][property];
+				});
+				Object.assign(card.text[key], definition);
+			} else {
+				card.text[key] = definition;
+			}
+		});
+		if (!keepCustom) {
+			Object.keys(card.text).forEach(function (key) {
+				if (!hasOwn(definitions, key)) {
+					delete card.text[key];
+				}
+			});
+		}
+	}
+
+	function applyTransformLayout(result) {
+		var face = result.transformFace;
+		var values = {};
+		Object.keys(result.card.text || {}).forEach(function (key) {
+			values[key] = result.card.text[key].text || '';
+		});
+		var reversePT = result.reversePT || '';
+		var definitions = transformTextDefinitions(face, reversePT);
+		Object.keys(result.card.text || {}).forEach(function (key) {
+			if (!hasOwn(definitions, key) && !['mana', 'title', 'type', 'rules', 'reminder', 'pt'].includes(key)) {
+				definitions[key] = JSON.parse(JSON.stringify(result.card.text[key]));
+			}
+		});
+		replaceLiveTextObjects(definitions, values, true);
+		if (face === 'front' && card.text.reminder) {
+			card.text.reminder.text = reversePT;
+		}
+		card.version = face === 'front' ? 'm15TransformFront' : 'm15TransformBackNew';
+		card.artBounds = {x:0.0767, y:0.1129, width:0.8476, height:0.4429};
+		card.setSymbolBounds = {x:0.9213, y:0.5910, width:0.12, height:0.0410, vertical:'center', horizontal:'right'};
+		card.watermarkBounds = {x:0.5, y:0.7762, width:0.75, height:0.2305};
+		activeTransformLayout = true;
+	}
+
+	function restoreTemplateTextLayout(result) {
+		if (!activeTransformLayout) {
+			return;
+		}
+		var definitions = JSON.parse(JSON.stringify(result.card.text || {}));
+		var values = {};
+		Object.keys(definitions).forEach(function (key) {
+			values[key] = definitions[key].text || '';
+		});
+		replaceLiveTextObjects(definitions, values, false);
+		activeTransformLayout = false;
+	}
+
+	async function applyTransformFrame(result) {
+		var face = result.transformFace;
+		var front = face === 'front';
+		var frameLetter = transformFrameLetter(result.fields);
+		var ptText = String((card.text.pt && card.text.pt.text) || '').trim();
+		var basePath = front ?
+			'/img/frames/m15/transform/regular/front' + frameLetter + '.png' :
+			'/img/frames/m15/transform/regular/new/back' + frameLetter + '.png';
+		var frames = [{
+			name: front ? 'Transform Front Frame' : 'Transform Back Frame',
+			src: basePath,
+			masks: []
+		}];
+		if (ptText) {
+			var ptLetter = transformPTLetter(result.fields);
+			frames.unshift({
+				name: 'Power/Toughness',
+				src: front ?
+					'/img/frames/m15/regular/m15PT' + ptLetter + '.png' :
+					'/img/frames/m15/transform/regular/pt' + ptLetter + '.png',
+				bounds: {x:0.7573, y:0.8848, width:0.188, height:0.0733},
+				masks: []
+			});
+		}
+		frames.unshift({
+			name: front ? 'Transform Front Icon' : 'Transform Back Icon',
+			src: '/img/frames/m15/transform/icons/default.png',
+			bounds: front ?
+				{x:0.0594, y:0.0505, width:0.0734, height:0.0524} :
+				{x:1737/2010, y:0.0505, width:0.0734, height:0.0524},
+			masks: []
+		});
+
+		await waitForFrameImages(async function () {
+			card.frames = frames;
+			var frameList = document.querySelector('#frame-list');
+			if (frameList) {
+				frameList.innerHTML = '';
+			}
+			for (var frame of frames.slice().reverse()) {
+				await addFrame([], frame);
+			}
+		});
+
+		var resolvedFrameType = front ? 'M15 Transform Front' : 'M15 Transform Back';
+		result.card.csvImport.resolvedFrameType = resolvedFrameType;
+		result.card.csvImport.frameColors = parseFrameColors(result.fields.color,
+			result.fields.colorIdentity, (card.text.mana && card.text.mana.text) || '');
+		var requestedType = resolveFrameType(result.fields.frameType, result.fields.frameVariant);
+		if (requestedType && !['M15Regular-1', 'M15RegularNew'].includes(requestedType)) {
+			result.warnings.push('Transform cards currently use the regular M15 transform frame.');
+		}
 		return resolvedFrameType;
 	}
 
@@ -391,6 +577,44 @@
 		}
 	}
 
+	function alternateFaceFields(fields) {
+		var alternate = Object.assign({}, fields);
+		alternate.name = fields.altName || fields.name || '';
+		alternate.color = fields.altColor || fields.color || '';
+		alternate.colorIdentity = fields.altColorIdentity || fields.colorIdentity || '';
+		alternate.manaCost = fields.altManaCost || '';
+		alternate.typeLine = fields.altTypeLine || fields.typeLine || '';
+		alternate.ability1 = fields.altAbility1 || '';
+		alternate.ability2 = fields.altAbility2 || '';
+		alternate.ability3 = fields.altAbility3 || '';
+		alternate.ability4 = fields.altAbility4 || '';
+		alternate.flavorText = fields.altFlavorText || '';
+		alternate.power = fields.altPower || '';
+		alternate.toughness = fields.altToughness || '';
+		alternate.artFile = fields.altArtFile || '';
+		alternate.artUrl = fields.altArtUrl || '';
+		alternate.artist = fields.altArtist || fields.artist || '';
+		Object.keys(alternate).forEach(function (key) {
+			if (key.indexOf('alt') === 0) {
+				delete alternate[key];
+			}
+		});
+		return alternate;
+	}
+
+	function primaryFaceFields(fields, separateFaces) {
+		if (!separateFaces) {
+			return fields;
+		}
+		var primary = Object.assign({}, fields);
+		Object.keys(primary).forEach(function (key) {
+			if (key.indexOf('alt') === 0) {
+				delete primary[key];
+			}
+		});
+		return primary;
+	}
+
 	function buildCard(rowIndex) {
 		if (!templateCard) {
 			throw new Error('Capture the current card as a batch template first.');
@@ -398,14 +622,19 @@
 
 		var csvState = CSVImporter.getState();
 		var mapped = collectMappedRow(csvState, rowIndex);
+		var transform = parseBoolean(mapped.fields.transform);
+		var flip = parseBoolean(mapped.fields.flip);
+		var separateFaces = transform || flip;
 		var builtCard = cloneSerializableCard(templateCard);
 		var warnings = [];
+		var primaryFields = primaryFaceFields(mapped.fields, separateFaces);
+		var primaryMapped = {fields: primaryFields, textboxes: mapped.textboxes};
 
-		applyCoreFields(builtCard, mapped, warnings);
-		applyCustomTextboxes(builtCard, mapped, warnings);
-		applyCollectorFields(builtCard, mapped.fields);
+		applyCoreFields(builtCard, primaryMapped, warnings);
+		applyCustomTextboxes(builtCard, primaryMapped, warnings);
+		applyCollectorFields(builtCard, primaryFields);
 
-		builtCard.csvImport = {
+		var csvImport = {
 			sourceRow: mapped.sourceRow,
 			chunk: mapped.fields.chunk || '',
 			cardId: mapped.fields.cardId || '',
@@ -413,17 +642,66 @@
 			frameVariant: mapped.fields.frameVariant || '',
 			template: mapped.fields.template || '',
 			outputFilename: mapped.fields.outputFilename || '',
-			transform: parseBoolean(mapped.fields.transform),
-			flip: parseBoolean(mapped.fields.flip),
+			transform: transform,
+			flip: flip,
 			color: mapped.fields.color || '',
 			colorIdentity: mapped.fields.colorIdentity || '',
 			metadata: mapped.metadata
 		};
+		builtCard.csvImport = JSON.parse(JSON.stringify(csvImport));
+
+		var alternateCard = null;
+		var alternateFields = null;
+		if (separateFaces) {
+			alternateFields = alternateFaceFields(mapped.fields);
+			alternateCard = cloneSerializableCard(templateCard);
+			var alternateMapped = {fields: alternateFields, textboxes: mapped.textboxes};
+			applyCoreFields(alternateCard, alternateMapped, warnings);
+			applyCustomTextboxes(alternateCard, alternateMapped, warnings);
+			applyCollectorFields(alternateCard, alternateFields);
+			alternateCard.csvImport = JSON.parse(JSON.stringify(csvImport));
+			alternateCard.csvImport.face = 'back';
+			if (transform && !String(mapped.fields.altName || mapped.fields.altTypeLine ||
+				mapped.fields.altAbility1 || mapped.fields.altAbility2 || mapped.fields.altAbility3 ||
+				mapped.fields.altAbility4 || mapped.fields.altFlavorText ||
+				mapped.fields.altPower || mapped.fields.altToughness || '').trim()) {
+				warnings.push('Transform is true, but the alternate-face text fields are blank.');
+			}
+		}
 
 		return {
 			card: builtCard,
+			alternateCard: alternateCard,
 			fields: mapped.fields,
-			warnings: warnings
+			alternateFields: alternateFields,
+			warnings: warnings,
+			transform: transform,
+			flip: flip
+		};
+	}
+
+	function renderResultForFace(result, face) {
+		if (face === 'back') {
+			if (!result.transform || !result.alternateCard) {
+				throw new Error('The selected row is not a Transform card.');
+			}
+			return {
+				card: cloneSerializableCard(result.alternateCard),
+				fields: Object.assign({}, result.alternateFields),
+				warnings: result.warnings.slice(),
+				transformFace: 'back',
+				reversePT: '',
+				sourceResult: result
+			};
+		}
+		return {
+			card: cloneSerializableCard(result.card),
+			fields: Object.assign({}, result.fields),
+			warnings: result.warnings.slice(),
+			transformFace: result.transform ? 'front' : '',
+			reversePT: result.transform && result.alternateCard && result.alternateCard.text.pt ?
+				result.alternateCard.text.pt.text || '' : '',
+			sourceResult: result
 		};
 	}
 
@@ -621,6 +899,7 @@
 	}
 
 	async function applyPreviewToCurrentCard(result) {
+		restoreTemplateTextLayout(result);
 		var previewText = JSON.parse(JSON.stringify(result.card.text));
 		card.text = card.text || {};
 		Object.keys(previewText).forEach(function (key) {
@@ -652,6 +931,9 @@
 			setInputValue('#text-editor-font-size', card.text[selectedKey].fontSize || 0);
 		}
 
+		if (result.transformFace) {
+			applyTransformLayout(result);
+		}
 		await applyMappedArt(result);
 		await waitForCardFonts();
 		result.appliedFrameType = await applyMappedFrame(result);
@@ -734,8 +1016,9 @@
 		await writable.close();
 	}
 
-	async function renderBatchCard(job) {
-		await applyPreviewToCurrentCard(job.result);
+	async function renderBatchCard(job, face) {
+		var renderResult = renderResultForFace(job.result, face);
+		await applyPreviewToCurrentCard(renderResult);
 		await new Promise(function (resolve) {
 			requestAnimationFrame(function () {
 				requestAnimationFrame(resolve);
@@ -745,6 +1028,10 @@
 			drawCard();
 		}
 		return canvasToBlob(cardCanvas);
+	}
+
+	function facesForResult(result) {
+		return result.transform ? ['front', 'back'] : ['single'];
 	}
 
 	async function exportBatch() {
@@ -779,7 +1066,7 @@
 				chunks.set(chunkName, []);
 			}
 			chunks.get(chunkName).push({rowIndex: rowIndex, result: result});
-			totalCards++;
+			totalCards += facesForResult(result).length;
 		}
 		if (!totalCards) {
 			status.textContent = 'No CSV rows are marked for inclusion.';
@@ -810,6 +1097,8 @@
 		var usedZipNames = {};
 		var selectedRow = document.querySelector('#csv-card-preview-row');
 		var selectedRowIndex = selectedRow && selectedRow.value !== '' ? Number(selectedRow.value) : null;
+		var selectedFaceElement = document.querySelector('#csv-card-preview-face');
+		var selectedFace = selectedFaceElement ? selectedFaceElement.value : 'front';
 
 		try {
 			for (var chunkEntry of chunks.entries()) {
@@ -821,21 +1110,27 @@
 
 				for (var job of jobs) {
 					var displayName = job.result.fields.name || 'Row ' + (job.rowIndex + 2);
-					status.textContent = 'Rendering ' + (completed + 1) + ' of ' + totalCards + ': ' + displayName + '…';
-					try {
-						var pngBlob = await renderBatchCard(job);
-						var requestedName = job.result.fields.outputFilename || displayName;
-						requestedName = String(requestedName).replace(/\.png$/i, '');
-						var safeCardName = sanitizeBaseName(requestedName, 'Card-' + (job.rowIndex + 2));
-						var pngName = uniqueFileName(safeCardName, '.png', usedCardNames);
-						zip.file(pngName, pngBlob);
-						addedCards++;
-					} catch (error) {
-						console.error('CSV batch row failed:', job.rowIndex + 2, error);
-						failedCards.push(displayName + ': ' + (error.message || 'render failed'));
+					var requestedName = job.result.fields.outputFilename || displayName;
+					requestedName = String(requestedName).replace(/\.png$/i, '');
+					var safeCardName = sanitizeBaseName(requestedName, 'Card-' + (job.rowIndex + 2));
+					for (var face of facesForResult(job.result)) {
+						var faceLabel = face === 'front' ? 'Front' : face === 'back' ? 'Back' : '';
+						status.textContent = 'Rendering ' + (completed + 1) + ' of ' + totalCards + ': ' +
+							displayName + (faceLabel ? ' (' + faceLabel + ')' : '') + '…';
+						try {
+							var pngBlob = await renderBatchCard(job, face);
+							var outputBase = safeCardName + (faceLabel ? ' - ' + faceLabel : '');
+							var pngName = uniqueFileName(outputBase, '.png', usedCardNames);
+							zip.file(pngName, pngBlob);
+							addedCards++;
+						} catch (error) {
+							console.error('CSV batch face failed:', job.rowIndex + 2, face, error);
+							failedCards.push(displayName + (faceLabel ? ' (' + faceLabel + ')' : '') +
+								': ' + (error.message || 'render failed'));
+						}
+						completed++;
+						progress.value = completed;
 					}
-					completed++;
-					progress.value = completed;
 				}
 
 				if (addedCards) {
@@ -853,9 +1148,11 @@
 			}
 
 			if (selectedRowIndex !== null) {
-				await applyPreviewToCurrentCard(buildCard(selectedRowIndex));
+				var selectedResult = buildCard(selectedRowIndex);
+				var restoreFace = selectedFace === 'back' && selectedResult.transform ? 'back' : 'front';
+				await applyPreviewToCurrentCard(renderResultForFace(selectedResult, restoreFace));
 			}
-			var resultMessage = 'Finished: ' + (totalCards - failedCards.length) + ' card(s) exported across ' +
+			var resultMessage = 'Finished: ' + (totalCards - failedCards.length) + ' image(s) exported across ' +
 				chunks.size + ' ZIP file(s).';
 			if (failedCards.length) {
 				resultMessage += ' Failed: ' + failedCards.join(', ') + '.';
@@ -892,6 +1189,10 @@
 			option.textContent = 'Row ' + (index + 2) + (name ? ': ' + name : '');
 			selector.appendChild(option);
 		});
+		var faceSelector = document.querySelector('#csv-card-preview-face');
+		if (faceSelector) {
+			faceSelector.value = 'front';
+		}
 	}
 
 	function captureTemplate() {
@@ -924,20 +1225,26 @@
 
 		try {
 			var result = buildCard(Number(selector.value));
-			await applyPreviewToCurrentCard(result);
-			window.lastCSVPreview = result;
+			var faceSelector = document.querySelector('#csv-card-preview-face');
+			var requestedFace = faceSelector ? faceSelector.value : 'front';
+			var face = requestedFace === 'back' ? 'back' : (result.transform ? 'front' : 'single');
+			var renderResult = renderResultForFace(result, face);
+			await applyPreviewToCurrentCard(renderResult);
+			window.lastCSVPreview = renderResult;
 			var appliedValues = [
 				'Title: ' + ((card.text.title && card.text.title.text) || '(blank)'),
 				'Mana: ' + ((card.text.mana && card.text.mana.text) || '(blank)'),
 				'Type: ' + ((card.text.type && card.text.type.text) || '(blank)'),
 				'Rules: ' + ((card.text.rules && card.text.rules.text) || '(blank)'),
 				'P/T: ' + ((card.text.pt && card.text.pt.text) || '(blank)'),
-				'Frame: ' + (result.appliedFrameType || 'Captured template'),
-				'Art: ' + (result.appliedArt || 'Captured template art')
+				'Frame: ' + (renderResult.appliedFrameType || 'Captured template'),
+				'Art: ' + (renderResult.appliedArt || 'Captured template art')
 			];
-			status.textContent = 'Previewed ' + (result.fields.name || 'row ' + (Number(selector.value) + 2)) +
+			var faceDescription = result.transform ? (face === 'back' ? 'back face of ' : 'front face of ') : '';
+			status.textContent = 'Previewed ' + faceDescription +
+				(result.fields.name || 'row ' + (Number(selector.value) + 2)) +
 				'. Applied ' + appliedValues.join('; ') + '.' +
-				(result.warnings.length ? ' ' + result.warnings.join(' ') : '');
+				(renderResult.warnings.length ? ' ' + renderResult.warnings.join(' ') : '');
 		} catch (error) {
 			status.textContent = error.message || 'The selected row could not be previewed.';
 		}
