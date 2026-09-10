@@ -116,6 +116,19 @@ Complete two-face support should also provide:
 - Warn when a mapping references a text field missing from the selected template.
 - Support common boolean forms such as TRUE/FALSE, Yes/No, and 1/0.
 
+## Current feature-control registry
+
+The CSV mapper exposes a controlled, expandable list of Card Conjurer controls. A custom CSV header can be manually assigned to any of these destinations without adding a new hard-coded import column.
+
+- Artwork: X, Y, scale, rotation, and grayscale.
+- Set symbol: X, Y, and scale.
+- Watermark: X, Y, scale, and opacity.
+- Every textbox in the captured template: text content, X, Y, width, height, and font-size adjustment.
+
+X, Y, width, and height values use the same editor-pixel measurements shown by Card Conjurer. Scale and opacity use percentages, rotation uses degrees, and grayscale accepts the same boolean forms as Transform and Flip. Blank cells keep the captured template value.
+
+This registry deliberately exposes supported controls instead of executing arbitrary object paths from a CSV. New Card Conjurer controls can be added to the registry without redesigning the importer. Feature-control values currently apply to both faces of a Transform card; face-specific controls can be added later.
+
 ## Chunked export
 
 - Group every generated card by its Chunk value.
