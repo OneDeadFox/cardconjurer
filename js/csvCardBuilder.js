@@ -408,6 +408,7 @@
 		var fields = {};
 		var metadata = {};
 		var textboxes = {};
+		var features = {};
 
 		csvState.mappings.forEach(function (target, columnIndex) {
 			var value = row[columnIndex] === undefined ? '' : String(row[columnIndex]);
@@ -422,6 +423,10 @@
 			}
 			if (target.indexOf('field:') === 0) {
 				fields[target.substring(6)] = value;
+				return;
+			}
+			if (target.indexOf('feature:') === 0 || target.indexOf('textboxprop:') === 0) {
+				features[target] = value;
 				return;
 			}
 			if (target.indexOf('textbox:') === 0) {
@@ -439,6 +444,7 @@
 			fields: fields,
 			metadata: metadata,
 			textboxes: textboxes,
+			features: features,
 			sourceRow: rowIndex + 2
 		};
 	}
@@ -674,6 +680,7 @@
 			alternateCard: alternateCard,
 			fields: mapped.fields,
 			alternateFields: alternateFields,
+			features: Object.assign({}, mapped.features),
 			warnings: warnings,
 			transform: transform,
 			flip: flip
@@ -688,6 +695,7 @@
 			return {
 				card: cloneSerializableCard(result.alternateCard),
 				fields: Object.assign({}, result.alternateFields),
+				features: Object.assign({}, result.features),
 				warnings: result.warnings.slice(),
 				transformFace: 'back',
 				reversePT: '',
@@ -697,6 +705,7 @@
 		return {
 			card: cloneSerializableCard(result.card),
 			fields: Object.assign({}, result.fields),
+			features: Object.assign({}, result.features),
 			warnings: result.warnings.slice(),
 			transformFace: result.transform ? 'front' : '',
 			reversePT: result.transform && result.alternateCard && result.alternateCard.text.pt ?
@@ -902,6 +911,152 @@
 		setInputValue('#art-rotate', card.artRotate || 0);
 	}
 
+	function parseFeatureBoolean(value) {
+		var normalized = String(value || '').trim().toLowerCase();
+		if (['true', 'yes', 'y', '1', 'x', 'on'].includes(normalized)) {
+			return true;
+		}
+		if (['false', 'no', 'n', '0', 'off'].includes(normalized)) {
+			return false;
+		}
+		return null;
+	}
+
+	function controlValueFromCard(definition) {
+		var value = card[definition.property];
+		if (value === undefined || value === null) {
+			return '';
+		}
+		if (definition.unit === 'x') {
+			return Number(value) * card.width;
+		}
+		if (definition.unit === 'y') {
+			return Number(value) * card.height;
+		}
+		if (definition.unit === 'percent') {
+			return Number(value) * 100;
+		}
+		return value;
+	}
+
+	function restoreRegisteredFeatureDefaults(result) {
+		if (!window.CSVFeatureRegistry) {
+			return;
+		}
+		CSVFeatureRegistry.definitions.forEach(function (definition) {
+			if (definition.id.indexOf('art') === 0) {
+				return;
+			}
+			if (definition.property && hasOwn(result.card, definition.property)) {
+				card[definition.property] = JSON.parse(JSON.stringify(result.card[definition.property]));
+				setInputValue(definition.input, controlValueFromCard(definition));
+			}
+		});
+		var grayscale = document.querySelector('#grayscale-art');
+		if (grayscale) {
+			grayscale.checked = !!(result.card.csvFeatureDefaults && result.card.csvFeatureDefaults.artGrayscale);
+		}
+	}
+
+	function applyTextboxProperty(target, rawValue, result) {
+		if (String(rawValue || '').trim() === '') {
+			return false;
+		}
+		var remainder = target.substring('textboxprop:'.length);
+		var divider = remainder.lastIndexOf(':');
+		var textboxKey = remainder.substring(0, divider);
+		var property = remainder.substring(divider + 1);
+		if (!textboxKey || !card.text || !card.text[textboxKey]) {
+			result.warnings.push('Mapped textbox control "' + target + '" is unavailable in this layout.');
+			return false;
+		}
+		var number = Number(rawValue);
+		if (!Number.isFinite(number)) {
+			result.warnings.push('Textbox control "' + target + '" requires a number; received "' + rawValue + '".');
+			return false;
+		}
+		if (property === 'x' || property === 'width') {
+			card.text[textboxKey][property] = number / card.width;
+		} else if (property === 'y' || property === 'height') {
+			card.text[textboxKey][property] = number / card.height;
+		} else if (property === 'fontSize') {
+			card.text[textboxKey].fontSize = number;
+		} else {
+			result.warnings.push('Textbox property "' + property + '" is not supported.');
+			return false;
+		}
+		return true;
+	}
+
+	function applyRegisteredFeature(target, rawValue, result) {
+		if (String(rawValue || '').trim() === '' || !window.CSVFeatureRegistry) {
+			return false;
+		}
+		var definition = CSVFeatureRegistry.get(target.substring('feature:'.length));
+		if (!definition) {
+			result.warnings.push('Mapped feature "' + target + '" is not registered.');
+			return false;
+		}
+		var input = document.querySelector(definition.input);
+		if (definition.unit === 'boolean') {
+			var booleanValue = parseFeatureBoolean(rawValue);
+			if (booleanValue === null) {
+				result.warnings.push(definition.label + ' requires a boolean value; received "' + rawValue + '".');
+				return false;
+			}
+			if (input) {
+				input.checked = booleanValue;
+			}
+			if (definition.property) {
+				card[definition.property] = booleanValue;
+			}
+			return true;
+		}
+
+		var number = Number(rawValue);
+		if (!Number.isFinite(number)) {
+			result.warnings.push(definition.label + ' requires a number; received "' + rawValue + '".');
+			return false;
+		}
+		var storedValue = number;
+		if (definition.unit === 'x') {
+			storedValue = number / card.width;
+		} else if (definition.unit === 'y') {
+			storedValue = number / card.height;
+		} else if (definition.unit === 'percent') {
+			storedValue = number / 100;
+		}
+		if (definition.property) {
+			card[definition.property] = storedValue;
+		}
+		if (input) {
+			input.value = number;
+		}
+		return true;
+	}
+
+	function applyMappedFeatures(result) {
+		restoreRegisteredFeatureDefaults(result);
+		var applied = [];
+		var watermarkChanged = false;
+		Object.keys(result.features || {}).forEach(function (target) {
+			var didApply = false;
+			if (target.indexOf('textboxprop:') === 0) {
+				didApply = applyTextboxProperty(target, result.features[target], result);
+			} else if (target.indexOf('feature:') === 0) {
+				didApply = applyRegisteredFeature(target, result.features[target], result);
+				watermarkChanged = watermarkChanged || (didApply && target.indexOf('feature:watermark') === 0);
+			}
+			if (didApply) {
+				applied.push(target);
+			}
+		});
+		if (watermarkChanged && typeof watermarkEdited === 'function') {
+			watermarkEdited();
+		}
+		result.appliedFeatures = applied;
+	}
+
 	async function applyPreviewToCurrentCard(result) {
 		restoreTemplateTextLayout(result);
 		var previewText = JSON.parse(JSON.stringify(result.card.text));
@@ -941,6 +1096,7 @@
 		await applyMappedArt(result);
 		await waitForCardFonts();
 		result.appliedFrameType = await applyMappedFrame(result);
+		applyMappedFeatures(result);
 
 		if (typeof bottomInfoEdited === 'function') {
 			await bottomInfoEdited();
@@ -1208,6 +1364,10 @@
 			return;
 		}
 		templateCard = cloneSerializableCard(card);
+		var grayscale = document.querySelector('#grayscale-art');
+		templateCard.csvFeatureDefaults = {
+			artGrayscale: grayscale ? grayscale.checked : false
+		};
 		if (status) {
 			status.textContent = 'Captured template: ' + (card.version || 'current card layout') + '.';
 		}
@@ -1242,7 +1402,8 @@
 				'Rules: ' + ((card.text.rules && card.text.rules.text) || '(blank)'),
 				'P/T: ' + ((card.text.pt && card.text.pt.text) || '(blank)'),
 				'Frame: ' + (renderResult.appliedFrameType || 'Captured template'),
-				'Art: ' + (renderResult.appliedArt || 'Captured template art')
+				'Art: ' + (renderResult.appliedArt || 'Captured template art'),
+				'Feature controls: ' + ((renderResult.appliedFeatures || []).length)
 			];
 			var faceDescription = result.transform ? (face === 'back' ? 'back face of ' : 'front face of ') : '';
 			status.textContent = 'Previewed ' + faceDescription +
