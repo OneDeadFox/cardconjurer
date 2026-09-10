@@ -688,6 +688,10 @@
 								<h5 id='csv-template-status' class='padding margin-bottom input-description'>No batch template captured.</h5>
 								<div class='input-grid margin-bottom'>
 									<select id='csv-card-preview-row' class='input' aria-label='Select CSV card row to preview'></select>
+									<select id='csv-card-preview-face' class='input' aria-label='Select CSV card face to preview'>
+										<option value='front'>Front / Single Face</option>
+										<option value='back'>Transform Back</option>
+									</select>
 									<button class='input' onclick='CSVCardBuilder.previewSelectedRow();'>Preview Selected Card</button>
 								</div>
 								<h5 id='csv-card-preview-status' class='padding margin-bottom input-description'>Preview uses session memory and does not save the card.</h5>
