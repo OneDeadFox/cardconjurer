@@ -59,6 +59,7 @@ Transform and Flip are distinct layout modes. For V1, the importer must report a
 - The preview face selector can display either face before export.
 - Each Transform row exports `Output Filename - Front.png` and `Output Filename - Back.png` into the row's Chunk ZIP.
 - Transform artwork uses `Art File` / `Art URL` for the front and `Alt Art File` / `Alt Art URL` for the back.
+- `Alt Art` is accepted as an alias for `Alt Art File`; `Alt Creature Type` and `Alt Type` are accepted as aliases for `Alt Type Line`.
 - The initial implementation uses Card Conjurer's regular M15 transform-front and transform-back frames. Additional transform frame variants remain future work.
 - `Flip` remains a separate single-canvas layout and is the next implementation step.
 
