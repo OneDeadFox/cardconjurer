@@ -93,6 +93,30 @@
 		}
 	];
 
+	var featureDefinitions = [
+		{group:'Artwork controls', id:'artX', label:'Art X (editor pixels)', property:'artX', input:'#art-x', unit:'x'},
+		{group:'Artwork controls', id:'artY', label:'Art Y (editor pixels)', property:'artY', input:'#art-y', unit:'y'},
+		{group:'Artwork controls', id:'artZoom', label:'Art Scale (%)', property:'artZoom', input:'#art-zoom', unit:'percent'},
+		{group:'Artwork controls', id:'artRotate', label:'Art Rotation (degrees)', property:'artRotate', input:'#art-rotate', unit:'number'},
+		{group:'Artwork controls', id:'artGrayscale', label:'Art Grayscale (boolean)', input:'#grayscale-art', unit:'boolean'},
+		{group:'Set symbol controls', id:'setSymbolX', label:'Set Symbol X (editor pixels)', property:'setSymbolX', input:'#setSymbol-x', unit:'x'},
+		{group:'Set symbol controls', id:'setSymbolY', label:'Set Symbol Y (editor pixels)', property:'setSymbolY', input:'#setSymbol-y', unit:'y'},
+		{group:'Set symbol controls', id:'setSymbolZoom', label:'Set Symbol Scale (%)', property:'setSymbolZoom', input:'#setSymbol-zoom', unit:'percent'},
+		{group:'Watermark controls', id:'watermarkX', label:'Watermark X (editor pixels)', property:'watermarkX', input:'#watermark-x', unit:'x'},
+		{group:'Watermark controls', id:'watermarkY', label:'Watermark Y (editor pixels)', property:'watermarkY', input:'#watermark-y', unit:'y'},
+		{group:'Watermark controls', id:'watermarkZoom', label:'Watermark Scale (%)', property:'watermarkZoom', input:'#watermark-zoom', unit:'percent'},
+		{group:'Watermark controls', id:'watermarkOpacity', label:'Watermark Opacity (%)', property:'watermarkOpacity', input:'#watermark-opacity', unit:'percent'}
+	];
+
+	window.CSVFeatureRegistry = {
+		definitions: featureDefinitions.slice(),
+		get: function (id) {
+			return featureDefinitions.find(function (definition) {
+				return definition.id === id;
+			}) || null;
+		}
+	};
+
 	var aliases = {
 		cardid: 'field:cardId',
 		id: 'field:cardId',
@@ -147,6 +171,14 @@
 		artfilename: 'field:artFile',
 		arturl: 'field:artUrl',
 		artist: 'field:artist',
+		artx: 'feature:artX',
+		arty: 'feature:artY',
+		artscale: 'feature:artZoom',
+		artzoom: 'feature:artZoom',
+		artrotation: 'feature:artRotate',
+		artrotate: 'feature:artRotate',
+		artgrayscale: 'feature:artGrayscale',
+		grayscaleart: 'feature:artGrayscale',
 		altname: 'field:altName',
 		alternatename: 'field:altName',
 		altcolor: 'field:altColor',
@@ -191,6 +223,15 @@
 		framevariant: 'field:frameVariant',
 		framestyle: 'field:frameVariant',
 		framesubtype: 'field:frameVariant',
+		setsymbolx: 'feature:setSymbolX',
+		setsymboly: 'feature:setSymbolY',
+		setsymbolscale: 'feature:setSymbolZoom',
+		setsymbolzoom: 'feature:setSymbolZoom',
+		watermarkx: 'feature:watermarkX',
+		watermarky: 'feature:watermarkY',
+		watermarkscale: 'feature:watermarkZoom',
+		watermarkzoom: 'feature:watermarkZoom',
+		watermarkopacity: 'feature:watermarkOpacity',
 		template: 'field:template'
 	};
 
@@ -336,6 +377,46 @@
 			groups.push({
 				label: 'Current template text fields',
 				fields: textFields
+			});
+		}
+
+		var featureGroups = {};
+		featureDefinitions.forEach(function (definition) {
+			if (!featureGroups[definition.group]) {
+				featureGroups[definition.group] = [];
+			}
+			featureGroups[definition.group].push([
+				'feature:' + definition.id,
+				definition.label
+			]);
+		});
+		Object.keys(featureGroups).forEach(function (label) {
+			groups.push({label: label, fields: featureGroups[label]});
+		});
+
+		var textboxControls = [];
+		if (window.card && card.text) {
+			Object.keys(card.text).forEach(function (key) {
+				var textField = card.text[key] || {};
+				var label = textField.name || key;
+				[
+					['x', 'X (editor pixels)'],
+					['y', 'Y (editor pixels)'],
+					['width', 'Width (editor pixels)'],
+					['height', 'Height (editor pixels)'],
+					['fontSize', 'Font-size adjustment']
+				].forEach(function (property) {
+					textboxControls.push([
+						'textboxprop:' + key + ':' + property[0],
+						label + ' — ' + property[1]
+					]);
+				});
+			});
+		}
+		if (textboxControls.length) {
+			groups.push({
+				label: 'Current template textbox controls',
+				fields: textboxControls
 			});
 		}
 
