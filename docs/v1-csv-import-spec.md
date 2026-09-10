@@ -51,6 +51,18 @@ Import flexible CSV files, map their columns to Card Conjurer fields, generate c
 
 Transform and Flip are distinct layout modes. For V1, the importer must report an error when both are true for the same row. A future layout mode should support cards that intentionally use both.
 
+### Current Transform generation
+
+- A true `Transform` value renders two independent card faces.
+- The front uses the primary Name, Mana Cost, Type Line, Ability, Flavor Text, Power/Toughness, Color, and Art fields.
+- The back uses the corresponding `Alt` fields. Blank Alt Name, Alt Type Line, Alt Color, and Alt Artist values inherit their primary-face values where appropriate.
+- The preview face selector can display either face before export.
+- Each Transform row exports `Output Filename - Front.png` and `Output Filename - Back.png` into the row's Chunk ZIP.
+- Transform artwork uses `Art File` / `Art URL` for the front and `Alt Art File` / `Alt Art URL` for the back.
+- The initial implementation uses Card Conjurer's regular M15 transform-front and transform-back frames. Additional transform frame variants remain future work.
+- `Flip` remains a separate single-canvas layout and is the next implementation step.
+
+
 Complete two-face support should also provide:
 
 - Alt Name
