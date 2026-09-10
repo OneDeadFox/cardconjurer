@@ -6,6 +6,18 @@
 		return;
 	}
 
+	var BUILT_IN_TEXTURES = [
+		{id: 'builtin:m15-artifact', name: 'M15 Artifact', src: '/img/textures/m15/artifact.png', builtIn: true},
+		{id: 'builtin:m15-black', name: 'M15 Black', src: '/img/textures/m15/black.png', builtIn: true},
+		{id: 'builtin:m15-blue', name: 'M15 Blue', src: '/img/textures/m15/blue.png', builtIn: true},
+		{id: 'builtin:m15-colorless', name: 'M15 Colorless', src: '/img/textures/m15/colorless.png', builtIn: true},
+		{id: 'builtin:m15-green', name: 'M15 Green', src: '/img/textures/m15/green.png', builtIn: true},
+		{id: 'builtin:m15-land', name: 'M15 Land', src: '/img/textures/m15/land.png', builtIn: true},
+		{id: 'builtin:m15-multicolor', name: 'M15 Multicolor', src: '/img/textures/m15/multicolor.png', builtIn: true},
+		{id: 'builtin:m15-red', name: 'M15 Red', src: '/img/textures/m15/red.png', builtIn: true},
+		{id: 'builtin:m15-white', name: 'M15 White', src: '/img/textures/m15/white.png', builtIn: true}
+	];
+
 	var BUILT_IN_MASKS = [
 		{name: 'Left Half', category: 'Split Regions', src: '/img/frames/maskLeftHalf.png', preview: '/img/frames/maskLeftHalfThumb.png'},
 		{name: 'Right Half', category: 'Split Regions', src: '/img/frames/maskRightHalf.png', preview: '/img/frames/maskRightHalfThumb.png'},
@@ -50,10 +62,16 @@
 		return FrameProjectStore.getAssets();
 	}
 
-	function textureAssets() {
-		return assets().filter(function (asset) {
+	function textureResources() {
+		var saved = assets().filter(function (asset) {
 			return asset.kind === 'texture' || asset.kind === 'frame';
 		});
+		return BUILT_IN_TEXTURES.concat(saved);
+	}
+
+	function selectedTexture() {
+		var select = element('#frame-resource-texture');
+		return select && textureResources().find(function (texture) { return texture.id === select.value; });
 	}
 
 	function customMaskResources() {
@@ -105,11 +123,11 @@
 	}
 
 	async function selectedTextureSource() {
-		var select = element('#frame-resource-texture');
-		if (!select || !select.value) {
+		var texture = selectedTexture();
+		if (!texture) {
 			return '';
 		}
-		return FrameProjectStore.getAssetSource(select.value);
+		return texture.builtIn ? texture.src : FrameProjectStore.getAssetSource(texture.id);
 	}
 
 	function selectedMask() {
@@ -149,7 +167,7 @@
 		if (!select) {
 			return;
 		}
-		var list = textureAssets();
+		var list = textureResources();
 		var previous = selectedId || select.value;
 		select.innerHTML = '';
 		if (!list.length) {
@@ -158,7 +176,8 @@
 		} else {
 			select.disabled = false;
 			list.forEach(function (asset) {
-				appendOption(select, asset.id, asset.name + (asset.kind === 'texture' ? ' (texture)' : ' (frame image)'));
+				var suffix = asset.builtIn ? ' (built-in)' : (asset.kind === 'texture' ? ' (texture)' : ' (frame image)');
+				appendOption(select, asset.id, asset.name + suffix);
 			});
 			if (list.some(function (asset) { return asset.id === previous; })) {
 				select.value = previous;
@@ -237,8 +256,7 @@
 	}
 
 	async function createLayer() {
-		var textureSelect = element('#frame-resource-texture');
-		var texture = textureSelect && assets().find(function (asset) { return asset.id === textureSelect.value; });
+		var texture = selectedTexture();
 		var mask = selectedMask();
 		if (!texture) {
 			setStatus('Import and select a texture first.', true);
@@ -253,17 +271,19 @@
 			return;
 		}
 		try {
-			var textureSource = await FrameProjectStore.getAssetSource(texture.id);
+			var textureSource = texture.builtIn ? texture.src : await FrameProjectStore.getAssetSource(texture.id);
 			var maskSource = await resolveMaskSource(mask, false);
 			var frame = {
 				name: texture.name + ' — ' + mask.name,
 				src: textureSource,
-				assetId: texture.id,
 				noThumb: true,
 				masks: [],
 				bounds: {x: 0, y: 0, width: 1, height: 1},
 				opacity: 100
 			};
+			if (!texture.builtIn) {
+				frame.assetId = texture.id;
+			}
 			var maskDefinition = {name: mask.name, src: maskSource, noThumb: true};
 			if (mask.assetId) {
 				maskDefinition.assetId = mask.assetId;
@@ -301,7 +321,8 @@
 		updateTexturePreview: updateTexturePreview,
 		updateMaskPreview: updateMaskPreview,
 		createLayer: createLayer,
-		builtInMasks: BUILT_IN_MASKS.slice()
+		builtInMasks: BUILT_IN_MASKS.slice(),
+		builtInTextures: BUILT_IN_TEXTURES.slice()
 	};
 
 	init();
