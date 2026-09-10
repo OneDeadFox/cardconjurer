@@ -500,12 +500,111 @@ function getManaSymbol(key) {
 	return mana.get(key);
 }
 //FRAME TAB
+function cloneFrameEditorValue(value) {
+	return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+function getFrameEditorState(frame) {
+	return {
+		bounds: cloneFrameEditorValue(frame.bounds || {}),
+		ogBounds: cloneFrameEditorValue(frame.ogBounds),
+		opacity: frame.opacity === undefined ? 100 : Number(frame.opacity),
+		erase: !!frame.erase,
+		preserveAlpha: !!frame.preserveAlpha,
+		colorOverlayCheck: !!frame.colorOverlayCheck,
+		colorOverlay: frame.colorOverlay || '#000000',
+		hslHue: Number(frame.hslHue) || 0,
+		hslSaturation: Number(frame.hslSaturation) || 0,
+		hslLightness: Number(frame.hslLightness) || 0,
+		rotation: Number(frame.rotation) || 0,
+		flipX: !!frame.flipX,
+		flipY: !!frame.flipY,
+		hidden: !!frame.hidden
+	};
+}
+function ensureFrameEditorDefaults(frame) {
+	if (!frame.editorDefaults) {
+		frame.editorDefaults = getFrameEditorState(frame);
+	}
+	return frame.editorDefaults;
+}
+function drawFrameLayerImage(context, image, x, y, width, height, frame) {
+	const rotation = Number(frame.rotation) || 0;
+	const scaleHorizontal = frame.flipX ? -1 : 1;
+	const scaleVertical = frame.flipY ? -1 : 1;
+	if (!rotation && scaleHorizontal == 1 && scaleVertical == 1) {
+		context.drawImage(image, x, y, width, height);
+		return;
+	}
+	context.save();
+	context.translate(x + width / 2, y + height / 2);
+	context.rotate(rotation * Math.PI / 180);
+	context.scale(scaleHorizontal, scaleVertical);
+	context.drawImage(image, -width / 2, -height / 2, width, height);
+	context.restore();
+}
+function syncFrameElementVisibility(frame) {
+	const index = card.frames.indexOf(frame);
+	const element = document.querySelector('#frame-list')?.children[index];
+	if (element) {
+		element.classList.toggle('frame-element-hidden', !!frame.hidden);
+	}
+}
+function refreshSelectedFrameEditor() {
+	const index = card.frames.indexOf(selectedFrame);
+	const element = document.querySelector('#frame-list')?.children[index];
+	if (element) {
+		frameElementClicked({target: element});
+	}
+}
+async function duplicateSelectedFrame() {
+	if (!selectedFrame) {
+		return;
+	}
+	const copy = JSON.parse(JSON.stringify(selectedFrame, (key, value) => key == 'image' ? undefined : value));
+	copy.name = (copy.name || 'Frame Layer') + ' Copy';
+	copy.masks = copy.masks || [];
+	delete copy.editorDefaults;
+	ensureFrameEditorDefaults(copy);
+	card.frames.unshift(copy);
+	await addFrame([], copy);
+	selectedFrame = copy;
+	syncFrameElementVisibility(copy);
+	refreshSelectedFrameEditor();
+	drawFrames();
+}
+function resetSelectedFrame() {
+	if (!selectedFrame || !confirm('Reset this layer\'s editable controls to the values it had when it was added?')) {
+		return;
+	}
+	const defaults = cloneFrameEditorValue(ensureFrameEditorDefaults(selectedFrame));
+	selectedFrame.bounds = defaults.bounds || {};
+	if (defaults.ogBounds === undefined) {
+		delete selectedFrame.ogBounds;
+	} else {
+		selectedFrame.ogBounds = defaults.ogBounds;
+	}
+	selectedFrame.opacity = defaults.opacity;
+	selectedFrame.erase = defaults.erase;
+	selectedFrame.preserveAlpha = defaults.preserveAlpha;
+	selectedFrame.colorOverlayCheck = defaults.colorOverlayCheck;
+	selectedFrame.colorOverlay = defaults.colorOverlay;
+	selectedFrame.hslHue = defaults.hslHue;
+	selectedFrame.hslSaturation = defaults.hslSaturation;
+	selectedFrame.hslLightness = defaults.hslLightness;
+	selectedFrame.rotation = defaults.rotation;
+	selectedFrame.flipX = defaults.flipX;
+	selectedFrame.flipY = defaults.flipY;
+	selectedFrame.hidden = defaults.hidden;
+	syncFrameElementVisibility(selectedFrame);
+	refreshSelectedFrameEditor();
+	drawFrames();
+}
 function drawFrames() {
 	frameContext.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
 	var frameToDraw = card.frames.slice().reverse();
 	var haveDrawnPrePTCanvas = false;
 	frameToDraw.forEach(item => {
-		if (item.image) {
+		if (item.image && !item.hidden) {
 			if (!haveDrawnPrePTCanvas && drawTextBetweenFrames && item.name.includes('Power/Toughness')) {
 				haveDrawnPrePTCanvas = true;
 				frameContext.globalCompositeOperation = 'source-over';
@@ -530,7 +629,7 @@ function drawFrames() {
 			if (item.preserveAlpha) { //preserves alpha, and blends colors using an alpha that only cares about the mask(s), and the user-set opacity value
 				//draw the image onto a separate canvas to view its unaltered state
 				frameCompositingContext.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
-				frameCompositingContext.drawImage(item.image, frameX, frameY, frameWidth, frameHeight);
+				drawFrameLayerImage(frameCompositingContext, item.image, frameX, frameY, frameWidth, frameHeight, item);
 				//create pixel arrays for the existing image, new image, and alpha mask
 				var existingData = frameContext.getImageData(0, 0, frameCanvas.width, frameCanvas.height)
 				var existingPixels = existingData.data;
@@ -549,7 +648,7 @@ function drawFrames() {
 				frameContext.putImageData(existingData, 0, 0);
 			} else {
 				//mask the image
-				frameMaskingContext.drawImage(item.image, frameX, frameY, frameWidth, frameHeight);
+				drawFrameLayerImage(frameMaskingContext, item.image, frameX, frameY, frameWidth, frameHeight, item);
 				//color overlay
 				if (item.colorOverlayCheck) {frameMaskingContext.globalCompositeOperation = 'source-in'; frameMaskingContext.fillStyle = item.colorOverlay; frameMaskingContext.fillRect(0, 0, frameMaskingCanvas.width, frameMaskingCanvas.height);}
 				//HSL adjustments
@@ -934,6 +1033,7 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 			maskThumbnail = false;
 		}
 	}
+	ensureFrameEditorDefaults(frameToAdd);
 	frameToAdd.masks.forEach(item => {
 		item.image = new Image();
 		item.image.crossOrigin = 'anonymous';
@@ -989,6 +1089,7 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	frameElementClose.onclick = removeFrame;
 	frameElement.appendChild(frameElementClose);
 	document.querySelector('#frame-list').prepend(frameElement);
+	syncFrameElementVisibility(frameToAdd);
 	bottomInfoEdited();
 }
 function removeFrame(event) {
@@ -1015,6 +1116,14 @@ function frameElementClicked(event) {
 		document.querySelector('#frame-editor-width').onchange = (event) => {selectedFrame.bounds.width = (event.target.value / card.width); drawFrames();}
 		document.querySelector('#frame-editor-height').value = scaleHeight(selectedFrame.bounds.height || 1);
 		document.querySelector('#frame-editor-height').onchange = (event) => {selectedFrame.bounds.height = (event.target.value / card.height); drawFrames();}
+		document.querySelector('#frame-editor-rotation').value = Number(selectedFrame.rotation) || 0;
+		document.querySelector('#frame-editor-rotation').onchange = (event) => {selectedFrame.rotation = Number(event.target.value) || 0; drawFrames();}
+		document.querySelector('#frame-editor-visible').checked = !selectedFrame.hidden;
+		document.querySelector('#frame-editor-visible').onchange = (event) => {selectedFrame.hidden = !event.target.checked; syncFrameElementVisibility(selectedFrame); drawFrames();}
+		document.querySelector('#frame-editor-flip-x').checked = !!selectedFrame.flipX;
+		document.querySelector('#frame-editor-flip-x').onchange = (event) => {selectedFrame.flipX = event.target.checked; drawFrames();}
+		document.querySelector('#frame-editor-flip-y').checked = !!selectedFrame.flipY;
+		document.querySelector('#frame-editor-flip-y').onchange = (event) => {selectedFrame.flipY = event.target.checked; drawFrames();}
 		document.querySelector('#frame-editor-opacity').value = selectedFrame.opacity || 100;
 		document.querySelector('#frame-editor-opacity').onchange = (event) => {selectedFrame.opacity = event.target.value; drawFrames();}
 		document.querySelector('#frame-editor-erase').checked = selectedFrame.erase || false;
