@@ -87,6 +87,7 @@
 				['field:language', 'Language'],
 				['field:year', 'Year'],
 				['field:frameType', 'Frame Type'],
+				['field:frameVariant', 'Frame Variant'],
 				['field:template', 'Template']
 			]
 		}
@@ -176,6 +177,9 @@
 		year: 'field:year',
 		frametype: 'field:frameType',
 		frame: 'field:frameType',
+		framevariant: 'field:frameVariant',
+		framestyle: 'field:frameVariant',
+		framesubtype: 'field:frameVariant',
 		template: 'field:template'
 	};
 
