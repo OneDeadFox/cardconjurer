@@ -380,6 +380,26 @@
 			});
 		}
 
+		var imageFields = [];
+		var seenImageFields = {};
+		if (window.card && card.frames) {
+			card.frames.forEach(function (frame) {
+				var key = frame.csvImageFieldKey;
+				if (!key || seenImageFields[key]) {
+					return;
+				}
+				seenImageFields[key] = true;
+				var label = frame.csvFieldLabel || frame.name || key;
+				imageFields.push(['imagefield:' + key, 'Image field: ' + label]);
+			});
+		}
+		if (imageFields.length) {
+			groups.push({
+				label: 'Current template image fields',
+				fields: imageFields
+			});
+		}
+
 		var featureGroups = {};
 		featureDefinitions.forEach(function (definition) {
 			if (!featureGroups[definition.group]) {
@@ -424,7 +444,28 @@
 	}
 
 	function getAutomaticTarget(header) {
-		return aliases[normalizeHeader(header)] || 'metadata';
+		var normalized = normalizeHeader(header);
+		if (aliases[normalized]) {
+			return aliases[normalized];
+		}
+		if (window.card && card.text) {
+			for (var textKey of Object.keys(card.text)) {
+				var textField = card.text[textKey] || {};
+				if (textField.customField &&
+					normalizeHeader(textField.csvFieldLabel || textField.name || textKey) === normalized) {
+					return 'textbox:' + textKey;
+				}
+			}
+		}
+		if (window.card && card.frames) {
+			for (var frame of card.frames) {
+				if (frame.csvImageFieldKey &&
+					normalizeHeader(frame.csvFieldLabel || frame.name || frame.csvImageFieldKey) === normalized) {
+					return 'imagefield:' + frame.csvImageFieldKey;
+				}
+			}
+		}
+		return 'metadata';
 	}
 
 	function appendTargetOptions(select, selectedValue) {
@@ -685,6 +726,9 @@
 		if (!state.headers.length) {
 			return;
 		}
+		state.mappings = state.mappings.map(function (mapping, index) {
+			return mapping === 'metadata' ? getAutomaticTarget(state.headers[index]) : mapping;
+		});
 		renderMappings();
 		validateAndRenderStatus();
 	}
