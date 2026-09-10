@@ -738,9 +738,12 @@ textarea.input {
 /*Creator related only*/
 /*Creator Grid/Canvas/Menu*/
 .creator-grid {
+	box-sizing: border-box;
 	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 	display: grid;
-	grid-template-columns: 1fr;
+	grid-template-columns: minmax(0, 1fr);
 	justify-items: center;
 	grid-gap: 1rem;
 	padding: 1rem 0;
@@ -752,11 +755,14 @@ textarea.input {
 	/*backdrop-filter: hue-rotate(80deg);*/
 }
 .creator-menu {
+	box-sizing: border-box;
 	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 }
 @media only screen and (min-width: 1250px) {
 	.creator-grid {
-		grid-template-columns: 750px auto;
+		grid-template-columns: 750px minmax(0, 1fr);
 		padding: 1rem;
 		justify-items: left;
 	}
@@ -999,6 +1005,15 @@ textarea.input {
 }
 
 /* CSV import */
+#creator-menu-sections,
+#creator-menu-import,
+#csv-import-details,
+.csv-preview {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+}
 .csv-mapping-row {
 	display: grid;
 	grid-template-columns: minmax(10rem, 1fr) minmax(16rem, 2fr);
@@ -1025,7 +1040,11 @@ textarea.input {
 }
 .csv-preview {
 	max-height: 24rem;
-	overflow: auto;
+	overflow-x: auto;
+	overflow-y: auto;
+}
+.csv-preview::-webkit-scrollbar {
+	height: 0.5rem;
 }
 .csv-preview table {
 	border-collapse: collapse;
