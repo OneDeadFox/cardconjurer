@@ -957,7 +957,8 @@ textarea.input {
 	grid-gap: 1rem;
 }
 .frame-element-editor {
-	width: 42rem;
+	box-sizing: border-box;
+	width: 46rem;
 	max-width: calc(50vw - 2rem);
 	max-height: calc(100vh - 2rem);
 	top: 1rem;
@@ -965,11 +966,91 @@ textarea.input {
 	left: auto;
 	transform: none;
 	overflow-y: auto;
+	padding: 1rem;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-gap: 0.75rem;
 }
 .frame-element-editor > .frame-element-editor-title {
 	cursor: move;
 	touch-action: none;
 	user-select: none;
+	white-space: nowrap;
+	font-size: 1.5rem;
+	align-self: center;
+}
+.frame-element-editor > .frame-element-editor-close {
+	font-size: 1.5rem;
+	align-self: center;
+}
+.frame-editor-number-grid,
+.frame-editor-toggle-grid,
+.frame-editor-lower-grid {
+	grid-column: 1 / -1;
+	display: grid;
+	gap: 0.5rem;
+	min-width: 0;
+}
+.frame-editor-number-grid,
+.frame-editor-toggle-grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.frame-editor-field,
+.frame-editor-field > .input {
+	box-sizing: border-box;
+	min-width: 0;
+	width: 100%;
+}
+.frame-editor-field > .input-description {
+	margin-bottom: 0.2rem;
+}
+.frame-editor-toggle-grid > .input,
+.frame-editor-color-control > .input {
+	box-sizing: border-box;
+	min-width: 0;
+	width: 100%;
+}
+.frame-editor-color-control {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 3rem;
+	gap: 0.35rem;
+	min-width: 0;
+}
+.frame-editor-lower-grid {
+	grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+	align-items: start;
+	gap: 0.75rem;
+}
+.frame-editor-hsl-section,
+.frame-editor-side-panel {
+	min-width: 0;
+}
+.frame-editor-hsl-section {
+	display: grid;
+	gap: 0.5rem;
+}
+.frame-editor-hsl-row {
+	display: grid;
+	gap: 0.2rem;
+}
+.frame-editor-hsl-control {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 4.5rem;
+	gap: 0.35rem;
+	align-items: center;
+	min-width: 0;
+}
+.frame-editor-hsl-control > .input {
+	box-sizing: border-box;
+	min-width: 0;
+	width: 100%;
+}
+.frame-editor-side-panel {
+	display: grid;
+	gap: 0.75rem;
+}
+.frame-editor-side-panel .input-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.35rem;
 }
 
 .frame-element-editor.opened, .textbox-editor.opened {
