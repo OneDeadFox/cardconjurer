@@ -81,17 +81,19 @@ Local image assets remain available offline. Assets saved as remote URLs still d
 The Design Frame workspace now provides the first usable construction library:
 
 - Nine built-in M15 base textures: artifact, black, blue, colorless, green, land, multicolor, red, and white.
+- Nine premade M15 regular power/toughness pieces.
 - User-imported textures stored in IndexedDB.
 - Bulk import for textures and custom masks.
-- A curated built-in catalog of general shapes, split regions, M15 Battle sections, Commander Legends sections, and legendary crowns.
-- Search and category filtering for masks.
-- Side-by-side texture and mask previews.
+- Ninety curated component choices across General, Regular, Battle, Commander Legends, Legendary, Transform, Borderless Transform, Japan Showcase, Zendikar Rising, Nickname, Showcase, Saga, Planeswalker, Split/Room, Borderless, and Sliver families.
+- Separate frame-family and component-type filters plus component search.
+- Side-by-side texture and component-mask previews.
+- A **Full Image (No Mask)** choice for premade pieces that should be added unchanged.
 - A non-destructive **Create Layer from Texture + Mask** action.
 - Automatic project references to the imported texture and custom-mask assets, so constructed layers remain reusable after the project is saved and reopened.
 
-Frame images already in the persistent asset library can also be selected as texture sources. The curated manifest intentionally exposes usable source masks rather than the hundreds of duplicates and thumbnails in the raw asset tree. Additional frame families, favorites, art-window masks, power/toughness masks, and Transform masks can be added to the catalog incrementally.
+Frame images already in the persistent asset library can also be selected as texture sources. The curated manifest intentionally exposes usable source masks rather than the hundreds of duplicates and thumbnails in the raw asset tree. The intended construction model is **base material + component mask**: select a colored or imported texture, then use a title, type-line, rules-box, pinline, border, crown, or other mask to cut it into that component. Premade pieces such as power/toughness boxes use **Full Image (No Mask)** instead.
 
-To build a layer, choose a built-in texture or import your own, select it from the Texture list, filter and select a mask, then choose **Create Layer from Texture + Mask**. The resulting layer appears under **Current Frame Layers** and uses the existing non-destructive position, size, rotation, flip, opacity, color, HSL, mask, duplicate, visibility, and reset controls.
+To build a layer, choose a built-in texture or import your own, select a frame family and component type, choose a component mask, then choose **Create Layer from Texture + Mask**. The resulting layer appears under **Current Frame Layers** and uses the existing non-destructive position, size, rotation, flip, opacity, color, HSL, mask, duplicate, visibility, and reset controls.
 
 ## Next V1 phases
 
