@@ -50,6 +50,13 @@ Card Conjurer's existing per-layer controls continue to work inside a saved proj
 - Color overlay.
 - Hue, saturation, and lightness.
 - Uploaded masks.
+- Rotation around the layer's bounding-box center.
+- Horizontal and vertical flipping.
+- Non-destructive visibility toggling.
+- Layer duplication.
+- Resetting editable controls to the values captured when the layer was added.
+
+All of these properties are serialized with Frame Designer projects. Reset restores position, size, opacity, compositing, color adjustments, rotation, flips, and visibility. It does not delete masks that were added later.
 
 ## Current workflow
 
@@ -70,12 +77,11 @@ Local image assets remain available offline. Assets saved as remote URLs still d
 
 ## Next V1 phases
 
-1. Layer rotation, horizontal flip, vertical flip, visibility, duplicate, and reset.
-2. Direct manipulation handles on the card canvas.
-3. Portrait and landscape project orientation.
-4. Publish a project as a named Frame Type and Frame Variant.
-5. Make published templates selectable by the CSV builder.
-6. Export/import a portable project package containing its project data and image assets.
+1. Direct manipulation handles on the card canvas.
+2. Portrait and landscape project orientation.
+3. Publish a project as a named Frame Type and Frame Variant.
+4. Make published templates selectable by the CSV builder.
+5. Export/import a portable project package containing its project data and image assets.
 
 ## Deferred to V2
 
