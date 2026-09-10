@@ -220,6 +220,36 @@
 						</div>
 						<div id='frame-workspace-design' class='hidden' role='tabpanel'>
 						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Frame Construction Resources</h5>
+							<h5 class='padding margin-bottom input-description'>Combine a reusable texture with a built-in or imported mask to make a new editable frame layer.</h5>
+							<div class='frame-resource-imports margin-bottom'>
+								<label class='frame-resource-import input'>Import Textures
+									<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' onchange='FrameResourceLibrary.importFiles(event.target.files, "texture"); this.value="";' aria-label='Import texture images'>
+								</label>
+								<label class='frame-resource-import input'>Import Custom Masks
+									<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' onchange='FrameResourceLibrary.importFiles(event.target.files, "mask"); this.value="";' aria-label='Import custom mask images'>
+								</label>
+							</div>
+							<div class='frame-resource-grid margin-bottom'>
+								<div class='frame-resource-column'>
+									<h5 class='input-description'>Texture</h5>
+									<select id='frame-resource-texture' class='input' onchange='FrameResourceLibrary.updateTexturePreview();' aria-label='Texture image'></select>
+									<div id='frame-resource-texture-preview' class='frame-resource-preview'><span>Import and select a texture</span></div>
+								</div>
+								<div class='frame-resource-column'>
+									<h5 class='input-description'>Mask</h5>
+									<div class='frame-resource-mask-filters'>
+										<input id='frame-resource-mask-search' type='search' class='input' placeholder='Search masks' oninput='FrameResourceLibrary.filterMasks();' aria-label='Search masks'>
+										<select id='frame-resource-mask-category' class='input' onchange='FrameResourceLibrary.filterMasks();' aria-label='Mask category'></select>
+									</div>
+									<select id='frame-resource-mask' class='input' onchange='FrameResourceLibrary.updateMaskPreview();' aria-label='Construction mask'></select>
+									<div id='frame-resource-mask-preview' class='frame-resource-preview frame-resource-mask-preview'><span>Select a mask</span></div>
+								</div>
+							</div>
+							<button class='input margin-bottom' onclick='FrameResourceLibrary.createLayer();'>Create Layer from Texture + Mask</button>
+							<h5 id='frame-resource-status' class='padding input-description'>Import a texture, choose a mask, then create a layer.</h5>
+						</div>
+						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Frame Designer Projects</h5>
 							<h5 class='padding margin-bottom input-description'>Save the editable frame, text layout, and card settings as a draft on this device.</h5>
 							<input id='frame-project-name' type='text' class='input margin-bottom' placeholder='Project name' aria-label='Frame project name'>
@@ -1080,6 +1110,7 @@
 	<script defer src='/js/autoFrame.js'></script>
 	<script defer src='/js/creator-23.js'></script>
 	<script defer src='/js/frameProjectStore.js'></script>
+	<script defer src='/js/frameResourceLibrary.js'></script>
 	<script defer src='/js/csvImport.js'></script>
 	<script defer src='/js/vendor/jszip.min.js'></script>
 	<script defer src='/js/csvCardBuilder.js'></script>
