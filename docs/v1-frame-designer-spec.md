@@ -95,6 +95,17 @@ Frame images already in the persistent asset library can also be selected as tex
 
 To build a layer, choose a built-in texture or import your own, select a frame family and component type, choose a component mask, then choose **Create Layer from Texture + Mask**. The resulting layer appears under **Current Frame Layers** and uses the existing non-destructive position, size, rotation, flip, opacity, color, HSL, mask, duplicate, visibility, and reset controls.
 
+## Custom CSV template fields
+
+The Design Frame workspace can add labeled fields before a project is published:
+
+- **Add Text Field** creates an editable textbox with a stable CSV key. Its font, text, and bounds use the existing Text tab controls.
+- **Add Image Field** creates a special frame layer with a stable CSV key. Its position, size, rotation, flips, opacity, masks, and layer order use the existing Frame Image Editor.
+- Custom field labels appear under **Current template text fields** or **Current template image fields** in CSV Import.
+- An exact CSV header-to-label match is selected automatically when the CSV is loaded. **Refresh Current Template Fields** also matches newly added fields while preserving deliberate mappings.
+- A custom image cell may contain an image filename from the selected art folder, including a subfolder path, or an HTTP(S), data-image, blob, or app-relative URL. A blank mapped cell clears the image slot for that row.
+- Custom field definitions and labels are part of the card snapshot, so Frame Designer project save/load and CSV template capture retain them.
+
 ## Next V1 phases
 
 1. Direct manipulation handles on the card canvas.
