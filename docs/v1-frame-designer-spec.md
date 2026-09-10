@@ -10,6 +10,15 @@ Turn Card Conjurer's existing Frame tab into a persistent, reusable frame-author
 - **Project:** An editable draft containing the current card dimensions, frame layers, masks, text layout, art bounds, and other card-layout settings.
 - **Template:** A published project assigned a Frame Type and Frame Variant for reuse and CSV generation. Template publishing is the next phase after project persistence.
 
+## Workspace organization
+
+The existing top-level **Frame** tab contains two internal workspaces that share the same card canvas and current card state:
+
+- **Browse Frames:** frame groups, frame packs, search, built-in frame images, and built-in masks.
+- **Design Frame:** the active layer list, saved projects, and the persistent asset library.
+
+General display options remain visible beneath both workspaces.
+
 ## Current foundation
 
 The Frame tab now includes:
@@ -44,7 +53,7 @@ Card Conjurer's existing per-layer controls continue to work inside a saved proj
 
 ## Current workflow
 
-1. Open the **Frame** tab.
+1. Open the **Frame** tab and select **Design Frame**.
 2. Import one or more images under **Persistent Frame Asset Library**.
 3. Select an asset and choose **Add Selected Asset**.
 4. Click the new layer in the frame list to edit its existing controls.
