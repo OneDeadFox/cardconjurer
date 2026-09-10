@@ -15,9 +15,10 @@ Turn Card Conjurer's existing Frame tab into a persistent, reusable frame-author
 The existing top-level **Frame** tab contains two internal workspaces that share the same card canvas and current card state:
 
 - **Browse Frames:** frame groups, frame packs, search, built-in frame images, and built-in masks.
-- **Design Frame:** the active layer list, saved projects, and the persistent asset library.
+- **Design Frame:** saved projects, the persistent asset library, and access to layer editing.
+- **Current Frame Layers:** shared between both workspaces. Layers can be reordered in either workspace, but clicking a layer opens its editor only in Design Frame.
 
-General display options remain visible beneath both workspaces.
+General display options remain visible beneath both workspaces. The Frame Image Editor is a compact movable panel limited to less than half the viewport width. Drag its title to reposition it. Scrolling a numeric layer input changes the value and redraws immediately; typed values apply only after Enter or leaving the field.
 
 ## Current foundation
 
