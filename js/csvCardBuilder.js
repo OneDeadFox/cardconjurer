@@ -432,6 +432,57 @@
 		}
 	}
 
+	function localArtSource(fileName) {
+		var normalized = String(fileName || '').trim().replace(/\\/g, '/').replace(/^\/+/, '');
+		return normalized ? '/local_art/' + normalized.split('/').map(encodeURIComponent).join('/') : '';
+	}
+
+	async function waitForImage(image) {
+		if (!image) {
+			return;
+		}
+		if (image.complete && image.naturalWidth) {
+			if (typeof image.decode === 'function') {
+				try {
+					await image.decode();
+				} catch (error) {
+					// The normal image error handler supplies the fallback image.
+				}
+			}
+			return;
+		}
+		await new Promise(function (resolve) {
+			var finished = function () {
+				image.removeEventListener('load', finished);
+				image.removeEventListener('error', finished);
+				resolve();
+			};
+			image.addEventListener('load', finished, {once: true});
+			image.addEventListener('error', finished, {once: true});
+		});
+	}
+
+	async function applyMappedArt(result) {
+		if (typeof uploadArt !== 'function' || typeof art === 'undefined') {
+			return;
+		}
+		['artX', 'artY', 'artZoom', 'artRotate', 'artBounds', 'artSource'].forEach(function (key) {
+			if (hasOwn(result.card, key)) {
+				card[key] = JSON.parse(JSON.stringify(result.card[key]));
+			}
+		});
+		var rowArtSource = String(result.fields.artUrl || '').trim() ||
+			localArtSource(result.fields.artFile) ||
+			result.card.artSource || '/img/blank.png';
+		var shouldAutoFit = String(result.fields.artUrl || result.fields.artFile || '').trim() !== '';
+		uploadArt(rowArtSource, shouldAutoFit ? 'autoFit' : '');
+		await waitForImage(art);
+		setInputValue('#art-x', scaleX(card.artX) - scaleWidth(card.marginX || 0));
+		setInputValue('#art-y', scaleY(card.artY) - scaleHeight(card.marginY || 0));
+		setInputValue('#art-zoom', (card.artZoom || 1) * 100);
+		setInputValue('#art-rotate', card.artRotate || 0);
+	}
+
 	async function applyPreviewToCurrentCard(result) {
 		var previewText = JSON.parse(JSON.stringify(result.card.text));
 		card.text = card.text || {};
@@ -464,11 +515,7 @@
 			setInputValue('#text-editor-font-size', card.text[selectedKey].fontSize || 0);
 		}
 
-		var artUrl = result.fields.artUrl || '';
-		if (artUrl && typeof uploadArt === 'function') {
-			uploadArt(artUrl, 'autoFit');
-		}
-
+		await applyMappedArt(result);
 		await waitForCardFonts();
 		result.appliedFrameType = await applyMappedFrame(result);
 
@@ -481,6 +528,210 @@
 			drawTextBuffer();
 		} else if (typeof drawCard === 'function') {
 			drawCard();
+		}
+	}
+
+
+	function shouldIncludeRow(fields) {
+		if (!hasOwn(fields, 'include') || String(fields.include || '').trim() === '') {
+			return true;
+		}
+		var value = String(fields.include).trim().toLowerCase();
+		return !['false', 'no', 'n', '0', 'off', 'exclude', 'skip'].includes(value);
+	}
+
+	function sanitizeBaseName(value, fallback) {
+		var safe = String(value || '').trim()
+			.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+			.replace(/[. ]+$/g, '')
+			.replace(/\s+/g, ' ');
+		if (!safe) {
+			safe = fallback;
+		}
+		if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(safe)) {
+			safe = '_' + safe;
+		}
+		return safe.substring(0, 120);
+	}
+
+	function uniqueFileName(baseName, extension, usedNames) {
+		var candidate = baseName + extension;
+		var number = 2;
+		while (usedNames[candidate.toLowerCase()]) {
+			candidate = baseName + ' (' + number + ')' + extension;
+			number++;
+		}
+		usedNames[candidate.toLowerCase()] = true;
+		return candidate;
+	}
+
+	function canvasToBlob(canvas) {
+		return new Promise(function (resolve, reject) {
+			canvas.toBlob(function (blob) {
+				if (blob) {
+					resolve(blob);
+				} else {
+					reject(new Error('The rendered card could not be converted to PNG.'));
+				}
+			}, 'image/png');
+		});
+	}
+
+	function downloadBlob(blob, fileName) {
+		var link = document.createElement('a');
+		var url = URL.createObjectURL(blob);
+		link.href = url;
+		link.download = fileName;
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		setTimeout(function () {
+			URL.revokeObjectURL(url);
+		}, 30000);
+	}
+
+	async function writeBlobToDirectory(directoryHandle, fileName, blob) {
+		var fileHandle = await directoryHandle.getFileHandle(fileName, {create: true});
+		var writable = await fileHandle.createWritable();
+		await writable.write(blob);
+		await writable.close();
+	}
+
+	async function renderBatchCard(job) {
+		await applyPreviewToCurrentCard(job.result);
+		await new Promise(function (resolve) {
+			requestAnimationFrame(function () {
+				requestAnimationFrame(resolve);
+			});
+		});
+		if (typeof drawCard === 'function') {
+			drawCard();
+		}
+		return canvasToBlob(cardCanvas);
+	}
+
+	async function exportBatch() {
+		var status = document.querySelector('#csv-batch-status');
+		var progress = document.querySelector('#csv-batch-progress');
+		var button = document.querySelector('#csv-batch-export');
+		var validationErrors = CSVImporter.getValidationErrors();
+
+		if (validationErrors.length) {
+			status.textContent = 'Resolve the CSV validation issues before exporting.';
+			return;
+		}
+		if (!templateCard) {
+			status.textContent = 'Capture the current card as a batch template before exporting.';
+			return;
+		}
+		if (typeof JSZip === 'undefined') {
+			status.textContent = 'The offline ZIP library did not load. Reload the page and try again.';
+			return;
+		}
+
+		var csvState = CSVImporter.getState();
+		var chunks = new Map();
+		var totalCards = 0;
+		for (var rowIndex = 0; rowIndex < csvState.rows.length; rowIndex++) {
+			var result = buildCard(rowIndex);
+			if (!shouldIncludeRow(result.fields)) {
+				continue;
+			}
+			var chunkName = String(result.fields.chunk || '').trim() || 'Unassigned';
+			if (!chunks.has(chunkName)) {
+				chunks.set(chunkName, []);
+			}
+			chunks.get(chunkName).push({rowIndex: rowIndex, result: result});
+			totalCards++;
+		}
+		if (!totalCards) {
+			status.textContent = 'No CSV rows are marked for inclusion.';
+			return;
+		}
+
+		var directoryHandle = null;
+		var usesFolderPicker = typeof window.showDirectoryPicker === 'function';
+		if (usesFolderPicker) {
+			try {
+				status.textContent = 'Choose the folder where the chunk ZIP files should be saved.';
+				directoryHandle = await window.showDirectoryPicker({mode: 'readwrite'});
+			} catch (error) {
+				if (error && error.name === 'AbortError') {
+					status.textContent = 'Batch export canceled.';
+					return;
+				}
+				console.warn('Folder picker unavailable; using browser downloads instead.', error);
+				usesFolderPicker = false;
+			}
+		}
+
+		button.disabled = true;
+		progress.max = totalCards;
+		progress.value = 0;
+		var completed = 0;
+		var failedCards = [];
+		var usedZipNames = {};
+		var selectedRow = document.querySelector('#csv-card-preview-row');
+		var selectedRowIndex = selectedRow && selectedRow.value !== '' ? Number(selectedRow.value) : null;
+
+		try {
+			for (var chunkEntry of chunks.entries()) {
+				var rawChunkName = chunkEntry[0];
+				var jobs = chunkEntry[1];
+				var zip = new JSZip();
+				var usedCardNames = {};
+				var addedCards = 0;
+
+				for (var job of jobs) {
+					var displayName = job.result.fields.name || 'Row ' + (job.rowIndex + 2);
+					status.textContent = 'Rendering ' + (completed + 1) + ' of ' + totalCards + ': ' + displayName + '…';
+					try {
+						var pngBlob = await renderBatchCard(job);
+						var requestedName = job.result.fields.outputFilename || displayName;
+						requestedName = String(requestedName).replace(/\.png$/i, '');
+						var safeCardName = sanitizeBaseName(requestedName, 'Card-' + (job.rowIndex + 2));
+						var pngName = uniqueFileName(safeCardName, '.png', usedCardNames);
+						zip.file(pngName, pngBlob);
+						addedCards++;
+					} catch (error) {
+						console.error('CSV batch row failed:', job.rowIndex + 2, error);
+						failedCards.push(displayName);
+					}
+					completed++;
+					progress.value = completed;
+				}
+
+				if (addedCards) {
+					status.textContent = 'Packaging ' + rawChunkName + '.zip…';
+					var zipBlob = await zip.generateAsync({type: 'blob', compression: 'STORE'});
+					var safeChunkName = sanitizeBaseName(rawChunkName, 'Unassigned');
+					var zipName = uniqueFileName(safeChunkName, '.zip', usedZipNames);
+					if (usesFolderPicker && directoryHandle) {
+						await writeBlobToDirectory(directoryHandle, zipName, zipBlob);
+					} else {
+						downloadBlob(zipBlob, zipName);
+						await new Promise(function (resolve) { setTimeout(resolve, 300); });
+					}
+				}
+			}
+
+			if (selectedRowIndex !== null) {
+				await applyPreviewToCurrentCard(buildCard(selectedRowIndex));
+			}
+			var resultMessage = 'Finished: ' + (totalCards - failedCards.length) + ' card(s) exported across ' +
+				chunks.size + ' ZIP file(s).';
+			if (failedCards.length) {
+				resultMessage += ' Failed: ' + failedCards.join(', ') + '.';
+			}
+			if (!usesFolderPicker && chunks.size > 1) {
+				resultMessage += ' If Edge blocked some ZIPs, allow multiple downloads and run the export again.';
+			}
+			status.textContent = resultMessage;
+		} catch (error) {
+			console.error('CSV batch export failed:', error);
+			status.textContent = error.message || 'CSV batch export failed.';
+		} finally {
+			button.disabled = false;
 		}
 	}
 
@@ -558,6 +809,7 @@
 		csvChanged: csvChanged,
 		captureTemplate: captureTemplate,
 		previewSelectedRow: previewSelectedRow,
+		exportBatch: exportBatch,
 		buildCard: buildCard
 	};
 })();
