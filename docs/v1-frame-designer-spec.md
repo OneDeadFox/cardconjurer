@@ -78,15 +78,19 @@ Local image assets remain available offline. Assets saved as remote URLs still d
 
 ## Frame construction resource library
 
-The Design Frame workspace will provide the ingredients needed to build a frame from scratch:
+The Design Frame workspace now provides the first usable construction library:
 
-- A user-imported texture library stored in IndexedDB.
-- A curated built-in mask catalog assembled from Card Conjurer's existing frame assets.
-- Categories for title bars, type lines, rules boxes, borders, pinlines, power/toughness boxes, art windows, split regions, Transform layouts, and general shapes.
-- A non-destructive **Texture + Mask → New Layer** action.
-- Search, previews, reusable favorites, and custom mask import.
+- User-imported textures stored in IndexedDB.
+- Bulk import for textures and custom masks.
+- A curated built-in catalog of general shapes, split regions, M15 Battle sections, Commander Legends sections, and legendary crowns.
+- Search and category filtering for masks.
+- Side-by-side texture and mask previews.
+- A non-destructive **Create Layer from Texture + Mask** action.
+- Automatic project references to the imported texture and custom-mask assets, so constructed layers remain reusable after the project is saved and reopened.
 
-The existing M15 asset tree contains hundreds of mask/section-related candidate files, including duplicates and thumbnail images. A manifest will expose only usable source masks with readable names and categories. Texture files stored on the user's computer must be bulk-imported into the persistent library before they can be used.
+Frame images already in the persistent asset library can also be selected as texture sources. The curated manifest intentionally exposes usable source masks rather than the hundreds of duplicates and thumbnails in the raw asset tree. Additional frame families, favorites, art-window masks, power/toughness masks, and Transform masks can be added to the catalog incrementally.
+
+To build a layer, import a texture, choose it from the Texture list, filter and select a mask, then choose **Create Layer from Texture + Mask**. The resulting layer appears under **Current Frame Layers** and uses the existing non-destructive position, size, rotation, flip, opacity, color, HSL, mask, duplicate, visibility, and reset controls.
 
 ## Next V1 phases
 
