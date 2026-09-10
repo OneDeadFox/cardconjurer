@@ -1107,6 +1107,89 @@ textarea.input {
   grid-row: 2;
 }
 
+/* Frame construction resources */
+.frame-resource-imports,
+.frame-resource-grid,
+.frame-resource-mask-filters {
+	display: grid;
+	gap: 0.5rem;
+	min-width: 0;
+}
+.frame-resource-imports,
+.frame-resource-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.frame-resource-import {
+	box-sizing: border-box;
+	position: relative;
+	text-align: center;
+	cursor: pointer;
+	overflow: hidden;
+}
+.frame-resource-import input[type='file'] {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	op: -10px;
+	left: -10px;
+	opacity: 0;
+}
+.frame-resource-column {
+	display: grid;
+	gap: 0.5rem;
+	min-width: 0;
+	align-content: start;
+}
+.frame-resource-mask-filters {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.frame-resource-column > *,
+.frame-resource-mask-filters > * {
+	box-sizing: border-box;
+	min-width: 0;
+	max-width: 100%;
+}
+.frame-resource-preview {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 100%;
+	height: 12rem;
+	overflow: hidden;
+	padding: 0.5rem;
+	border: 1px solid #8888;
+	background-color: #777;
+	background-image:
+		linear-gradient(45deg, #666 25%, transparent 25%),
+		linear-gradient(-45deg, #666 25%, transparent 25%),
+		linear-gradient(45deg, transparent 75%, #666 75%),
+		linear-gradient(-45deg, transparent 75%, #666 75%);
+	background-size: 1rem 1rem;
+	background-position: 0 0, 0 0.5rem, 0.5rem -0.5rem, -0.5rem 0;
+}
+.frame-resource-preview img {
+	display: block;
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+.frame-resource-preview span {
+	padding: 0.5rem;
+	text-align: center;
+	background: #222c;
+}
+.frame-resource-mask-preview img {
+	filter: drop-shadow(0 0 1px white);
+}
+@media only screen and (max-width: 700px) {
+	.frame-resource-grid,
+	.frame-resource-imports,
+	.frame-resource-mask-filters {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
 /* CSV import */
 #creator-menu-sections,
 #creator-menu-import,
