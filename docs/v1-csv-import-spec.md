@@ -13,7 +13,7 @@ Import flexible CSV files, map their columns to Card Conjurer fields, generate c
 - Card ID
 - Include
 - Name
-- Player
+- Chunk (the current test CSV uses the header Player as an alias)
 - Color
 - Color Identity
 - Mana Cost
@@ -49,7 +49,7 @@ Import flexible CSV files, map their columns to Card Conjurer fields, generate c
 - Transform (boolean): use a double-faced transform layout
 - Flip (boolean): use the classic Kamigawa-style 180-degree flip layout
 
-Transform and Flip are distinct layout modes and should not both be true for the same row. The importer must report that combination as a validation error.
+Transform and Flip are distinct layout modes. For V1, the importer must report an error when both are true for the same row. A future layout mode should support cards that intentionally use both.
 
 Complete two-face support should also provide:
 
@@ -90,6 +90,15 @@ Complete two-face support should also provide:
 - Save reusable mapping presets with templates.
 - Warn when a mapping references a text field missing from the selected template.
 - Support common boolean forms such as TRUE/FALSE, Yes/No, and 1/0.
+
+## Chunked export
+
+- Group every generated card by its Chunk value.
+- Export each nonblank Chunk as its own ZIP file.
+- Use a safe version of the Chunk value as the ZIP filename.
+- Put rows with no Chunk value into an Unassigned ZIP.
+- Treat the current Player header as an alias for Chunk so the test CSV remains valid.
+- Keep Chunk as the internal field name even while the interface temporarily displays Player.
 
 ## Storage and export
 
