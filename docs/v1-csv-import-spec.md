@@ -71,6 +71,16 @@ Complete two-face support should also provide:
 
 `Frame Type` selects Card Conjurer's layout or frame family. `Frame Variant` refines that choice (for example, `M15` + `Regular`). If both are blank, the row inherits the captured template frame. `Color` selects the frame color; when `Color` is `Multi`, `Color Identity` supplies its component colors. `Template` selects a saved user configuration within that frame type.
 
+## Artwork files
+
+- `Art File` contains a filename relative to a folder selected for the current browser session (for example, `Test Card 1.png` or `blue/Test Card 1.png`).
+- The user selects the artwork folder with the CSV import panel before preview or export.
+- Artwork is read directly from that folder, auto-fitted, and loaded before the canvas is captured.
+- Folder handles and artwork data are not stored in localStorage.
+- `Art URL` is an alternative and takes precedence when both artwork fields contain a value.
+- Missing, unreadable, or non-image files produce a row-specific preview/export error.
+
+
 ## Ability assembly
 
 - Nonblank Ability 1 through Ability 4 values are combined in numeric order.
