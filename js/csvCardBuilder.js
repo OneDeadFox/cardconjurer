@@ -246,7 +246,7 @@
 		}
 	}
 
-	function applyPreviewToCurrentCard(result) {
+	async function applyPreviewToCurrentCard(result) {
 		card.text = JSON.parse(JSON.stringify(result.card.text));
 		card.csvImport = JSON.parse(JSON.stringify(result.card.csvImport));
 
@@ -262,6 +262,7 @@
 		setInputValue('#info-language', card.infoLanguage);
 		setInputValue('#info-year', card.infoYear);
 		setInputValue('#info-artist', card.infoArtist);
+		setInputValue('#art-artist', card.infoArtist);
 
 		var selectedKey = Object.keys(card.text)[selectedTextIndex] || Object.keys(card.text)[0];
 		if (selectedKey) {
@@ -269,22 +270,20 @@
 			setInputValue('#text-editor-font-size', card.text[selectedKey].fontSize || 0);
 		}
 
-		if (typeof drawTextBuffer === 'function') {
-			drawTextBuffer();
-		}
-		if (typeof bottomInfoEdited === 'function') {
-			bottomInfoEdited();
-		}
-		if (typeof drawCard === 'function') {
-			drawCard();
-		}
-
 		var artUrl = result.fields.artUrl || '';
 		if (artUrl && typeof uploadArt === 'function') {
 			uploadArt(artUrl, 'autoFit');
 		}
-		if (result.fields.artist && typeof artistEdited === 'function') {
-			artistEdited(result.fields.artist);
+
+		if (typeof bottomInfoEdited === 'function') {
+			await bottomInfoEdited();
+		}
+		if (typeof drawText === 'function') {
+			await drawText();
+		} else if (typeof drawTextBuffer === 'function') {
+			drawTextBuffer();
+		} else if (typeof drawCard === 'function') {
+			drawCard();
 		}
 	}
 
@@ -324,7 +323,7 @@
 		}
 	}
 
-	function previewSelectedRow() {
+	async function previewSelectedRow() {
 		var status = document.querySelector('#csv-card-preview-status');
 		var errors = CSVImporter.getValidationErrors();
 		if (errors.length) {
@@ -340,7 +339,7 @@
 
 		try {
 			var result = buildCard(Number(selector.value));
-			applyPreviewToCurrentCard(result);
+			await applyPreviewToCurrentCard(result);
 			status.textContent = 'Previewed ' + (result.fields.name || 'row ' + (Number(selector.value) + 2)) +
 				(result.warnings.length ? '. ' + result.warnings.join(' ') : '.');
 		} catch (error) {
