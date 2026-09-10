@@ -69,7 +69,7 @@
 			</div>
 			<div class='drop-area'>
 	            <h5 class='margin-bottom padding input-description'>Drag and drop masks to add</h5>
-	            <input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' placeholder='File Upload' class='input' oninput='uploadFiles(event.target.files, uploadMaskOption);' data-dropFunction='uploadMaskOption' data-otherParams=''>
+	            <input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' placeholder='File Upload' class='input' oninput='uploadFiles(event.target.files, uploadMaskOption, "filename");' data-dropFunction='uploadMaskOption' data-otherParams='filename'>
 			</div>
 		</div>
 		<div id='textbox-editor' class='textbox-editor'>
@@ -173,16 +173,34 @@
 							<h5 class='padding input-description'>You may also click to edit opacity, position, size, and more</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Upload custom frame images</h5>
-							<div class='input-grid'>
-								<div class='padding drop-area'>
-						            <h5 class='margin-bottom padding input-description'>Drag and drop</h5>
-						            <input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' placeholder='File Upload' class='input' oninput='uploadFiles(event.target.files, uploadFrameOption);' data-dropFunction='uploadFrameOption' data-otherParams=''>
-						        </div>
-						        <div>
-									<input type='url' placeholder='Via URL' class='input' onchange='imageURL(this.value, uploadFrameOption);'>
-								</div>
+							<h5 class='margin-bottom padding input-description'>Frame Designer Projects</h5>
+							<h5 class='padding margin-bottom input-description'>Save the complete editable card and frame layout as a draft on this device.</h5>
+							<input id='frame-project-name' type='text' class='input margin-bottom' placeholder='Project name' aria-label='Frame project name'>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='FrameProjectStore.saveProject();'>Save Project</button>
+								<button class='input' onclick='FrameProjectStore.saveProjectAs();'>Save as New</button>
 							</div>
+							<select id='frame-project-list' class='input margin-bottom' aria-label='Saved frame projects'></select>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='FrameProjectStore.loadSelectedProject();'>Load Project</button>
+								<button class='input' onclick='FrameProjectStore.deleteSelectedProject();'>Delete Project</button>
+							</div>
+							<h5 id='frame-project-status' class='padding input-description'>Opening the Frame Designer project store...</h5>
+						</div>
+						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Persistent Frame Asset Library</h5>
+							<h5 class='padding margin-bottom input-description'>Imported images are stored once on this device and can be reused in multiple frame projects.</h5>
+							<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' class='input margin-bottom' oninput='FrameProjectStore.importFiles(event.target.files, "frame"); this.value="";' aria-label='Import frame images'>
+							<div class='input-grid margin-bottom'>
+								<input id='frame-asset-url' type='url' placeholder='Image URL' class='input' aria-label='Frame asset image URL'>
+								<button class='input' onclick='FrameProjectStore.importUrl(document.querySelector("#frame-asset-url").value);'>Save URL</button>
+							</div>
+							<select id='frame-asset-list' class='input margin-bottom' aria-label='Saved frame assets'></select>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='FrameProjectStore.addSelectedAsset();'>Add Selected Asset</button>
+								<button class='input' onclick='FrameProjectStore.deleteSelectedAsset();'>Delete Asset</button>
+							</div>
+							<h5 id='frame-asset-status' class='padding input-description'>Opening the frame asset library...</h5>
 						</div>
 						<div class='readable-background padding'>
 							<h5 class='input-description margin-bottom'>Rounded Corners (When Downloaded)</h5>
@@ -1013,6 +1031,7 @@
 	</div>
 	<script defer src='/js/autoFrame.js'></script>
 	<script defer src='/js/creator-23.js'></script>
+	<script defer src='/js/frameProjectStore.js'></script>
 	<script defer src='/js/csvImport.js'></script>
 	<script defer src='/js/vendor/jszip.min.js'></script>
 	<script defer src='/js/csvCardBuilder.js'></script>
