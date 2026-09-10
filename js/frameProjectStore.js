@@ -250,7 +250,7 @@
 		assets.forEach(function (asset) {
 			var option = document.createElement('option');
 			option.value = asset.id;
-			option.textContent = asset.name + (asset.kind === 'mask' ? ' (mask)' : '');
+			option.textContent = asset.name + ' (' + (asset.kind || 'frame') + ')';
 			select.appendChild(option);
 		});
 		if (selectedId && assets.some(function (asset) { return asset.id === selectedId; })) {
@@ -263,6 +263,7 @@
 			return left.name.localeCompare(right.name);
 		});
 		renderAssetOptions(selectedId);
+		window.dispatchEvent(new CustomEvent('frameassetschanged'));
 	}
 
 	async function addSelectedAsset() {
@@ -522,6 +523,7 @@
 		deleteSelectedProject: deleteSelectedProject,
 		saveSourceAsset: saveSourceAsset,
 		getAssetSource: getAssetSource,
+		getAssets: function () { return assets.slice(); },
 		sourceFromParams: sourceFromParams
 	};
 
