@@ -119,9 +119,21 @@ function bindInputs(query1, query2, checkbox = false) {
 	}
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-	document.body.dispatchEvent(new Event('doCreate'));
-})
+function openCardCreator(event) {
+	if (event) {
+		event.preventDefault();
+	}
+	if (document.querySelector('.hamburger').classList.contains('opened')) {
+		toggleMenu();
+	}
+	if (document.querySelector('#previewCanvas')) {
+		return;
+	}
+	htmx.ajax('GET', 'creator/index.html', {
+		target: '#content',
+		swap: 'innerHTML'
+	});
+}
 
 document.onkeyup = function(e) {
 	if (document.activeElement === document.getElementById('text-editor')) {
