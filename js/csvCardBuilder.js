@@ -624,7 +624,7 @@
 		var mapped = collectMappedRow(csvState, rowIndex);
 		var transform = parseBoolean(mapped.fields.transform);
 		var flip = parseBoolean(mapped.fields.flip);
-		var separateFaces = transform || flip;
+		var separateFaces = transform;
 		var builtCard = cloneSerializableCard(templateCard);
 		var warnings = [];
 		var primaryFields = primaryFaceFields(mapped.fields, separateFaces);
@@ -868,7 +868,11 @@
 		if (typeof uploadArt !== 'function' || typeof art === 'undefined') {
 			return;
 		}
-		['artX', 'artY', 'artZoom', 'artRotate', 'artBounds', 'artSource'].forEach(function (key) {
+		var artStateKeys = ['artX', 'artY', 'artZoom', 'artRotate', 'artSource'];
+		if (!result.transformFace) {
+			artStateKeys.push('artBounds');
+		}
+		artStateKeys.forEach(function (key) {
 			if (hasOwn(result.card, key)) {
 				card[key] = JSON.parse(JSON.stringify(result.card[key]));
 			}
