@@ -16,7 +16,7 @@
 				['field:cardId', 'Card ID'],
 				['field:include', 'Include'],
 				['field:name', 'Name'],
-				['field:player', 'Player'],
+				['field:chunk', 'Player'],
 				['field:outputFilename', 'Output Filename']
 			]
 		},
@@ -99,8 +99,10 @@
 		generate: 'field:include',
 		name: 'field:name',
 		cardname: 'field:name',
-		player: 'field:player',
-		owner: 'field:player',
+		player: 'field:chunk',
+		chunk: 'field:chunk',
+		group: 'field:chunk',
+		owner: 'field:chunk',
 		outputfilename: 'field:outputFilename',
 		filename: 'field:outputFilename',
 		color: 'field:color',
