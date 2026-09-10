@@ -923,6 +923,9 @@ textarea.input {
 	box-shadow: 0 0px 16px black;
 	transition: 0.05s;
 }
+.frame-element.frame-element-hidden {
+	opacity: 0.5;
+}
 .frame-element-close {
 	font-size: 2rem;
 	cursor: pointer;
@@ -958,6 +961,9 @@ textarea.input {
 }
 .frame-element-editor > .frame-element-editor-title, .textbox-editor > .textbox-editor-title {
 	grid-column: 1 / -2;
+}
+.frame-element-editor > .frame-editor-actions {
+	grid-column: 1 / -1;
 }
 .frame-element-editor > .frame-element-editor-close, .textbox-editor > .textbox-editor-close {
 	cursor: pointer;
