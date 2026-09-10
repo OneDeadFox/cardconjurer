@@ -3041,12 +3041,17 @@ function drawCard() {
 	cardContext.clearRect(0, 0, cardCanvas.width, cardCanvas.height);
 	// art
 	cardContext.save();
-	cardContext.translate(scaleX(card.artX), scaleY(card.artY));
-	cardContext.rotate(Math.PI / 180 * (card.artRotate || 0));
+	const drawnArtWidth = art.width * card.artZoom;
+	const drawnArtHeight = art.height * card.artZoom;
+	cardContext.translate(
+		scaleX(card.artX) + drawnArtWidth / 2,
+		scaleY(card.artY) + drawnArtHeight / 2
+	);
+	cardContext.rotate(Math.PI / 180 * (Number(card.artRotate) || 0));
 	if (document.querySelector('#grayscale-art').checked) {
 		cardContext.filter='grayscale(1)';
 	}
-	cardContext.drawImage(art, 0, 0, art.width * card.artZoom, art.height * card.artZoom);
+	cardContext.drawImage(art, -drawnArtWidth / 2, -drawnArtHeight / 2, drawnArtWidth, drawnArtHeight);
 	cardContext.restore();
 	// frame elements
 	if (card.version.includes('planeswalker') && typeof planeswalkerPreFrameCanvas !== "undefined") {
