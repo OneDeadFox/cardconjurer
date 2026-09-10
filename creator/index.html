@@ -221,7 +221,7 @@
 						<div id='frame-workspace-design' class='hidden' role='tabpanel'>
 						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Frame Construction Resources</h5>
-							<h5 class='padding margin-bottom input-description'>Combine a reusable texture with a built-in or imported mask to make a new editable frame layer.</h5>
+							<h5 class='padding margin-bottom input-description'>Combine a built-in or imported texture with a built-in or imported mask to make a new editable frame layer.</h5>
 							<div class='frame-resource-imports margin-bottom'>
 								<label class='frame-resource-import input'>Import Textures
 									<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' onchange='FrameResourceLibrary.importFiles(event.target.files, "texture"); this.value="";' aria-label='Import texture images'>
@@ -247,7 +247,7 @@
 								</div>
 							</div>
 							<button class='input margin-bottom' onclick='FrameResourceLibrary.createLayer();'>Create Layer from Texture + Mask</button>
-							<h5 id='frame-resource-status' class='padding input-description'>Import a texture, choose a mask, then create a layer.</h5>
+							<h5 id='frame-resource-status' class='padding input-description'>Choose a built-in texture or import your own, select a mask, then create a layer.</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Frame Designer Projects</h5>
