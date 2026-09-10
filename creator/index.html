@@ -251,6 +251,16 @@
 							<h5 id='frame-resource-status' class='padding input-description'>Choose a texture, then filter the curated component masks by frame family and component type.</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Custom CSV Fields</h5>
+							<h5 class='padding margin-bottom input-description'>Create a labeled text box or image slot that can be matched to a CSV column and saved with this frame project.</h5>
+							<input id='custom-template-field-label' type='text' class='input margin-bottom' placeholder='Field label, such as Chapter Name or Faction Icon' aria-label='Custom CSV field label'>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='addCustomTemplateField("text");'>Add Text Field</button>
+								<button class='input' onclick='addCustomTemplateField("image");'>Add Image Field</button>
+							</div>
+							<h5 id='custom-template-field-status' class='padding input-description'>Custom fields will appear as named targets in CSV Import.</h5>
+						</div>
+						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Frame Designer Projects</h5>
 							<h5 class='padding margin-bottom input-description'>Save the editable frame, text layout, and card settings as a draft on this device.</h5>
 							<input id='frame-project-name' type='text' class='input margin-bottom' placeholder='Project name' aria-label='Frame project name'>
@@ -772,11 +782,11 @@
 							<h5 id='csv-import-status' class='padding input-description'>No CSV loaded.</h5>
 							<div id='csv-import-errors' class='csv-import-errors hidden padding'></div>
 							<div id='csv-import-details' class='hidden'>
-								<h5 class='padding margin-bottom input-description'>If the CSV uses Art File, select the folder containing those images. Filenames may include subfolders.</h5>
+								<h5 class='padding margin-bottom input-description'>If the CSV uses Art File or a custom image field, select the folder containing those images. Filenames may include subfolders.</h5>
 								<button class='input margin-bottom' onclick='CSVCardBuilder.selectArtFolder();'>Select Art Folder</button>
 								<h5 id='csv-art-folder-status' class='padding margin-bottom input-description'>No art folder selected. The folder and its files remain on this computer.</h5>
-								<h5 class='padding margin-bottom input-description'>Map each CSV column to a built-in field, current-template text or layout control, feature control, custom metadata, or Ignore.</h5>
-								<button class='input margin-bottom' onclick='CSVImporter.refreshTextFields();'>Refresh Current Template Text Fields</button>
+								<h5 class='padding margin-bottom input-description'>Map each CSV column to a built-in field, labeled custom text or image field, current-template layout control, feature control, custom metadata, or Ignore.</h5>
+								<button class='input margin-bottom' onclick='CSVImporter.refreshTextFields();'>Refresh Current Template Fields</button>
 								<div id='csv-mapping-rows' class='margin-bottom'></div>
 								<h5 class='padding margin-bottom input-description'>Preview of the first three card rows</h5>
 								<div id='csv-preview' class='csv-preview margin-bottom'></div>
