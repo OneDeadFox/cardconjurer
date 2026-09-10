@@ -29,6 +29,31 @@
 				<input id='frame-editor-height' class='input' type='number' placeholder='X' step='1'>
 			</div>
 			<div>
+				<h5 class='input-description'>Rotation (degrees)</h5>
+				<input id='frame-editor-rotation' class='input' type='number' value='0' min='-360' max='360' step='1' aria-label='Frame layer rotation'>
+			</div>
+			<div>
+				<h5 class='input-description'>Visibility</h5>
+				<label class='checkbox-container input'>Visible
+					<input id='frame-editor-visible' type='checkbox' checked>
+					<span class='checkmark'></span>
+				</label>
+			</div>
+			<div>
+				<h5 class='input-description'>Horizontal orientation</h5>
+				<label class='checkbox-container input'>Flip Horizontally
+					<input id='frame-editor-flip-x' type='checkbox'>
+					<span class='checkmark'></span>
+				</label>
+			</div>
+			<div>
+				<h5 class='input-description'>Vertical orientation</h5>
+				<label class='checkbox-container input'>Flip Vertically
+					<input id='frame-editor-flip-y' type='checkbox'>
+					<span class='checkmark'></span>
+				</label>
+			</div>
+			<div>
 				<h5 class='input-description'>Opacity</h5>
 				<input id='frame-editor-opacity' class='input' type='number' placeholder='Opacity' max='100' min='0' step='1'>
 			</div>
@@ -61,6 +86,13 @@
 				<input id='frame-editor-hsl-saturation' class='input' type='number' min='-100' max='100' value='0' step='1' aria-label='HSL Saturation Value'>
 				<input id='frame-editor-hsl-lightness-slider' class='input' type='range' min='-100' max='100' value='0' step='1' aria-label='HSL Lightness Slider'>
 				<input id='frame-editor-hsl-lightness' class='input' type='number' min='-100' max='100' value='0' step='1' aria-label='HSL Lightness Value'>
+			</div>
+			<div class='frame-editor-actions'>
+				<h5 class='input-description margin-bottom'>Layer Actions</h5>
+				<div class='input-grid'>
+					<button class='input' onclick='duplicateSelectedFrame();'>Duplicate Layer</button>
+					<button class='input' onclick='resetSelectedFrame();'>Reset Layer Controls</button>
+				</div>
 			</div>
 			<div>
 				<h5 class='input-description'>Select and remove masks</h5>
