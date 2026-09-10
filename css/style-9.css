@@ -997,3 +997,48 @@ textarea.input {
 #addToBottomHalf {
   grid-row: 2;
 }
+
+/* CSV import */
+.csv-mapping-row {
+	display: grid;
+	grid-template-columns: minmax(10rem, 1fr) minmax(16rem, 2fr);
+	gap: 0.5rem;
+	align-items: center;
+	margin-bottom: 0.5rem;
+}
+.csv-mapping-source {
+	overflow-wrap: anywhere;
+}
+.csv-preview {
+	max-height: 24rem;
+	overflow: auto;
+}
+.csv-preview table {
+	border-collapse: collapse;
+	min-width: 100%;
+}
+.csv-preview th,
+.csv-preview td {
+	padding: 0.5rem;
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid #8886;
+	white-space: pre-wrap;
+}
+.csv-preview th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--input-background);
+}
+.csv-import-errors {
+	color: #ff9f9f;
+}
+.csv-import-errors ul {
+	margin-left: 1.5rem;
+}
+@media only screen and (max-width: 650px) {
+	.csv-mapping-row {
+		grid-template-columns: 1fr;
+	}
+}
