@@ -1146,7 +1146,10 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	frameElement.appendChild(frameElementImage);
 	var frameElementMask = document.createElement('img');
 	if (maskThumbnail) {
-		frameElementMask.src = fixUri(frameToAdd.masks[0].src.replace('.png', 'Thumb.png'));
+		var frameElementMaskDefinition = frameToAdd.masks[0];
+		frameElementMask.src = fixUri(frameElementMaskDefinition.noThumb
+			? frameElementMaskDefinition.src
+			: frameElementMaskDefinition.src.replace('.png', 'Thumb.png'));
 	} else {
 		frameElementMask.src = black.src;
 	}
