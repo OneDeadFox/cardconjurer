@@ -74,6 +74,7 @@ Complete two-face support should also provide:
 ## Artwork files
 
 - `Art File` contains a filename relative to a folder selected for the current browser session (for example, `Test Card 1.png` or `blue/Test Card 1.png`).
+- The file extension may be omitted; the importer checks PNG, JPG, JPEG, WebP, BMP, and SVG in that order.
 - The user selects the artwork folder with the CSV import panel before preview or export.
 - Artwork is read directly from that folder, auto-fitted, and loaded before the canvas is captured.
 - Folder handles and artwork data are not stored in localStorage.
