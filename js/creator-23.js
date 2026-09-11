@@ -493,7 +493,7 @@ async function loadFrameLayoutTemplateForPack(packValue, groupValue = '') {
 	}
 	return applyCurrentFrameLayout({force:true, source:'csv'});
 }
-function toggleFrameWorkspace(event, target) {
+async function toggleFrameWorkspace(event, target) {
 	if (!['browse', 'design'].includes(target)) {
 		return;
 	}
@@ -517,6 +517,8 @@ function toggleFrameWorkspace(event, target) {
 	}
 	if (target != 'design') {
 		document.querySelector('#frame-element-editor')?.classList.remove('opened');
+	} else {
+		await decomposePendingBuiltInFrames();
 	}
 	drawCard();
 }
@@ -844,6 +846,128 @@ function resetSelectedFrame() {
 	refreshSelectedFrameEditor();
 	drawFrames();
 }
+
+var frameComponentRecipes = {
+	'M15Regular-1': ['Border', 'Title', 'Type', 'Rules', 'Pinline', 'Frame'],
+	'Class': ['Border', 'Text Boxes', 'Title', 'Type', 'Rules', 'Pinline', 'Frame'],
+	'ClassUB': ['Border', 'Text Boxes', 'Title', 'Type', 'Rules', 'Pinline', 'Frame']
+};
+var genericFrameComponentOrder = [
+	'Border',
+	'Power/Toughness',
+	'Text Boxes',
+	'Title',
+	'Type',
+	'Rules',
+	'Pinline',
+	'Frame'
+];
+function normalizeFrameComponentName(value) {
+	return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+function setFrameDecompositionStatus(message, isError = false) {
+	const status = document.querySelector('#frame-decomposition-status');
+	if (!status) {
+		return;
+	}
+	status.textContent = message;
+	status.classList.toggle('error', isError);
+}
+function selectFrameComponentMasks(frame) {
+	const masks = cloneFrameEditorValue(frame.designComponentMasks || []);
+	if (masks.length < 2) {
+		return [];
+	}
+	const recipe = frameComponentRecipes[frame.designSourcePack] || genericFrameComponentOrder;
+	const masksByName = {};
+	masks.forEach(mask => {
+		const key = normalizeFrameComponentName(mask.name);
+		if (key && !masksByName[key]) {
+			masksByName[key] = mask;
+		}
+	});
+	const selected = [];
+	recipe.forEach(name => {
+		const mask = masksByName[normalizeFrameComponentName(name)];
+		if (mask) {
+			selected.push(mask);
+		}
+	});
+	return selected.length > 1 ? selected : [];
+}
+function cloneFrameForComponent(frame, mask) {
+	const copy = JSON.parse(JSON.stringify(frame, (key, value) => {
+		return key == 'image' || key == 'editorDefaults' ? undefined : value;
+	}));
+	const sourceName = frame.designSourceFrameName || frame.name || 'Frame';
+	copy.name = sourceName + ' — ' + (mask.name || 'Component');
+	copy.componentLabel = copy.name;
+	copy.componentKind = mask.name || 'Component';
+	copy.masks = [cloneFrameEditorValue(mask)];
+	copy.designComponentPending = false;
+	copy.designComponentDecomposed = true;
+	delete copy.designComponentMasks;
+	delete copy.editorDefaults;
+	return copy;
+}
+async function rebuildFrameLayerList() {
+	const list = document.querySelector('#frame-list');
+	if (!list) {
+		return;
+	}
+	list.innerHTML = '';
+	const framesInLoadOrder = (card.frames || []).slice().reverse();
+	for (const frame of framesInLoadOrder) {
+		await addFrame([], frame);
+	}
+}
+async function decomposePendingBuiltInFrames() {
+	const frames = card.frames || [];
+	var decomposedFrameCount = 0;
+	var componentCount = 0;
+	var skippedFrameCount = 0;
+	const rebuiltFrames = [];
+	frames.forEach(frame => {
+		if (!frame.designComponentPending) {
+			rebuiltFrames.push(frame);
+			return;
+		}
+		const componentMasks = selectFrameComponentMasks(frame);
+		if (!componentMasks.length) {
+			frame.designComponentPending = false;
+			rebuiltFrames.push(frame);
+			skippedFrameCount++;
+			return;
+		}
+		const componentLayers = componentMasks.map(mask => cloneFrameForComponent(frame, mask));
+		rebuiltFrames.push(...componentLayers);
+		decomposedFrameCount++;
+		componentCount += componentLayers.length;
+	});
+	if (!decomposedFrameCount && !skippedFrameCount) {
+		setFrameDecompositionStatus('No newly added combined frame is waiting to be decomposed.');
+		return false;
+	}
+	card.frames = rebuiltFrames;
+	selectedFrame = null;
+	document.querySelector('#frame-element-editor')?.classList.remove('opened');
+	await rebuildFrameLayerList();
+	drawFrames();
+	bottomInfoEdited();
+	if (decomposedFrameCount) {
+		var message = 'Split ' + decomposedFrameCount + ' built-in frame' +
+			(decomposedFrameCount == 1 ? '' : 's') + ' into ' + componentCount +
+			' editable components using the selected pack\'s masks.';
+		if (skippedFrameCount) {
+			message += ' Kept ' + skippedFrameCount + ' unsupported frame combined.';
+		}
+		setFrameDecompositionStatus(message);
+	} else {
+		setFrameDecompositionStatus('This pack does not expose a safe component recipe, so its frame was kept combined.', true);
+	}
+	return !!decomposedFrameCount;
+}
+
 function drawFrames() {
 	frameContext.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
 	var frameToDraw = card.frames.slice().reverse();
@@ -1244,10 +1368,19 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 		: JSON.parse(JSON.stringify(availableFrames[selectedFrameIndex]));
 	var maskThumbnail = true;
 	if (!loadingFrame) {
+		// Keep an untouched copy of the pack's component masks. When an unmasked
+		// built-in frame is taken into Design Frame, these definitions let us
+		// split the combined texture into editable semantic layers.
+		var packComponentMasks = cloneFrameEditorValue(frameToAdd.masks || []);
+		var noDefaultMask = frameToAdd.noDefaultMask ? 1 : 0;
+		var hasSelectedComponentMask = !!(frameToAdd.masks && selectedMaskIndex + noDefaultMask > 0);
+		frameToAdd.designSourcePack = document.querySelector('#selectFramePack')?.value || '';
+		frameToAdd.designSourceFrameName = frameToAdd.name || 'Frame';
+		frameToAdd.designComponentMasks = packComponentMasks;
+		frameToAdd.designComponentPending = packComponentMasks.length > 1 &&
+			!hasSelectedComponentMask && additionalMasks.length == 0;
 		// The frame is being added manually by the user, so we must process which mask(s) they have selected
-		var noDefaultMask = 0;
-		if (frameToAdd.noDefaultMask) {noDefaultMask = 1;}
-		if (frameToAdd.masks && selectedMaskIndex + noDefaultMask > 0) {
+		if (hasSelectedComponentMask) {
 			frameToAdd.masks = frameToAdd.masks.slice(selectedMaskIndex - 1 + noDefaultMask, selectedMaskIndex + noDefaultMask);
 		} else {
 		 	frameToAdd.masks = [];
@@ -1346,8 +1479,10 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	}
 	frameElement.appendChild(frameElementMask);
 	var frameElementLabel = document.createElement('h4');
-	frameElementLabel.innerHTML = frameToAdd.name;
-	frameToAdd.masks.forEach(item => frameElementLabel.innerHTML += ', ' + item.name);
+	frameElementLabel.innerHTML = frameToAdd.componentLabel || frameToAdd.name;
+	if (!frameToAdd.componentLabel) {
+		frameToAdd.masks.forEach(item => frameElementLabel.innerHTML += ', ' + item.name);
+	}
 	frameElement.appendChild(frameElementLabel);
 	var frameElementClose = document.createElement('h4');
 	frameElementClose.innerHTML = 'X';
