@@ -187,7 +187,9 @@
 
 	async function applyMappedFrame(result) {
 		if (result.appliedTemplateName) {
-			await restoreCapturedFrames(result.card.frames);
+			if (!result.loadedNamedTemplate) {
+				await restoreCapturedFrames(result.card.frames);
+			}
 			return 'Saved template: ' + result.appliedTemplateName;
 		}
 		if (result.transformFace === 'front' || result.transformFace === 'back') {
@@ -525,6 +527,80 @@
 		cardData.text[key].text = value;
 	}
 
+	function numberedAbilityFieldIndex(key, textbox) {
+		var name = String((textbox && textbox.name) || '').trim();
+		var match = name.match(/^Ability\s+(\d+)$/i) ||
+			name.match(/^Rules(?:\s+Text)?\s+(\d+)$/i) ||
+			name.match(/^(\d+)\s*-\s*Text$/i);
+		if (match) {
+			return Number(match[1]);
+		}
+		match = String(key).match(/^level(\d+)c$/i) || String(key).match(/^ability(\d+)$/i);
+		if (match) {
+			return Number(match[1]) + 1;
+		}
+		return 0;
+	}
+
+	function numberedAbilityTargets(cardData) {
+		var targets = {};
+		Object.keys((cardData && cardData.text) || {}).forEach(function (key) {
+			var number = numberedAbilityFieldIndex(key, cardData.text[key]);
+			if (number >= 1 && number <= 4 && !targets[number]) {
+				targets[number] = key;
+			}
+		});
+		if (!targets[1] && cardData.text && cardData.text.levelup &&
+			(targets[2] || targets[3] || targets[4])) {
+			targets[1] = 'levelup';
+		}
+		return targets;
+	}
+
+	function classAbilityText(cardData, key, value) {
+		var existing = String((cardData.text[key] && cardData.text[key].text) || '');
+		if (key === 'level0c' && existing.indexOf('{bar}') !== -1) {
+			return existing + (String(value || '').trim() ? value : '');
+		}
+		return value;
+	}
+
+	function applyAbilityFields(cardData, fields, warnings) {
+		if (!isMapped(fields, ['ability1', 'ability2', 'ability3', 'ability4', 'flavorText'])) {
+			return;
+		}
+		var targets = numberedAbilityTargets(cardData);
+		if (!Object.keys(targets).length) {
+			setTextbox(cardData, 'rules', assembleRules(fields, false), warnings);
+			return;
+		}
+
+		var lastTarget = 0;
+		for (var number = 1; number <= 4; number++) {
+			var fieldKey = 'ability' + number;
+			var value = fields[fieldKey] || '';
+			if (targets[number]) {
+				setTextbox(cardData, targets[number], classAbilityText(cardData, targets[number], value), warnings);
+				if (String(value).trim()) {
+					lastTarget = number;
+				}
+			} else if (hasOwn(fields, fieldKey) && String(value).trim()) {
+				warnings.push('The selected template does not contain a numbered rules field for Ability ' + number + '.');
+			}
+		}
+
+		var flavor = fields.flavorText || '';
+		if (String(flavor).trim()) {
+			var flavorTarget = targets[lastTarget] || targets[1] || targets[2] || targets[3] || targets[4];
+			if (flavorTarget) {
+				var current = String(cardData.text[flavorTarget].text || '');
+				cardData.text[flavorTarget].text = current + '{flavor}' + flavor;
+			} else {
+				warnings.push('The selected template does not contain a rules field for Flavor Text.');
+			}
+		}
+	}
+
 	function applyCoreFields(cardData, mapped, warnings) {
 		var fields = mapped.fields;
 
@@ -537,9 +613,7 @@
 		if (isMapped(fields, ['typeLine', 'supertype1', 'supertype2', 'supertype3', 'cardType1', 'cardType2', 'cardType3', 'subtype1', 'subtype2', 'subtype3'])) {
 			setTextbox(cardData, 'type', assembleTypeLine(fields), warnings);
 		}
-		if (isMapped(fields, ['ability1', 'ability2', 'ability3', 'ability4', 'flavorText'])) {
-			setTextbox(cardData, 'rules', assembleRules(fields, false), warnings);
-		}
+		applyAbilityFields(cardData, fields, warnings);
 		if (isMapped(fields, ['power', 'toughness'])) {
 			setTextbox(cardData, 'pt', assemblePowerToughness(fields, false), warnings);
 		}
@@ -1012,7 +1086,7 @@
 			return;
 		}
 		var artStateKeys = ['artX', 'artY', 'artZoom', 'artRotate', 'artSource'];
-		if (!result.transformFace) {
+		if (!result.transformFace || result.appliedTemplateName) {
 			artStateKeys.push('artBounds');
 		}
 		artStateKeys.forEach(function (key) {
@@ -1300,13 +1374,25 @@
 	async function applyPreviewToCurrentCard(result) {
 		await applyNamedProjectTemplate(result);
 		await applyBuiltInFrameTemplate(result);
-		restoreTemplateTextLayout(result);
-		var previewText = JSON.parse(JSON.stringify(result.card.text || {}));
-		var previewValues = {};
-		Object.keys(previewText).forEach(function (key) {
-			previewValues[key] = previewText[key].text || '';
-		});
-		replaceLiveTextObjects(previewText, previewValues, false);
+		if (result.appliedTemplateName && typeof loadCardData === 'function') {
+			var restored = await loadCardData(result.card, result.appliedTemplateName);
+			if (restored === false) {
+				throw new Error('The saved frame project "' + result.appliedTemplateName + '" could not be restored.');
+			}
+			result.loadedNamedTemplate = true;
+			activeTransformLayout = false;
+		} else {
+			restoreTemplateTextLayout(result);
+			var previewText = JSON.parse(JSON.stringify(result.card.text || {}));
+			var previewValues = {};
+			Object.keys(previewText).forEach(function (key) {
+				previewValues[key] = previewText[key].text || '';
+			});
+			replaceLiveTextObjects(previewText, previewValues, false);
+			if (typeof loadTextOptions === 'function' && Object.keys(card.text || {}).length) {
+				loadTextOptions(card.text);
+			}
+		}
 		card.csvImport = JSON.parse(JSON.stringify(result.card.csvImport));
 
 		['infoNumber', 'infoRarity', 'infoSet', 'infoLanguage', 'infoYear', 'infoArtist'].forEach(function (key) {
@@ -1329,7 +1415,7 @@
 			setInputValue('#text-editor-font-size', card.text[selectedKey].fontSize || 0);
 		}
 
-		if (result.transformFace) {
+		if (result.transformFace && !result.appliedTemplateName) {
 			applyTransformLayout(result);
 		}
 		await applyMappedArt(result);
