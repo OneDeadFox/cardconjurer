@@ -159,6 +159,14 @@
 		}
 		if (String(source).indexOf('data:') === 0) {
 			record.blob = dataUrlToBlob(source);
+			record.mimeType = record.blob.type || record.mimeType;
+		} else if (String(source).indexOf('blob:') === 0) {
+			var response = await fetch(source);
+			if (!response.ok) {
+				throw new Error('A temporary frame image could not be preserved. Re-select the image and save the project again.');
+			}
+			record.blob = await response.blob();
+			record.mimeType = record.blob.type || record.mimeType;
 		} else {
 			record.sourceUrl = source;
 		}
@@ -348,8 +356,9 @@
 			layer.src = 'asset://' + layer.assetId;
 			return;
 		}
-		if (String(layer.src || '').indexOf('data:') === 0) {
-			var asset = await saveSourceAsset(layer.src, layer.name || 'Project image', kind);
+		var source = String(layer.src || '');
+		if (source.indexOf('data:') === 0 || source.indexOf('blob:') === 0) {
+			var asset = await saveSourceAsset(source, layer.name || 'Project image', kind);
 			layer.assetId = asset.id;
 			layer.src = 'asset://' + asset.id;
 		}
@@ -359,7 +368,12 @@
 		var snapshot = JSON.parse(JSON.stringify(card, stripRuntimeImages));
 		snapshot.frames = snapshot.frames || [];
 		for (var frame of snapshot.frames) {
-			await externalizeLayerImage(frame, 'frame');
+			if (frame.csvImageFieldKey && !frame.assetId && String(frame.src || '').indexOf('blob:') === 0) {
+				// CSV image fields save their bounds and label, not a session-only preview file.
+				frame.src = '/img/blank.png';
+			} else {
+				await externalizeLayerImage(frame, 'frame');
+			}
 			frame.masks = frame.masks || [];
 			for (var mask of frame.masks) {
 				await externalizeLayerImage(mask, 'mask');
@@ -375,10 +389,20 @@
 		if (!layer) {
 			return;
 		}
-		var match = String(layer.src || '').match(/^asset:\/\/(.+)$/);
+		var source = String(layer.src || '');
+		var match = source.match(/^asset:\/\/(.+)$/);
 		if (match) {
 			layer.assetId = match[1];
 			layer.src = await getAssetSource(match[1]);
+			return;
+		}
+		if (source.indexOf('blob:') === 0) {
+			if (layer.csvImageFieldKey) {
+				// Repair projects saved before CSV image previews were normalized.
+				layer.src = '/img/blank.png';
+				return;
+			}
+			throw new Error('This saved project contains an expired temporary frame image. Re-select that frame image and save the project again.');
 		}
 	}
 
