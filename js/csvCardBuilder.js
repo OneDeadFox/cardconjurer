@@ -6,6 +6,7 @@
 	var activeArtObjectUrl = '';
 	var activeImageFieldObjectUrls = {};
 	var namedTemplateCache = {};
+	var builtInLayoutCache = {};
 	var activeTransformLayout = false;
 
 	function cloneSerializableCard(sourceCard) {
@@ -215,6 +216,13 @@
 
 		var colors = parseFrameColors(fields.color, fields.colorIdentity,
 			(card.text.mana && card.text.mana.text) || '');
+		if (result.appliedBuiltInLayout) {
+			card.frames = [];
+			var frameList = document.querySelector('#frame-list');
+			if (frameList) {
+				frameList.innerHTML = '';
+			}
+		}
 		await waitForFrameImages(async function () {
 			await autoFrameUnified(
 				resolvedFrameType,
@@ -653,14 +661,14 @@
 		var csvState = CSVImporter.getState();
 		var mapped = collectMappedRow(csvState, rowIndex);
 		var requestedTemplate = String(mapped.fields.template || '').trim();
-		if (!templateCard && !requestedTemplate) {
-			throw new Error('Capture the current card as a batch template, or name a saved Frame Designer project in the Template column.');
+		var hasBuiltInFrameRequest = !!String((mapped.fields.frameType || '') + (mapped.fields.frameVariant || '')).trim();
+		if (!templateCard && !requestedTemplate && !hasBuiltInFrameRequest) {
+			throw new Error('Provide Frame Type/Frame Variant in the CSV, name a saved Frame Designer project in Template, or capture an optional fallback card.');
 		}
 		var baseCard = templateCard || {text:{}, frames:[], artSource:'/img/blank.png'};
 		var transform = parseBoolean(mapped.fields.transform);
 		var flip = parseBoolean(mapped.fields.flip);
 		var separateFaces = transform;
-		var hasBuiltInFrameRequest = !!String((mapped.fields.frameType || '') + (mapped.fields.frameVariant || '')).trim();
 		var usesTemplateFields = !!requestedTemplate || !hasBuiltInFrameRequest;
 		var builtCard = cloneSerializableCard(baseCard);
 		var warnings = [];
@@ -792,6 +800,60 @@
 		result.card = selectedTemplate;
 		result.appliedTemplateName = templateName;
 		return templateName;
+	}
+
+	function layoutPackForFrameType(frameType) {
+		return {
+			BorderlessUB: 'Borderless'
+		}[frameType] || frameType;
+	}
+
+	async function applyBuiltInFrameTemplate(result) {
+		if (result.appliedTemplateName) {
+			return '';
+		}
+		var fields = result.fields || {};
+		var hasFrameRequest = !!String((fields.frameType || '') + (fields.frameVariant || '')).trim();
+		if (!hasFrameRequest) {
+			return '';
+		}
+		var resolvedFrameType = resolveFrameType(fields.frameType, fields.frameVariant);
+		if (!resolvedFrameType) {
+			throw new Error('Frame Type "' + (fields.frameType || '') + '" with variant "' +
+				(fields.frameVariant || '') + '" is not recognized.');
+		}
+		if (!builtInLayoutCache[resolvedFrameType]) {
+			if (typeof loadFrameLayoutTemplateForPack !== 'function') {
+				throw new Error('Built-in frame layouts are not ready. Reload the Card Creator and try again.');
+			}
+			var config = typeof getFrameTypeConfig === 'function' ? getFrameTypeConfig(resolvedFrameType) : null;
+			var layoutLoaded = await loadFrameLayoutTemplateForPack(
+				layoutPackForFrameType(resolvedFrameType),
+				config ? config.group : ''
+			);
+			if (!layoutLoaded || !card.text || !Object.keys(card.text).length) {
+				throw new Error('The built-in layout for "' + resolvedFrameType + '" could not be loaded.');
+			}
+			var baseline = cloneSerializableCard(card);
+			baseline.frames = [];
+			baseline.artSource = '/img/blank.png';
+			removeCustomTemplateFields(baseline);
+			Object.keys(baseline.text || {}).forEach(function (key) {
+				baseline.text[key].text = '';
+			});
+			builtInLayoutCache[resolvedFrameType] = baseline;
+		}
+		var selectedLayout = cloneSerializableCard(builtInLayoutCache[resolvedFrameType]);
+		var mapped = {
+			fields: fields,
+			textboxes: result.textboxes || {}
+		};
+		applyCoreFields(selectedLayout, mapped, result.warnings);
+		applyCollectorFields(selectedLayout, fields);
+		selectedLayout.csvImport = JSON.parse(JSON.stringify(result.card.csvImport || {}));
+		result.card = selectedLayout;
+		result.appliedBuiltInLayout = resolvedFrameType;
+		return resolvedFrameType;
 	}
 
 	function setInputValue(selector, value) {
@@ -1245,6 +1307,7 @@
 
 	async function applyPreviewToCurrentCard(result) {
 		await applyNamedProjectTemplate(result);
+		await applyBuiltInFrameTemplate(result);
 		restoreTemplateTextLayout(result);
 		var previewText = JSON.parse(JSON.stringify(result.card.text || {}));
 		var previewValues = {};
@@ -1595,7 +1658,7 @@
 				'Type: ' + ((card.text.type && card.text.type.text) || '(blank)'),
 				'Rules: ' + ((card.text.rules && card.text.rules.text) || '(blank)'),
 				'P/T: ' + ((card.text.pt && card.text.pt.text) || '(blank)'),
-				'Template: ' + (renderResult.appliedTemplateName || 'captured session template'),
+				'Template: ' + (renderResult.appliedTemplateName || (renderResult.appliedBuiltInLayout ? 'CSV built-in layout' : 'captured session fallback')),
 				'Frame: ' + (renderResult.appliedFrameType || 'Captured template'),
 				'Art: ' + (renderResult.appliedArt || 'Captured template art'),
 				'Custom images: ' + ((renderResult.appliedImageFields || []).length),
