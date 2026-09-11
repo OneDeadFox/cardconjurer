@@ -336,6 +336,7 @@ function toggleCreatorTabs(event, target) {
 	selectSelectable(event);
 }
 var activeFrameWorkspace = 'browse';
+var suppressFrameVersionAutoload = false;
 function getCurrentFrameLayoutSelection() {
 	const groupSelect = document.querySelector('#selectFrameGroup');
 	const packSelect = document.querySelector('#selectFramePack');
@@ -461,6 +462,35 @@ async function applyCurrentFrameLayout({force = false, source = 'design'} = {}) 
 		setFrameLayoutTemplateStatus('The selected layout template could not be applied.', true);
 		return false;
 	}
+}
+async function loadFrameLayoutTemplateForPack(packValue, groupValue = '') {
+	if (!packValue) {
+		return false;
+	}
+	const groupSelect = document.querySelector('#selectFrameGroup');
+	const packSelect = document.querySelector('#selectFramePack');
+	if (!packSelect) {
+		return false;
+	}
+	if (groupValue && groupSelect && Array.from(groupSelect.options).some(option => option.value == groupValue)) {
+		groupSelect.value = groupValue;
+	}
+	var option = Array.from(packSelect.options).find(item => item.value == packValue);
+	if (!option) {
+		option = document.createElement('option');
+		option.value = packValue;
+		option.textContent = packValue;
+		packSelect.appendChild(option);
+	}
+	packSelect.value = packValue;
+	syncFrameLayoutTemplateControls();
+	suppressFrameVersionAutoload = true;
+	try {
+		await loadScript('/js/frames/pack' + packValue + '.js');
+	} finally {
+		suppressFrameVersionAutoload = false;
+	}
+	return applyCurrentFrameLayout({force:true, source:'csv'});
 }
 function toggleFrameWorkspace(event, target) {
 	if (!['browse', 'design'].includes(target)) {
@@ -928,7 +958,7 @@ function loadFramePack(frameOptions = availableFrames) {
 	document.querySelector('#mask-picker').innerHTML = '';
 	document.querySelector('#frame-picker').children[0].click();
 	registerCurrentFrameLayoutTemplate();
-	if (localStorage.getItem('autoLoadFrameVersion') == 'true') {
+	if (!suppressFrameVersionAutoload && localStorage.getItem('autoLoadFrameVersion') == 'true') {
 		applyCurrentFrameLayout({force:true, source:'auto'});
 	}
 }
@@ -5535,6 +5565,5 @@ bindInputs('#show-guidelines', '#show-guidelines-2', true);
 // Load / init whatever
 syncFrameLayoutTemplateControls();
 loadScript('/js/frames/groupStandard-3.js');
-loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
 loadAvailableCards();
 initDraggableArt();
