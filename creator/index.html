@@ -230,6 +230,29 @@
 							<h5 id='frame-layout-template-status' class='padding input-description'>Choose a frame type and variant.</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Layout Highlights</h5>
+							<h5 class='padding margin-bottom input-description'>Preview-only outlines show where each part of this template will render. These outlines are never included in downloaded cards.</h5>
+							<div class='input-grid margin-bottom'>
+								<label class='checkbox-container input'>Text Fields
+									<input id='layout-highlight-text' type='checkbox' checked onchange='drawCard();'>
+									<span class='checkmark'></span>
+								</label>
+								<label class='checkbox-container input'>Art Area
+									<input id='layout-highlight-art' type='checkbox' checked onchange='drawCard();'>
+									<span class='checkmark'></span>
+								</label>
+								<label class='checkbox-container input'>Custom Images
+									<input id='layout-highlight-images' type='checkbox' checked onchange='drawCard();'>
+									<span class='checkmark'></span>
+								</label>
+								<label class='checkbox-container input'>Symbols + Watermark
+									<input id='layout-highlight-symbols' type='checkbox' checked onchange='drawCard();'>
+									<span class='checkmark'></span>
+								</label>
+							</div>
+							<h5 class='padding input-description'><span style='color:#43d9ff'>Text</span> · <span style='color:#52e36f'>Art</span> · <span style='color:#ff59d6'>Custom images</span> · <span style='color:#ffd34e'>Symbols and watermark</span></h5>
+						</div>
+						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Frame Construction Resources</h5>
 							<h5 class='padding margin-bottom input-description'>Combine a built-in or imported texture with a built-in or imported mask to make a new editable frame layer.</h5>
 							<div class='frame-resource-imports margin-bottom'>
