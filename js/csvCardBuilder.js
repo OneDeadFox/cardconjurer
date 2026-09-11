@@ -5,6 +5,7 @@
 	var artDirectoryHandle = null;
 	var activeArtObjectUrl = '';
 	var activeImageFieldObjectUrls = {};
+	var namedTemplateCache = {};
 	var activeTransformLayout = false;
 
 	function cloneSerializableCard(sourceCard) {
@@ -184,6 +185,10 @@
 	}
 
 	async function applyMappedFrame(result) {
+		if (result.appliedTemplateName) {
+			await restoreCapturedFrames(result.card.frames);
+			return 'Saved template: ' + result.appliedTemplateName;
+		}
 		if (result.transformFace === 'front' || result.transformFace === 'back') {
 			return applyTransformFrame(result);
 		}
@@ -558,14 +563,30 @@
 		Object.keys(mapped.textboxes).forEach(function (key) {
 			var values = mapped.textboxes[key];
 			if (!cardData.text || !cardData.text[key]) {
-				warnings.push('The custom mapping target "' + key + '" is not present in the captured template.');
+				warnings.push('The custom mapping target "' + key + '" is not present in the selected template.');
 				return;
 			}
 			var customText = values.join('\n');
+			if (cardData.text[key].customField) {
+				cardData.text[key].text = customText;
+				return;
+			}
 			var existingText = cardData.text[key].text || '';
 			cardData.text[key].text = [existingText, customText].filter(function (value) {
 				return String(value).trim() !== '';
 			}).join('\n');
+		});
+	}
+
+	function removeCustomTemplateFields(cardData) {
+		cardData.text = cardData.text || {};
+		Object.keys(cardData.text).forEach(function (key) {
+			if (cardData.text[key] && cardData.text[key].customField) {
+				delete cardData.text[key];
+			}
+		});
+		cardData.frames = (cardData.frames || []).filter(function (frame) {
+			return !frame.csvImageFieldKey;
 		});
 	}
 
@@ -638,14 +659,23 @@
 		var transform = parseBoolean(mapped.fields.transform);
 		var flip = parseBoolean(mapped.fields.flip);
 		var separateFaces = transform;
+		var requestedTemplate = String(mapped.fields.template || '').trim();
+		var hasBuiltInFrameRequest = !!String((mapped.fields.frameType || '') + (mapped.fields.frameVariant || '')).trim();
+		var usesTemplateFields = !!requestedTemplate || !hasBuiltInFrameRequest;
 		var builtCard = cloneSerializableCard(templateCard);
 		var warnings = [];
 		var primaryFields = primaryFaceFields(mapped.fields, separateFaces);
 		var primaryMapped = {fields: primaryFields, textboxes: mapped.textboxes};
 
-		applyCoreFields(builtCard, primaryMapped, warnings);
-		applyCustomTextboxes(builtCard, primaryMapped, warnings);
-		applyCollectorFields(builtCard, primaryFields);
+		if (!requestedTemplate) {
+			applyCoreFields(builtCard, primaryMapped, warnings);
+			if (usesTemplateFields) {
+				applyCustomTextboxes(builtCard, primaryMapped, warnings);
+			} else {
+				removeCustomTemplateFields(builtCard);
+			}
+			applyCollectorFields(builtCard, primaryFields);
+		}
 
 		var csvImport = {
 			sourceRow: mapped.sourceRow,
@@ -653,7 +683,7 @@
 			cardId: mapped.fields.cardId || '',
 			frameType: mapped.fields.frameType || '',
 			frameVariant: mapped.fields.frameVariant || '',
-			template: mapped.fields.template || '',
+			template: requestedTemplate,
 			outputFilename: mapped.fields.outputFilename || '',
 			transform: transform,
 			flip: flip,
@@ -669,9 +699,15 @@
 			alternateFields = alternateFaceFields(mapped.fields);
 			alternateCard = cloneSerializableCard(templateCard);
 			var alternateMapped = {fields: alternateFields, textboxes: mapped.textboxes};
-			applyCoreFields(alternateCard, alternateMapped, warnings);
-			applyCustomTextboxes(alternateCard, alternateMapped, warnings);
-			applyCollectorFields(alternateCard, alternateFields);
+			if (!requestedTemplate) {
+				applyCoreFields(alternateCard, alternateMapped, warnings);
+				if (usesTemplateFields) {
+					applyCustomTextboxes(alternateCard, alternateMapped, warnings);
+				} else {
+					removeCustomTemplateFields(alternateCard);
+				}
+				applyCollectorFields(alternateCard, alternateFields);
+			}
 			alternateCard.csvImport = JSON.parse(JSON.stringify(csvImport));
 			alternateCard.csvImport.face = 'back';
 			if (transform && !String(mapped.fields.altName || mapped.fields.altTypeLine ||
@@ -687,7 +723,8 @@
 			alternateCard: alternateCard,
 			fields: mapped.fields,
 			alternateFields: alternateFields,
-			imageFields: Object.assign({}, mapped.imageFields),
+			textboxes: JSON.parse(JSON.stringify(mapped.textboxes)),
+			imageFields: usesTemplateFields ? Object.assign({}, mapped.imageFields) : {},
 			features: Object.assign({}, mapped.features),
 			warnings: warnings,
 			transform: transform,
@@ -703,6 +740,7 @@
 			return {
 				card: cloneSerializableCard(result.alternateCard),
 				fields: Object.assign({}, result.alternateFields),
+				textboxes: JSON.parse(JSON.stringify(result.textboxes || {})),
 				imageFields: Object.assign({}, result.imageFields),
 				features: Object.assign({}, result.features),
 				warnings: result.warnings.slice(),
@@ -714,6 +752,7 @@
 		return {
 			card: cloneSerializableCard(result.card),
 			fields: Object.assign({}, result.fields),
+			textboxes: JSON.parse(JSON.stringify(result.textboxes || {})),
 			imageFields: Object.assign({}, result.imageFields),
 			features: Object.assign({}, result.features),
 			warnings: result.warnings.slice(),
@@ -722,6 +761,37 @@
 				result.alternateCard.text.pt.text || '' : '',
 			sourceResult: result
 		};
+	}
+
+
+	async function applyNamedProjectTemplate(result) {
+		var templateName = String(result.fields.template || '').trim();
+		if (!templateName) {
+			return '';
+		}
+		if (!window.FrameProjectStore || typeof FrameProjectStore.getProjectCardByName !== 'function') {
+			throw new Error('Frame Designer projects are not available yet. Reload the page and try again.');
+		}
+		var cacheKey = templateName.toLowerCase();
+		if (!namedTemplateCache[cacheKey]) {
+			namedTemplateCache[cacheKey] = await FrameProjectStore.getProjectCardByName(templateName);
+		}
+		if (!namedTemplateCache[cacheKey]) {
+			throw new Error('Saved frame project "' + templateName + '" was not found.');
+		}
+
+		var selectedTemplate = cloneSerializableCard(namedTemplateCache[cacheKey]);
+		var mapped = {
+			fields: result.fields,
+			textboxes: result.textboxes || {}
+		};
+		applyCoreFields(selectedTemplate, mapped, result.warnings);
+		applyCustomTextboxes(selectedTemplate, mapped, result.warnings);
+		applyCollectorFields(selectedTemplate, result.fields);
+		selectedTemplate.csvImport = JSON.parse(JSON.stringify(result.card.csvImport || {}));
+		result.card = selectedTemplate;
+		result.appliedTemplateName = templateName;
+		return templateName;
 	}
 
 	function setInputValue(selector, value) {
@@ -1174,16 +1244,14 @@
 	}
 
 	async function applyPreviewToCurrentCard(result) {
+		await applyNamedProjectTemplate(result);
 		restoreTemplateTextLayout(result);
-		var previewText = JSON.parse(JSON.stringify(result.card.text));
-		card.text = card.text || {};
+		var previewText = JSON.parse(JSON.stringify(result.card.text || {}));
+		var previewValues = {};
 		Object.keys(previewText).forEach(function (key) {
-			if (card.text[key]) {
-				card.text[key].text = previewText[key].text;
-			} else {
-				card.text[key] = previewText[key];
-			}
+			previewValues[key] = previewText[key].text || '';
 		});
+		replaceLiveTextObjects(previewText, previewValues, false);
 		card.csvImport = JSON.parse(JSON.stringify(result.card.csvImport));
 
 		['infoNumber', 'infoRarity', 'infoSet', 'infoLanguage', 'infoYear', 'infoArtist'].forEach(function (key) {
@@ -1518,6 +1586,7 @@
 				'Type: ' + ((card.text.type && card.text.type.text) || '(blank)'),
 				'Rules: ' + ((card.text.rules && card.text.rules.text) || '(blank)'),
 				'P/T: ' + ((card.text.pt && card.text.pt.text) || '(blank)'),
+				'Template: ' + (renderResult.appliedTemplateName || 'captured session template'),
 				'Frame: ' + (renderResult.appliedFrameType || 'Captured template'),
 				'Art: ' + (renderResult.appliedArt || 'Captured template art'),
 				'Custom images: ' + ((renderResult.appliedImageFields || []).length),
@@ -1533,6 +1602,10 @@
 		}
 	}
 
+
+	window.addEventListener('frameprojectschanged', function () {
+		namedTemplateCache = {};
+	});
 
 	window.addEventListener('beforeunload', function () {
 		Object.keys(activeImageFieldObjectUrls).forEach(function (key) {
