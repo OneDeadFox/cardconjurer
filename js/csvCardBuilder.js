@@ -557,14 +557,6 @@
 		return targets;
 	}
 
-	function classAbilityText(cardData, key, value) {
-		var existing = String((cardData.text[key] && cardData.text[key].text) || '');
-		if (key === 'level0c' && existing.indexOf('{bar}') !== -1) {
-			return existing + (String(value || '').trim() ? value : '');
-		}
-		return value;
-	}
-
 	function applyAbilityFields(cardData, fields, warnings) {
 		if (!isMapped(fields, ['ability1', 'ability2', 'ability3', 'ability4', 'flavorText'])) {
 			return;
@@ -580,7 +572,7 @@
 			var fieldKey = 'ability' + number;
 			var value = fields[fieldKey] || '';
 			if (targets[number]) {
-				setTextbox(cardData, targets[number], classAbilityText(cardData, targets[number], value), warnings);
+				setTextbox(cardData, targets[number], value, warnings);
 				if (String(value).trim()) {
 					lastTarget = number;
 				}
