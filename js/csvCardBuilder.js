@@ -675,13 +675,9 @@
 		var primaryFields = primaryFaceFields(mapped.fields, separateFaces);
 		var primaryMapped = {fields: primaryFields, textboxes: mapped.textboxes};
 
-		if (!requestedTemplate) {
+		if (!requestedTemplate && !hasBuiltInFrameRequest) {
 			applyCoreFields(builtCard, primaryMapped, warnings);
-			if (usesTemplateFields) {
-				applyCustomTextboxes(builtCard, primaryMapped, warnings);
-			} else {
-				removeCustomTemplateFields(builtCard);
-			}
+			applyCustomTextboxes(builtCard, primaryMapped, warnings);
 			applyCollectorFields(builtCard, primaryFields);
 		}
 
@@ -707,13 +703,9 @@
 			alternateFields = alternateFaceFields(mapped.fields);
 			alternateCard = cloneSerializableCard(baseCard);
 			var alternateMapped = {fields: alternateFields, textboxes: mapped.textboxes};
-			if (!requestedTemplate) {
+			if (!requestedTemplate && !hasBuiltInFrameRequest) {
 				applyCoreFields(alternateCard, alternateMapped, warnings);
-				if (usesTemplateFields) {
-					applyCustomTextboxes(alternateCard, alternateMapped, warnings);
-				} else {
-					removeCustomTemplateFields(alternateCard);
-				}
+				applyCustomTextboxes(alternateCard, alternateMapped, warnings);
 				applyCollectorFields(alternateCard, alternateFields);
 			}
 			alternateCard.csvImport = JSON.parse(JSON.stringify(csvImport));
@@ -729,7 +721,7 @@
 		return {
 			card: builtCard,
 			alternateCard: alternateCard,
-			fields: mapped.fields,
+			fields: primaryFields,
 			alternateFields: alternateFields,
 			textboxes: JSON.parse(JSON.stringify(mapped.textboxes)),
 			imageFields: usesTemplateFields ? Object.assign({}, mapped.imageFields) : {},
