@@ -3565,14 +3565,32 @@ function drawSetSymbol(cardContext, setSymbol, bounds) {
     }
 }
 // DESIGN FRAME LAYOUT HIGHLIGHTS
+var activeFrameDesignMode = 'fields';
+var layoutHighlightHitAreas = [];
+var layoutHighlightDrag = null;
 function layoutHighlightEnabled(id) {
 	const input = document.querySelector('#' + id);
 	return !!input?.checked;
 }
+function setFrameDesignMode(value) {
+	activeFrameDesignMode = value == 'frames' ? 'frames' : 'fields';
+	const select = document.querySelector('#frame-design-mode');
+	if (select) {
+		select.value = activeFrameDesignMode;
+	}
+	const status = document.querySelector('#frame-design-mode-status');
+	if (status) {
+		status.textContent = activeFrameDesignMode == 'frames'
+			? 'Drag a component label to move it, drag an outlined edge to resize it, or double-click a component on the card to open its frame editor.'
+			: 'Drag a field label to move it, drag an outlined edge to resize it, or double-click its label to open its editor.';
+	}
+	drawCard();
+}
 function shouldDrawLayoutHighlights() {
 	const frameSection = document.querySelector('#creator-menu-frame');
+	const hasFieldHighlight = ['layout-highlight-text', 'layout-highlight-art', 'layout-highlight-images', 'layout-highlight-symbols'].some(layoutHighlightEnabled);
 	return activeFrameWorkspace == 'design' && frameSection && !frameSection.classList.contains('hidden') &&
-		['layout-highlight-text', 'layout-highlight-art', 'layout-highlight-images', 'layout-highlight-symbols'].some(layoutHighlightEnabled);
+		(activeFrameDesignMode == 'frames' || hasFieldHighlight);
 }
 function previewLayoutBounds(bounds, horizontal = 'left', vertical = 'top') {
 	if (!bounds) {
@@ -3623,8 +3641,9 @@ function drawLayoutHighlightBox(bounds, color, label, options = {}) {
 	previewContext.font = 'bold ' + fontSize + 'px sans-serif';
 	const labelWidth = Math.min(previewCanvas.width, previewContext.measureText(label).width + padding * 2);
 	const labelHeight = fontSize + padding * 2;
+	const offsetY = Number(options.labelOffsetY) || 0;
 	const labelX = Math.max(0, Math.min(previewCanvas.width - labelWidth, rectangle.x));
-	const labelY = Math.max(labelHeight, Math.min(previewCanvas.height, rectangle.y));
+	const labelY = Math.max(labelHeight, Math.min(previewCanvas.height, rectangle.y + offsetY));
 	previewContext.globalAlpha = 0.92;
 	previewContext.fillStyle = color;
 	previewContext.fillRect(labelX, labelY - labelHeight, labelWidth, labelHeight);
@@ -3632,36 +3651,277 @@ function drawLayoutHighlightBox(bounds, color, label, options = {}) {
 	previewContext.fillStyle = '#101010';
 	previewContext.fillText(label, labelX + padding, labelY - padding - 1);
 	previewContext.restore();
+
+	if (options.target) {
+		layoutHighlightHitAreas.push({
+			kind: options.kind || 'field',
+			key: options.key || '',
+			target: options.target,
+			rectangle: rectangle,
+			labelRectangle: {x:labelX, y:labelY - labelHeight, width:labelWidth, height:labelHeight},
+			horizontal: options.horizontal || 'left',
+			vertical: options.vertical || 'top',
+			rotation: rotation
+		});
+	}
 }
 function drawLayoutHighlights() {
+	layoutHighlightHitAreas = [];
 	if (!shouldDrawLayoutHighlights()) {
+		return;
+	}
+	if (activeFrameDesignMode == 'frames') {
+		(card.frames || []).slice().reverse().forEach((frame, reverseIndex) => {
+			frame.bounds = frame.bounds || {x:0, y:0, width:1, height:1};
+			const frameIndex = card.frames.indexOf(frame);
+			drawLayoutHighlightBox(frame.bounds, '#ff9f43', frame.name || 'Frame Component', {
+				kind:'frame',
+				target:frame,
+				rotation:frame.rotation,
+				labelOffsetY:(frameIndex + 1) * Math.max(18, previewCanvas.width / 48)
+			});
+		});
 		return;
 	}
 	if (layoutHighlightEnabled('layout-highlight-text')) {
 		Object.entries(card.text || {}).forEach(item => {
-			drawLayoutHighlightBox(item[1], '#43d9ff', item[1].name || item[0]);
+			drawLayoutHighlightBox(item[1], '#43d9ff', item[1].name || item[0], {kind:'text', key:item[0], target:item[1]});
 		});
 	}
 	if (layoutHighlightEnabled('layout-highlight-art')) {
-		drawLayoutHighlightBox(card.artBounds, '#52e36f', 'Art');
+		drawLayoutHighlightBox(card.artBounds, '#52e36f', 'Art', {kind:'art', target:card.artBounds});
 	}
 	if (layoutHighlightEnabled('layout-highlight-images')) {
 		(card.frames || []).filter(frame => frame.csvImageFieldKey).forEach(frame => {
-			drawLayoutHighlightBox(frame.bounds || {x:0, y:0, width:1, height:1}, '#ff59d6', frame.csvFieldLabel || frame.name || 'Custom Image', {rotation:frame.rotation});
+			frame.bounds = frame.bounds || {x:0, y:0, width:1, height:1};
+			drawLayoutHighlightBox(frame.bounds, '#ff59d6', frame.csvFieldLabel || frame.name || 'Custom Image', {
+				kind:'frame', key:frame.csvImageFieldKey, target:frame, rotation:frame.rotation
+			});
 		});
 	}
 	if (layoutHighlightEnabled('layout-highlight-symbols')) {
 		if (card.setSymbolBounds) {
 			drawLayoutHighlightBox(card.setSymbolBounds, '#ffd34e', 'Set Symbol', {
-				horizontal:card.setSymbolBounds.horizontal,
-				vertical:card.setSymbolBounds.vertical
+				kind:'setSymbol', target:card.setSymbolBounds,
+				horizontal:card.setSymbolBounds.horizontal, vertical:card.setSymbolBounds.vertical
 			});
 		}
 		if (card.watermarkBounds) {
-			drawLayoutHighlightBox(card.watermarkBounds, '#ffd34e', 'Watermark', {horizontal:'center', vertical:'center'});
+			drawLayoutHighlightBox(card.watermarkBounds, '#ffd34e', 'Watermark', {
+				kind:'watermark', target:card.watermarkBounds, horizontal:'center', vertical:'center'
+			});
 		}
 	}
 }
+function layoutHighlightPoint(event) {
+	const rectangle = previewCanvas.getBoundingClientRect();
+	return {
+		x: (event.clientX - rectangle.left) * previewCanvas.width / rectangle.width,
+		y: (event.clientY - rectangle.top) * previewCanvas.height / rectangle.height
+	};
+}
+function pointInsideLayoutRectangle(point, rectangle, padding = 0) {
+	return point.x >= rectangle.x - padding && point.x <= rectangle.x + rectangle.width + padding &&
+		point.y >= rectangle.y - padding && point.y <= rectangle.y + rectangle.height + padding;
+}
+function layoutHighlightHit(point, includeInterior = false) {
+	for (var index = layoutHighlightHitAreas.length - 1; index >= 0; index--) {
+		if (pointInsideLayoutRectangle(point, layoutHighlightHitAreas[index].labelRectangle)) {
+			return {area:layoutHighlightHitAreas[index], action:'move'};
+		}
+	}
+	const threshold = Math.max(7, previewCanvas.width / 145);
+	for (var areaIndex = layoutHighlightHitAreas.length - 1; areaIndex >= 0; areaIndex--) {
+		const area = layoutHighlightHitAreas[areaIndex];
+		const rectangle = area.rectangle;
+		if (!pointInsideLayoutRectangle(point, rectangle, threshold)) {
+			continue;
+		}
+		const onLeft = Math.abs(point.x - rectangle.x) <= threshold;
+		const onRight = Math.abs(point.x - (rectangle.x + rectangle.width)) <= threshold;
+		const onTop = Math.abs(point.y - rectangle.y) <= threshold;
+		const onBottom = Math.abs(point.y - (rectangle.y + rectangle.height)) <= threshold;
+		const horizontal = onLeft ? 'left' : (onRight ? 'right' : '');
+		const vertical = onTop ? 'top' : (onBottom ? 'bottom' : '');
+		if (horizontal || vertical) {
+			return {area:area, action:[vertical, horizontal].filter(Boolean).join('-')};
+		}
+		if (includeInterior && pointInsideLayoutRectangle(point, rectangle)) {
+			return {area:area, action:'open'};
+		}
+	}
+	return null;
+}
+function layoutHighlightCursor(action) {
+	if (action == 'move') return 'move';
+	if (action == 'left' || action == 'right') return 'ew-resize';
+	if (action == 'top' || action == 'bottom') return 'ns-resize';
+	if (action == 'top-left' || action == 'bottom-right') return 'nwse-resize';
+	if (action == 'top-right' || action == 'bottom-left') return 'nesw-resize';
+	return action == 'open' ? 'pointer' : '';
+}
+function updateAnchoredCoordinate(original, delta, edge, anchor) {
+	if (anchor == 'center') {
+		return original + delta / 2;
+	}
+	if ((edge == 'left' || edge == 'top') && anchor != 'right' && anchor != 'bottom') {
+		return original + delta;
+	}
+	if ((edge == 'right' || edge == 'bottom') && (anchor == 'right' || anchor == 'bottom')) {
+		return original + delta;
+	}
+	return original;
+}
+function applyLayoutHighlightDrag(point) {
+	if (!layoutHighlightDrag) {
+		return;
+	}
+	const drag = layoutHighlightDrag;
+	const deltaX = (point.x - drag.startPoint.x) * cardCanvas.width / previewCanvas.width / card.width;
+	const deltaY = (point.y - drag.startPoint.y) * cardCanvas.height / previewCanvas.height / card.height;
+	const target = drag.area.kind == 'frame' ? drag.area.target.bounds : drag.area.target;
+	const original = drag.original;
+	if (drag.action == 'move') {
+		target.x = original.x + deltaX;
+		target.y = original.y + deltaY;
+	} else {
+		const minimumWidth = 10 / card.width;
+		const minimumHeight = 10 / card.height;
+		if (drag.action.includes('left')) {
+			target.width = Math.max(minimumWidth, original.width - deltaX);
+			target.x = updateAnchoredCoordinate(original.x, deltaX, 'left', drag.area.horizontal);
+		} else if (drag.action.includes('right')) {
+			target.width = Math.max(minimumWidth, original.width + deltaX);
+			target.x = updateAnchoredCoordinate(original.x, deltaX, 'right', drag.area.horizontal);
+		}
+		if (drag.action.includes('top')) {
+			target.height = Math.max(minimumHeight, original.height - deltaY);
+			target.y = updateAnchoredCoordinate(original.y, deltaY, 'top', drag.area.vertical);
+		} else if (drag.action.includes('bottom')) {
+			target.height = Math.max(minimumHeight, original.height + deltaY);
+			target.y = updateAnchoredCoordinate(original.y, deltaY, 'bottom', drag.area.vertical);
+		}
+	}
+	if (drag.area.kind == 'frame') {
+		drawFrames();
+	} else {
+		drawCard();
+		if (drag.area.kind == 'text') {
+			drawTextBuffer();
+		}
+	}
+}
+function activateCreatorEditorTab(target) {
+	Array.from(document.querySelector('#creator-menu-sections').children).forEach(element => element.classList.add('hidden'));
+	document.querySelector('#creator-menu-' + target)?.classList.remove('hidden');
+	Array.from(document.querySelector('#creator-menu-tabs').children).forEach(tab => {
+		const handler = tab.getAttribute('onclick') || '';
+		const selected = handler.includes('"' + target + '"') || handler.includes('`' + target + '`');
+		tab.classList.toggle('selected', selected);
+	});
+	drawCard();
+}
+function openLayoutHighlightEditor(area) {
+	if (!area) {
+		return;
+	}
+	if (area.kind == 'text') {
+		const textIndex = Object.keys(card.text || {}).indexOf(area.key);
+		if (textIndex >= 0) {
+			selectedTextIndex = textIndex;
+			activateCreatorEditorTab('text');
+			document.querySelector('#text-options')?.children[textIndex]?.click();
+			textboxEditor();
+		}
+		return;
+	}
+	if (area.kind == 'frame') {
+		const frameIndex = card.frames.indexOf(area.target);
+		const frameElement = document.querySelector('#frame-list')?.children[frameIndex];
+		if (frameElement) {
+			frameElementClicked({target:frameElement});
+		}
+		return;
+	}
+	if (area.kind == 'art') activateCreatorEditorTab('art');
+	if (area.kind == 'setSymbol') activateCreatorEditorTab('setSymbol');
+	if (area.kind == 'watermark') activateCreatorEditorTab('watermark');
+}
+function finishLayoutHighlightDrag(event) {
+	if (!layoutHighlightDrag) {
+		return;
+	}
+	const area = layoutHighlightDrag.area;
+	layoutHighlightDrag = null;
+	if (event?.pointerId !== undefined && previewCanvas.hasPointerCapture?.(event.pointerId)) {
+		previewCanvas.releasePointerCapture(event.pointerId);
+	}
+	if (area.kind == 'text') {
+		drawText();
+	} else if (area.kind == 'frame') {
+		drawFrames();
+	} else if (area.kind == 'art' && typeof autoFitArt == 'function') {
+		autoFitArt();
+	} else if (area.kind == 'setSymbol' && typeof resetSetSymbol == 'function') {
+		resetSetSymbol();
+	} else if (area.kind == 'watermark' && typeof resetWatermark == 'function') {
+		resetWatermark();
+	} else {
+		drawCard();
+	}
+}
+function initializeLayoutHighlightInteractions() {
+	if (!previewCanvas || previewCanvas.dataset.layoutEditingReady) {
+		return;
+	}
+	previewCanvas.dataset.layoutEditingReady = 'true';
+	previewCanvas.addEventListener('pointerdown', event => {
+		if (!shouldDrawLayoutHighlights() || event.button != 0) {
+			return;
+		}
+		const point = layoutHighlightPoint(event);
+		const hit = layoutHighlightHit(point, false);
+		if (!hit) {
+			return;
+		}
+		const bounds = hit.area.kind == 'frame' ? hit.area.target.bounds : hit.area.target;
+		layoutHighlightDrag = {
+			area:hit.area,
+			action:hit.action,
+			startPoint:point,
+			original:{
+				x:Number(bounds.x) || 0,
+				y:Number(bounds.y) || 0,
+				width:Number(bounds.width) || 1,
+				height:Number(bounds.height) || 1
+			}
+		};
+		previewCanvas.setPointerCapture?.(event.pointerId);
+		event.preventDefault();
+	});
+	previewCanvas.addEventListener('pointermove', event => {
+		const point = layoutHighlightPoint(event);
+		if (layoutHighlightDrag) {
+			applyLayoutHighlightDrag(point);
+			return;
+		}
+		const hit = shouldDrawLayoutHighlights() ? layoutHighlightHit(point, activeFrameDesignMode == 'frames') : null;
+		previewCanvas.style.cursor = layoutHighlightCursor(hit?.action || '');
+	});
+	previewCanvas.addEventListener('pointerup', finishLayoutHighlightDrag);
+	previewCanvas.addEventListener('pointercancel', finishLayoutHighlightDrag);
+	previewCanvas.addEventListener('dblclick', event => {
+		if (!shouldDrawLayoutHighlights()) {
+			return;
+		}
+		const hit = layoutHighlightHit(layoutHighlightPoint(event), activeFrameDesignMode == 'frames');
+		if (hit && (hit.action == 'move' || (activeFrameDesignMode == 'frames' && hit.action == 'open'))) {
+			openLayoutHighlightEditor(hit.area);
+			event.preventDefault();
+		}
+	});
+}
+initializeLayoutHighlightInteractions();
 
 //DRAWING THE CARD (putting it all together)
 function drawCard() {
