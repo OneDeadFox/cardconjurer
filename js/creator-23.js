@@ -1204,7 +1204,9 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	if (!loadingFrame && activeFrameWorkspace == 'browse') {
 		await applyCurrentFrameLayout({source:'browse'});
 	}
-	var frameToAdd = JSON.parse(JSON.stringify(availableFrames[selectedFrameIndex]));
+	var frameToAdd = loadingFrame
+		? JSON.parse(JSON.stringify(loadingFrame))
+		: JSON.parse(JSON.stringify(availableFrames[selectedFrameIndex]));
 	var maskThumbnail = true;
 	if (!loadingFrame) {
 		// The frame is being added manually by the user, so we must process which mask(s) they have selected
@@ -1254,7 +1256,7 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 			selectedFrameIndex = realFrameIndex;
 		}
 	} else {
-		frameToAdd = loadingFrame;
+		frameToAdd.masks = frameToAdd.masks || [];
 		if (frameToAdd.masks.length == 0 || (frameToAdd.masks[0].src.includes('/img/frames/mask'))) {
 			maskThumbnail = false;
 		}
