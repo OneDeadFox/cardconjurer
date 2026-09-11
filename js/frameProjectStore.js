@@ -425,6 +425,23 @@
 			return left.name.localeCompare(right.name);
 		});
 		renderProjectOptions(selectedId);
+		window.dispatchEvent(new CustomEvent('frameprojectschanged'));
+	}
+
+	async function getProjectCardByName(name) {
+		var requested = String(name || '').trim().toLowerCase();
+		if (!requested) {
+			return null;
+		}
+		var matches = projects.filter(function (project) {
+			return String(project.name || '').trim().toLowerCase() === requested;
+		}).sort(function (left, right) {
+			return String(right.updatedAt || '').localeCompare(String(left.updatedAt || ''));
+		});
+		if (!matches.length) {
+			throw new Error('Saved frame project "' + name + '" was not found. Load or save that project in Frame Designer first.');
+		}
+		return hydrateProjectSnapshot(matches[0].card);
 	}
 
 	async function saveProject(asNew) {
@@ -524,6 +541,8 @@
 		saveSourceAsset: saveSourceAsset,
 		getAssetSource: getAssetSource,
 		getAssets: function () { return assets.slice(); },
+		getProjects: function () { return JSON.parse(JSON.stringify(projects)); },
+		getProjectCardByName: getProjectCardByName,
 		sourceFromParams: sourceFromParams
 	};
 
