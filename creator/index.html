@@ -160,7 +160,7 @@
 						<div id='frame-workspace-browse' role='tabpanel'>
 						<div class='readable-background margin-bottom padding'>
 							<h5 class='margin-bottom padding input-description'>
-								Select a Frame Group and a Frame Pack, or type to search. Then you may Load the selected Frame Version (loading the frame version configures text placement, art size, etc...)</h5>
+								Select a Frame Group and Frame Pack, or type to search. Adding a frame automatically adopts that pack's compatible text fields, art bounds, symbol placement, orientation, and other layout settings. Use Load Frame Version to reapply the layout without adding an image layer.</h5>
 							<div class='input-grid margin-bottom'>
 								<select id='selectFrameGroup' onchange='loadScript("/js/frames/group" + this.value + ".js")' class='input' aria-label='Select Frame Group'>
 									<option disabled>Standard Frames</option>
@@ -219,6 +219,16 @@
 						</div>
 						</div>
 						<div id='frame-workspace-design' class='hidden' role='tabpanel'>
+						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Layout Templates</h5>
+							<h5 class='padding margin-bottom input-description'>Choose a frame type and variant to apply its text fields, art bounds, set-symbol placement, orientation, and other card settings. Applying a layout does not add, remove, or reorder your frame image layers.</h5>
+							<h5 class='input-description margin-bottom'>Frame Type</h5>
+							<select id='frame-layout-template-group' class='input margin-bottom' onchange='selectFrameLayoutGroup(this.value);' aria-label='Layout frame type'></select>
+							<h5 class='input-description margin-bottom'>Frame Variant</h5>
+							<select id='frame-layout-template-pack' class='input margin-bottom' onchange='selectFrameLayoutPack(this.value);' aria-label='Layout frame variant'></select>
+							<button id='apply-frame-layout-template' class='input margin-bottom' onclick='applyCurrentFrameLayout({force:true, source:"design"});'>Apply Layout Template</button>
+							<h5 id='frame-layout-template-status' class='padding input-description'>Choose a frame type and variant.</h5>
+						</div>
 						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Frame Construction Resources</h5>
 							<h5 class='padding margin-bottom input-description'>Combine a built-in or imported texture with a built-in or imported mask to make a new editable frame layer.</h5>
