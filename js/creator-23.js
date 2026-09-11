@@ -1234,8 +1234,11 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	if (!loadingFrame && activeFrameWorkspace == 'browse') {
 		await applyCurrentFrameLayout({source:'browse'});
 	}
+	// Restored frames must keep the same object reference stored in card.frames.
+	// addFrame attaches runtime Image objects to this object; cloning it here would
+	// populate the layer list while leaving the canvas copy without an image.
 	var frameToAdd = loadingFrame
-		? JSON.parse(JSON.stringify(loadingFrame))
+		? loadingFrame
 		: JSON.parse(JSON.stringify(availableFrames[selectedFrameIndex]));
 	var maskThumbnail = true;
 	if (!loadingFrame) {
