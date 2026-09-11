@@ -650,19 +650,19 @@
 	}
 
 	function buildCard(rowIndex) {
-		if (!templateCard) {
-			throw new Error('Capture the current card as a batch template first.');
-		}
-
 		var csvState = CSVImporter.getState();
 		var mapped = collectMappedRow(csvState, rowIndex);
+		var requestedTemplate = String(mapped.fields.template || '').trim();
+		if (!templateCard && !requestedTemplate) {
+			throw new Error('Capture the current card as a batch template, or name a saved Frame Designer project in the Template column.');
+		}
+		var baseCard = templateCard || {text:{}, frames:[], artSource:'/img/blank.png'};
 		var transform = parseBoolean(mapped.fields.transform);
 		var flip = parseBoolean(mapped.fields.flip);
 		var separateFaces = transform;
-		var requestedTemplate = String(mapped.fields.template || '').trim();
 		var hasBuiltInFrameRequest = !!String((mapped.fields.frameType || '') + (mapped.fields.frameVariant || '')).trim();
 		var usesTemplateFields = !!requestedTemplate || !hasBuiltInFrameRequest;
-		var builtCard = cloneSerializableCard(templateCard);
+		var builtCard = cloneSerializableCard(baseCard);
 		var warnings = [];
 		var primaryFields = primaryFaceFields(mapped.fields, separateFaces);
 		var primaryMapped = {fields: primaryFields, textboxes: mapped.textboxes};
@@ -697,7 +697,7 @@
 		var alternateFields = null;
 		if (separateFaces) {
 			alternateFields = alternateFaceFields(mapped.fields);
-			alternateCard = cloneSerializableCard(templateCard);
+			alternateCard = cloneSerializableCard(baseCard);
 			var alternateMapped = {fields: alternateFields, textboxes: mapped.textboxes};
 			if (!requestedTemplate) {
 				applyCoreFields(alternateCard, alternateMapped, warnings);
@@ -1389,16 +1389,25 @@
 			status.textContent = 'Resolve the CSV validation issues before exporting.';
 			return;
 		}
+		var csvState = CSVImporter.getState();
 		if (!templateCard) {
-			status.textContent = 'Capture the current card as a batch template before exporting.';
-			return;
+			var templateColumn = csvState.mappings.indexOf('field:template');
+			var includeColumn = csvState.mappings.indexOf('field:include');
+			var missingTemplateRow = csvState.rows.findIndex(function (row) {
+				var includeValue = includeColumn === -1 ? '' : String(row[includeColumn] || '').trim().toLowerCase();
+				var included = includeColumn === -1 || !['false', 'no', 'n', '0', 'off', 'exclude', 'skip'].includes(includeValue);
+				return included && (templateColumn === -1 || !String(row[templateColumn] || '').trim());
+			});
+			if (missingTemplateRow !== -1) {
+				status.textContent = 'Row ' + (missingTemplateRow + 2) + ' needs a saved Template name, or capture the current card as the fallback template.';
+				return;
+			}
 		}
 		if (typeof JSZip === 'undefined') {
 			status.textContent = 'The offline ZIP library did not load. Reload the page and try again.';
 			return;
 		}
 
-		var csvState = CSVImporter.getState();
 		var chunks = new Map();
 		var totalCards = 0;
 		for (var rowIndex = 0; rowIndex < csvState.rows.length; rowIndex++) {
