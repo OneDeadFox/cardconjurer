@@ -6,6 +6,7 @@
 	var ASSET_STORE = 'assets';
 	var PROJECT_STORE = 'projects';
 	var dbPromise = null;
+	var readyPromise = null;
 	var assets = [];
 	var projects = [];
 	var currentProjectId = '';
@@ -429,6 +430,7 @@
 	}
 
 	async function getProjectCardByName(name) {
+		await ensureReady();
 		var requested = String(name || '').trim().toLowerCase();
 		if (!requested) {
 			return null;
@@ -512,6 +514,13 @@
 		setStatus('#frame-project-status', 'Deleted frame project "' + project.name + '".', false);
 	}
 
+	function ensureReady() {
+		if (!readyPromise) {
+			readyPromise = init();
+		}
+		return readyPromise;
+	}
+
 	async function init() {
 		try {
 			await Promise.all([refreshAssets(), refreshProjects()]);
@@ -543,8 +552,9 @@
 		getAssets: function () { return assets.slice(); },
 		getProjects: function () { return JSON.parse(JSON.stringify(projects)); },
 		getProjectCardByName: getProjectCardByName,
+		ready: ensureReady,
 		sourceFromParams: sourceFromParams
 	};
 
-	init();
+	readyPromise = init();
 })();
