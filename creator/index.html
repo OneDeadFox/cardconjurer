@@ -220,6 +220,14 @@
 						</div>
 						<div id='frame-workspace-design' class='hidden' role='tabpanel'>
 						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Design Editing Mode</h5>
+							<select id='frame-design-mode' class='input margin-bottom' onchange='setFrameDesignMode(this.value);' aria-label='Design editing mode'>
+								<option value='fields'>Layout Fields</option>
+								<option value='frames'>Frame Components</option>
+							</select>
+							<h5 id='frame-design-mode-status' class='padding input-description'>Drag a field label to move it, drag an outlined edge to resize it, or double-click its label to open its editor.</h5>
+						</div>
+						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Layout Templates</h5>
 							<h5 class='padding margin-bottom input-description'>Choose a frame type and variant to apply its text fields, art bounds, set-symbol placement, orientation, and other card settings. Applying a layout does not add, remove, or reorder your frame image layers.</h5>
 							<h5 class='input-description margin-bottom'>Frame Type</h5>
@@ -231,7 +239,7 @@
 						</div>
 						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Layout Highlights</h5>
-							<h5 class='padding margin-bottom input-description'>Preview-only outlines show where each part of this template will render. These outlines are never included in downloaded cards.</h5>
+							<h5 class='padding margin-bottom input-description'>Drag a label to move its field, drag any outlined edge to resize that axis, or double-click a label for detailed controls. These preview-only outlines are never included in downloaded cards.</h5>
 							<div class='input-grid margin-bottom'>
 								<label class='checkbox-container input'>Text Fields
 									<input id='layout-highlight-text' type='checkbox' checked onchange='drawCard();'>
