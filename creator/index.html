@@ -318,6 +318,12 @@
 								<button class='input' onclick='FrameProjectStore.loadSelectedProject();'>Load Project</button>
 								<button class='input' onclick='FrameProjectStore.deleteSelectedProject();'>Delete Project</button>
 							</div>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='FrameProjectStore.exportSelectedProject();'>Export Selected</button>
+								<button class='input' onclick='document.querySelector("#frame-project-import").click();'>Import Project</button>
+							</div>
+							<input id='frame-project-import' type='file' accept='.ccproject,.zip,application/zip' hidden oninput='FrameProjectStore.importProjectFile(event.target.files[0]); this.value="";' aria-label='Import a Card Conjurer frame project backup'>
+							<h5 class='padding input-description'>Project backups include the editable layout and all saved images used by that project.</h5>
 							<h5 id='frame-project-status' class='padding input-description'>Opening the Frame Designer project store...</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>

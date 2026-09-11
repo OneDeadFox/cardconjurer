@@ -544,6 +544,291 @@
 		setStatus('#frame-project-status', 'Deleted frame project "' + project.name + '".', false);
 	}
 
+	function ensureProjectArchiveSupport() {
+		if (typeof JSZip !== 'function') {
+			throw new Error('Project backup support is still loading. Wait a moment and try again.');
+		}
+	}
+
+	function collectAssetIds(value, result, visited) {
+		result = result || new Set();
+		visited = visited || new Set();
+		if (value === null || value === undefined) {
+			return result;
+		}
+		if (typeof value === 'string') {
+			var match = value.match(/^asset:\/\/(.+)$/);
+			if (match) {
+				result.add(match[1]);
+			}
+			return result;
+		}
+		if (typeof value !== 'object' || visited.has(value)) {
+			return result;
+		}
+		visited.add(value);
+		if (value.assetId) {
+			result.add(String(value.assetId));
+		}
+		if (Array.isArray(value)) {
+			value.forEach(function (item) { collectAssetIds(item, result, visited); });
+		} else {
+			Object.keys(value).forEach(function (key) { collectAssetIds(value[key], result, visited); });
+		}
+		return result;
+	}
+
+	function archiveExtension(mimeType) {
+		var extensions = {
+			'image/png': 'png',
+			'image/jpeg': 'jpg',
+			'image/jpg': 'jpg',
+			'image/svg+xml': 'svg',
+			'image/webp': 'webp',
+			'image/bmp': 'bmp',
+			'image/gif': 'gif'
+		};
+		return extensions[String(mimeType || '').toLowerCase()] || 'bin';
+	}
+
+	function safeDownloadName(value) {
+		var name = String(value || 'Frame Project').trim()
+			.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+			.replace(/\s+/g, ' ')
+			.replace(/[. ]+$/g, '');
+		return name || 'Frame Project';
+	}
+
+	function downloadBlob(blob, filename) {
+		var url = URL.createObjectURL(blob);
+		var link = document.createElement('a');
+		link.href = url;
+		link.download = filename;
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+	}
+
+	async function exportSelectedProject() {
+		await ensureReady();
+		var select = document.querySelector('#frame-project-list');
+		var id = select ? select.value : '';
+		if (!id) {
+			setStatus('#frame-project-status', 'Select a saved frame project to export.', true);
+			return;
+		}
+		try {
+			ensureProjectArchiveSupport();
+			var project = await getOne(PROJECT_STORE, id);
+			if (!project) {
+				throw new Error('The selected frame project could not be found.');
+			}
+			var zip = new JSZip();
+			var assetIds = Array.from(collectAssetIds(project.card));
+			var exportedAssets = [];
+			var linkedAssetWarnings = [];
+
+			for (var index = 0; index < assetIds.length; index++) {
+				var assetId = assetIds[index];
+				var asset = await getOne(ASSET_STORE, assetId);
+				if (!asset) {
+					throw new Error('The project references a missing asset (' + assetId + '). Restore that image before exporting.');
+				}
+				var blob = asset.blob || null;
+				if (!blob && asset.sourceUrl) {
+					try {
+						var response = await fetch(asset.sourceUrl);
+						if (response.ok) {
+							blob = await response.blob();
+						}
+					} catch (error) {
+						// Cross-origin linked images may not be downloadable. Preserve their URL below.
+					}
+				}
+				var metadata = {
+					id: asset.id,
+					name: asset.name,
+					kind: asset.kind || 'frame',
+					mimeType: (blob && blob.type) || asset.mimeType || '',
+					createdAt: asset.createdAt || '',
+					updatedAt: asset.updatedAt || ''
+				};
+				if (blob) {
+					metadata.file = 'assets/' + String(index + 1).padStart(3, '0') + '-' + asset.id + '.' + archiveExtension(metadata.mimeType);
+					zip.file(metadata.file, blob);
+				} else if (asset.sourceUrl) {
+					metadata.sourceUrl = asset.sourceUrl;
+					linkedAssetWarnings.push(asset.name);
+				} else {
+					throw new Error('The asset "' + asset.name + '" does not contain an image that can be exported.');
+				}
+				exportedAssets.push(metadata);
+			}
+
+			var manifest = {
+				format: 'cardconjurer-frame-project',
+				formatVersion: 1,
+				exportedAt: new Date().toISOString(),
+				project: project,
+				assets: exportedAssets
+			};
+			zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+			var archive = await zip.generateAsync({
+				type: 'blob',
+				mimeType: 'application/zip',
+				compression: 'DEFLATE',
+				compressionOptions: {level: 6}
+			});
+			downloadBlob(archive, safeDownloadName(project.name) + '.ccproject');
+			var message = 'Exported "' + project.name + '" with ' + exportedAssets.length + ' asset' + (exportedAssets.length === 1 ? '' : 's') + '.';
+			if (linkedAssetWarnings.length) {
+				message += ' ' + linkedAssetWarnings.length + ' linked image' + (linkedAssetWarnings.length === 1 ? '' : 's') + ' could not be embedded and will still require its original URL.';
+			}
+			setStatus('#frame-project-status', message, false);
+		} catch (error) {
+			setStatus('#frame-project-status', error.message, true);
+		}
+	}
+
+	function rewriteAssetReferences(value, idMap, visited) {
+		visited = visited || new Set();
+		if (typeof value === 'string') {
+			var match = value.match(/^asset:\/\/(.+)$/);
+			return match && idMap[match[1]] ? 'asset://' + idMap[match[1]] : value;
+		}
+		if (!value || typeof value !== 'object' || visited.has(value)) {
+			return value;
+		}
+		visited.add(value);
+		if (value.assetId && idMap[String(value.assetId)]) {
+			value.assetId = idMap[String(value.assetId)];
+		}
+		if (Array.isArray(value)) {
+			for (var index = 0; index < value.length; index++) {
+				value[index] = rewriteAssetReferences(value[index], idMap, visited);
+			}
+		} else {
+			Object.keys(value).forEach(function (key) {
+				value[key] = rewriteAssetReferences(value[key], idMap, visited);
+			});
+		}
+		return value;
+	}
+
+	function uniqueImportedProjectName(value) {
+		var base = String(value || 'Imported Frame Project').trim() || 'Imported Frame Project';
+		var used = new Set(projects.map(function (project) { return String(project.name || '').trim().toLowerCase(); }));
+		if (!used.has(base.toLowerCase())) {
+			return base;
+		}
+		var suffix = ' (Imported)';
+		var candidate = base + suffix;
+		var counter = 2;
+		while (used.has(candidate.toLowerCase())) {
+			candidate = base + suffix + ' ' + counter;
+			counter++;
+		}
+		return candidate;
+	}
+
+	async function putImportedBundle(assetRecords, projectRecord) {
+		var database = await openDatabase();
+		var transaction = database.transaction([ASSET_STORE, PROJECT_STORE], 'readwrite');
+		var assetStore = transaction.objectStore(ASSET_STORE);
+		assetRecords.forEach(function (asset) { assetStore.put(asset); });
+		transaction.objectStore(PROJECT_STORE).put(projectRecord);
+		await transactionFinished(transaction);
+	}
+
+	async function importProjectFile(file) {
+		if (!file) {
+			return;
+		}
+		try {
+			await ensureReady();
+			ensureProjectArchiveSupport();
+			var zip = await JSZip.loadAsync(file);
+			var manifestEntry = zip.file('manifest.json');
+			if (!manifestEntry) {
+				throw new Error('This file is not a Card Conjurer project backup.');
+			}
+			var manifest;
+			try {
+				manifest = JSON.parse(await manifestEntry.async('string'));
+			} catch (error) {
+				throw new Error('The project manifest is damaged or unreadable.');
+			}
+			if (!manifest || manifest.format !== 'cardconjurer-frame-project' || manifest.formatVersion !== 1 || !manifest.project || !manifest.project.card) {
+				throw new Error('This project backup uses an unsupported format.');
+			}
+			var assetMetadata = Array.isArray(manifest.assets) ? manifest.assets : [];
+			if (assetMetadata.length > 1000) {
+				throw new Error('This project contains too many assets to import safely.');
+			}
+			var idMap = Object.create(null);
+			var importedAssets = [];
+			var now = new Date().toISOString();
+
+			for (var index = 0; index < assetMetadata.length; index++) {
+				var metadata = assetMetadata[index] || {};
+				var oldId = String(metadata.id || '');
+				if (!oldId || idMap[oldId]) {
+					throw new Error('The project backup contains an invalid or duplicate asset identifier.');
+				}
+				var newId = makeId('asset');
+				idMap[oldId] = newId;
+				var record = {
+					id: newId,
+					name: extensionlessName(metadata.name),
+					kind: metadata.kind || 'frame',
+					mimeType: metadata.mimeType || '',
+					createdAt: metadata.createdAt || now,
+					updatedAt: now
+				};
+				if (metadata.file) {
+					var archivePath = String(metadata.file);
+					if (!/^assets\/[A-Za-z0-9._-]+$/.test(archivePath)) {
+						throw new Error('The project backup contains an unsafe asset path.');
+					}
+					var assetEntry = zip.file(archivePath);
+					if (!assetEntry) {
+						throw new Error('The project backup is missing "' + archivePath + '".');
+					}
+					var importedBlob = await assetEntry.async('blob');
+					record.blob = record.mimeType ? new Blob([importedBlob], {type: record.mimeType}) : importedBlob;
+					record.mimeType = record.blob.type || record.mimeType;
+				} else if (metadata.sourceUrl) {
+					record.sourceUrl = String(metadata.sourceUrl);
+				} else {
+					throw new Error('The project backup contains an asset without image data.');
+				}
+				importedAssets.push(record);
+			}
+
+			var referencedIds = Array.from(collectAssetIds(manifest.project.card));
+			var missingIds = referencedIds.filter(function (id) { return !idMap[id]; });
+			if (missingIds.length) {
+				throw new Error('The project backup is incomplete and is missing ' + missingIds.length + ' referenced asset' + (missingIds.length === 1 ? '' : 's') + '.');
+			}
+			var importedCard = rewriteAssetReferences(JSON.parse(JSON.stringify(manifest.project.card)), idMap);
+			var importedProject = {
+				id: makeId('project'),
+				name: uniqueImportedProjectName(manifest.project.name),
+				schemaVersion: manifest.project.schemaVersion || 1,
+				card: importedCard,
+				createdAt: now,
+				updatedAt: now,
+				importedAt: now
+			};
+			await putImportedBundle(importedAssets, importedProject);
+			await Promise.all([refreshAssets(), refreshProjects(importedProject.id)]);
+			setStatus('#frame-project-status', 'Imported "' + importedProject.name + '" with ' + importedAssets.length + ' asset' + (importedAssets.length === 1 ? '' : 's') + '. It is selected and ready to load.', false);
+		} catch (error) {
+			setStatus('#frame-project-status', error.message, true);
+		}
+	}
+
 	function ensureReady() {
 		if (!readyPromise) {
 			readyPromise = init();
@@ -554,7 +839,7 @@
 	async function init() {
 		try {
 			await Promise.all([refreshAssets(), refreshProjects()]);
-			setStatus('#frame-project-status', 'Frame projects are stored on this device.', false);
+			setStatus('#frame-project-status', 'Frame projects are stored on this device. Export a .ccproject backup to keep a portable copy.', false);
 			setStatus('#frame-asset-status', assets.length ? assets.length + ' saved frame asset' + (assets.length === 1 ? '' : 's') + ' available.' : 'No saved frame assets yet.', false);
 		} catch (error) {
 			setStatus('#frame-project-status', error.message, true);
@@ -577,6 +862,8 @@
 		saveProjectAs: function () { return saveProject(true); },
 		loadSelectedProject: loadSelectedProject,
 		deleteSelectedProject: deleteSelectedProject,
+		exportSelectedProject: exportSelectedProject,
+		importProjectFile: importProjectFile,
 		saveSourceAsset: saveSourceAsset,
 		getAssetSource: getAssetSource,
 		getAssets: function () { return assets.slice(); },
