@@ -101,18 +101,19 @@ The Design Frame workspace can add labeled fields before a project is published:
 
 - **Add Text Field** creates an editable textbox with a stable CSV key. Its font, text, and bounds use the existing Text tab controls.
 - **Add Image Field** creates a special frame layer with a stable CSV key. Its position, size, rotation, flips, opacity, masks, and layer order use the existing Frame Image Editor.
-- Custom field labels appear under **Current template text fields** or **Current template image fields** in CSV Import.
+- Custom field labels appear under **Available template text fields** or **Available template image fields** in CSV Import.
 - An exact CSV header-to-label match is selected automatically when the CSV is loaded. **Refresh Current Template Fields** also matches newly added fields while preserving deliberate mappings.
 - A custom image cell may contain an image filename from the selected art folder, including a subfolder path, or an HTTP(S), data-image, blob, or app-relative URL. A blank mapped cell clears the image slot for that row.
 - Custom field definitions and labels are part of the card snapshot, so Frame Designer project save/load and CSV template capture retain them.
+- The CSV **Template** value selects a saved Frame Designer project by its exact name. **Frame Type** and **Frame Variant** must be blank on that row.
+- When a row selects a built-in Frame Type/Variant, template-only custom text and image fields are removed so values from a previously previewed custom template cannot remain visible.
 
 ## Next V1 phases
 
 1. Direct manipulation handles on the card canvas.
 2. Portrait and landscape project orientation.
-3. Publish a project as a named Frame Type and Frame Variant.
-4. Make published templates selectable by the CSV builder.
-5. Export/import a portable project package containing its project data and image assets.
+3. Publish a project as a named Frame Type and Frame Variant in the normal frame browser.
+4. Export/import a portable project package containing its project data and image assets.
 
 ## Deferred to V2
 
