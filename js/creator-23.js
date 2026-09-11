@@ -334,6 +334,7 @@ function toggleCreatorTabs(event, target) {
 	Array.from(document.querySelector('#creator-menu-sections').children).forEach(element => element.classList.add('hidden'));
 	document.querySelector('#creator-menu-' + target).classList.remove('hidden');
 	selectSelectable(event);
+	drawCard();
 }
 var activeFrameWorkspace = 'browse';
 var suppressFrameVersionAutoload = false;
@@ -517,6 +518,7 @@ function toggleFrameWorkspace(event, target) {
 	if (target != 'design') {
 		document.querySelector('#frame-element-editor')?.classList.remove('opened');
 	}
+	drawCard();
 }
 function selectSelectable(event) {
 	var eventTarget = event.target.closest('.selectable');
@@ -3562,6 +3564,105 @@ function drawSetSymbol(cardContext, setSymbol, bounds) {
         cardContext.drawImage(setSymbol, x, y, symbolWidth, symbolHeight);
     }
 }
+// DESIGN FRAME LAYOUT HIGHLIGHTS
+function layoutHighlightEnabled(id) {
+	const input = document.querySelector('#' + id);
+	return !!input?.checked;
+}
+function shouldDrawLayoutHighlights() {
+	const frameSection = document.querySelector('#creator-menu-frame');
+	return activeFrameWorkspace == 'design' && frameSection && !frameSection.classList.contains('hidden') &&
+		['layout-highlight-text', 'layout-highlight-art', 'layout-highlight-images', 'layout-highlight-symbols'].some(layoutHighlightEnabled);
+}
+function previewLayoutBounds(bounds, horizontal = 'left', vertical = 'top') {
+	if (!bounds) {
+		return null;
+	}
+	const ratioX = previewCanvas.width / cardCanvas.width;
+	const ratioY = previewCanvas.height / cardCanvas.height;
+	const width = scaleWidth(Number(bounds.width) || 0) * ratioX;
+	const height = scaleHeight(Number(bounds.height) || 0) * ratioY;
+	let x = scaleX(Number(bounds.x) || 0) * ratioX;
+	let y = scaleY(Number(bounds.y) || 0) * ratioY;
+	if (horizontal == 'center') {
+		x -= width / 2;
+	} else if (horizontal == 'right') {
+		x -= width;
+	}
+	if (vertical == 'center') {
+		y -= height / 2;
+	} else if (vertical == 'bottom') {
+		y -= height;
+	}
+	return {x:x, y:y, width:width, height:height};
+}
+function drawLayoutHighlightBox(bounds, color, label, options = {}) {
+	const rectangle = previewLayoutBounds(bounds, options.horizontal, options.vertical);
+	if (!rectangle || rectangle.width <= 0 || rectangle.height <= 0 ||
+		rectangle.x >= previewCanvas.width || rectangle.y >= previewCanvas.height ||
+		rectangle.x + rectangle.width <= 0 || rectangle.y + rectangle.height <= 0) {
+		return;
+	}
+	previewContext.save();
+	previewContext.strokeStyle = color;
+	previewContext.lineWidth = Math.max(2, previewCanvas.width / 500);
+	previewContext.setLineDash([8, 5]);
+	const rotation = Number(options.rotation) || 0;
+	if (rotation) {
+		previewContext.translate(rectangle.x + rectangle.width / 2, rectangle.y + rectangle.height / 2);
+		previewContext.rotate(rotation * Math.PI / 180);
+		previewContext.strokeRect(-rectangle.width / 2, -rectangle.height / 2, rectangle.width, rectangle.height);
+	} else {
+		previewContext.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+	}
+	previewContext.restore();
+
+	const fontSize = Math.max(11, Math.round(previewCanvas.width / 84));
+	const padding = 3;
+	previewContext.save();
+	previewContext.font = 'bold ' + fontSize + 'px sans-serif';
+	const labelWidth = Math.min(previewCanvas.width, previewContext.measureText(label).width + padding * 2);
+	const labelHeight = fontSize + padding * 2;
+	const labelX = Math.max(0, Math.min(previewCanvas.width - labelWidth, rectangle.x));
+	const labelY = Math.max(labelHeight, Math.min(previewCanvas.height, rectangle.y));
+	previewContext.globalAlpha = 0.92;
+	previewContext.fillStyle = color;
+	previewContext.fillRect(labelX, labelY - labelHeight, labelWidth, labelHeight);
+	previewContext.globalAlpha = 1;
+	previewContext.fillStyle = '#101010';
+	previewContext.fillText(label, labelX + padding, labelY - padding - 1);
+	previewContext.restore();
+}
+function drawLayoutHighlights() {
+	if (!shouldDrawLayoutHighlights()) {
+		return;
+	}
+	if (layoutHighlightEnabled('layout-highlight-text')) {
+		Object.entries(card.text || {}).forEach(item => {
+			drawLayoutHighlightBox(item[1], '#43d9ff', item[1].name || item[0]);
+		});
+	}
+	if (layoutHighlightEnabled('layout-highlight-art')) {
+		drawLayoutHighlightBox(card.artBounds, '#52e36f', 'Art');
+	}
+	if (layoutHighlightEnabled('layout-highlight-images')) {
+		(card.frames || []).filter(frame => frame.csvImageFieldKey).forEach(frame => {
+			drawLayoutHighlightBox(frame.bounds || {x:0, y:0, width:1, height:1}, '#ff59d6', frame.csvFieldLabel || frame.name || 'Custom Image', {rotation:frame.rotation});
+		});
+	}
+	if (layoutHighlightEnabled('layout-highlight-symbols')) {
+		if (card.setSymbolBounds) {
+			drawLayoutHighlightBox(card.setSymbolBounds, '#ffd34e', 'Set Symbol', {
+				horizontal:card.setSymbolBounds.horizontal,
+				vertical:card.setSymbolBounds.vertical
+			});
+		}
+		if (card.watermarkBounds) {
+			drawLayoutHighlightBox(card.watermarkBounds, '#ffd34e', 'Watermark', {horizontal:'center', vertical:'center'});
+		}
+	}
+}
+
 //DRAWING THE CARD (putting it all together)
 function drawCard() {
 	// reset
@@ -3686,6 +3787,7 @@ function drawCard() {
 	// show preview
 	previewContext.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 	previewContext.drawImage(cardCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+	drawLayoutHighlights();
 
 	if (window.cardDrawingPromiseResolver) {
         window.cardDrawingPromiseResolver();
