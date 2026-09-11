@@ -88,7 +88,7 @@
 				['field:year', 'Year'],
 				['field:frameType', 'Frame Type'],
 				['field:frameVariant', 'Frame Variant'],
-				['field:template', 'Template']
+				['field:template', 'Saved Frame Project (Template)']
 			]
 		}
 	];
@@ -356,6 +356,13 @@
 		};
 	}
 
+	function savedFrameProjects() {
+		if (!window.FrameProjectStore || typeof FrameProjectStore.getProjects !== 'function') {
+			return [];
+		}
+		return FrameProjectStore.getProjects();
+	}
+
 	function getTargets() {
 		var groups = fieldGroups.map(function (group) {
 			return {
@@ -365,37 +372,57 @@
 		});
 
 		var textFields = [];
+		var seenTextFields = {};
 		if (window.card && card.text) {
 			Object.keys(card.text).forEach(function (key) {
 				var textField = card.text[key] || {};
-				var label = textField.name || key;
-				textFields.push(['textbox:' + key, 'Text field: ' + label + ' (' + key + ')']);
+				var label = textField.csvFieldLabel || textField.name || key;
+				var target = 'textbox:' + key;
+				seenTextFields[target] = true;
+				textFields.push([target, 'Text field: ' + label + ' (' + key + ')']);
 			});
 		}
-
+		savedFrameProjects().forEach(function (project) {
+			Object.keys((project.card && project.card.text) || {}).forEach(function (key) {
+				var textField = project.card.text[key] || {};
+				var target = 'textbox:' + key;
+				if (!textField.customField || seenTextFields[target]) {
+					return;
+				}
+				seenTextFields[target] = true;
+				var label = textField.csvFieldLabel || textField.name || key;
+				textFields.push([target, 'Text field: ' + label + ' (' + project.name + ')']);
+			});
+		});
 		if (textFields.length) {
 			groups.push({
-				label: 'Current template text fields',
+				label: 'Available template text fields',
 				fields: textFields
 			});
 		}
 
 		var imageFields = [];
 		var seenImageFields = {};
-		if (window.card && card.frames) {
-			card.frames.forEach(function (frame) {
-				var key = frame.csvImageFieldKey;
-				if (!key || seenImageFields[key]) {
-					return;
-				}
-				seenImageFields[key] = true;
-				var label = frame.csvFieldLabel || frame.name || key;
-				imageFields.push(['imagefield:' + key, 'Image field: ' + label]);
-			});
+		function collectImageField(frame, projectName) {
+			var key = frame.csvImageFieldKey;
+			if (!key || seenImageFields[key]) {
+				return;
+			}
+			seenImageFields[key] = true;
+			var label = frame.csvFieldLabel || frame.name || key;
+			imageFields.push(['imagefield:' + key, 'Image field: ' + label + (projectName ? ' (' + projectName + ')' : '')]);
 		}
+		if (window.card && card.frames) {
+			card.frames.forEach(function (frame) { collectImageField(frame, ''); });
+		}
+		savedFrameProjects().forEach(function (project) {
+			((project.card && project.card.frames) || []).forEach(function (frame) {
+				collectImageField(frame, project.name);
+			});
+		});
 		if (imageFields.length) {
 			groups.push({
-				label: 'Current template image fields',
+				label: 'Available template image fields',
 				fields: imageFields
 			});
 		}
@@ -418,7 +445,7 @@
 		if (window.card && card.text) {
 			Object.keys(card.text).forEach(function (key) {
 				var textField = card.text[key] || {};
-				var label = textField.name || key;
+				var label = textField.csvFieldLabel || textField.name || key;
 				[
 					['x', 'X (editor pixels)'],
 					['y', 'Y (editor pixels)'],
@@ -448,20 +475,45 @@
 		if (aliases[normalized]) {
 			return aliases[normalized];
 		}
+		function textTarget(text, key) {
+			return text && text.customField &&
+				normalizeHeader(text.csvFieldLabel || text.name || key) === normalized ?
+				'textbox:' + key : '';
+		}
 		if (window.card && card.text) {
 			for (var textKey of Object.keys(card.text)) {
-				var textField = card.text[textKey] || {};
-				if (textField.customField &&
-					normalizeHeader(textField.csvFieldLabel || textField.name || textKey) === normalized) {
-					return 'textbox:' + textKey;
+				var currentTextTarget = textTarget(card.text[textKey], textKey);
+				if (currentTextTarget) {
+					return currentTextTarget;
 				}
 			}
 		}
+		for (var project of savedFrameProjects()) {
+			for (var projectTextKey of Object.keys((project.card && project.card.text) || {})) {
+				var projectTextTarget = textTarget(project.card.text[projectTextKey], projectTextKey);
+				if (projectTextTarget) {
+					return projectTextTarget;
+				}
+			}
+		}
+		function imageTarget(frame) {
+			return frame && frame.csvImageFieldKey &&
+				normalizeHeader(frame.csvFieldLabel || frame.name || frame.csvImageFieldKey) === normalized ?
+				'imagefield:' + frame.csvImageFieldKey : '';
+		}
 		if (window.card && card.frames) {
 			for (var frame of card.frames) {
-				if (frame.csvImageFieldKey &&
-					normalizeHeader(frame.csvFieldLabel || frame.name || frame.csvImageFieldKey) === normalized) {
-					return 'imagefield:' + frame.csvImageFieldKey;
+				var currentImageTarget = imageTarget(frame);
+				if (currentImageTarget) {
+					return currentImageTarget;
+				}
+			}
+		}
+		for (var savedProject of savedFrameProjects()) {
+			for (var projectFrame of ((savedProject.card && savedProject.card.frames) || [])) {
+				var projectImageTarget = imageTarget(projectFrame);
+				if (projectImageTarget) {
+					return projectImageTarget;
 				}
 			}
 		}
@@ -611,10 +663,19 @@
 
 		var transformIndex = getMappedColumn('field:transform');
 		var flipIndex = getMappedColumn('field:flip');
+		var templateIndex = getMappedColumn('field:template');
+		var frameTypeIndex = getMappedColumn('field:frameType');
+		var frameVariantIndex = getMappedColumn('field:frameVariant');
+		var projectNames = savedFrameProjects().map(function (project) {
+			return String(project.name || '').trim().toLowerCase();
+		});
 
 		state.rows.forEach(function (row, index) {
 			var transform = transformIndex === -1 ? false : parseBoolean(row[transformIndex]);
 			var flip = flipIndex === -1 ? false : parseBoolean(row[flipIndex]);
+			var templateName = templateIndex === -1 ? '' : String(row[templateIndex] || '').trim();
+			var frameType = frameTypeIndex === -1 ? '' : String(row[frameTypeIndex] || '').trim();
+			var frameVariant = frameVariantIndex === -1 ? '' : String(row[frameVariantIndex] || '').trim();
 
 			if (transform === null) {
 				errors.push('Row ' + (index + 2) + ' has an invalid Transform value.');
@@ -624,6 +685,12 @@
 			}
 			if (transform === true && flip === true) {
 				errors.push('Row ' + (index + 2) + ' cannot be both Transform and Flip.');
+			}
+			if (templateName && (frameType || frameVariant)) {
+				errors.push('Row ' + (index + 2) + ' cannot use both a saved Template and Frame Type/Variant.');
+			}
+			if (templateName && projectNames.indexOf(templateName.toLowerCase()) === -1) {
+				errors.push('Row ' + (index + 2) + ' names an unknown saved frame project: "' + templateName + '".');
 			}
 		});
 
@@ -732,6 +799,11 @@
 		renderMappings();
 		validateAndRenderStatus();
 	}
+
+
+	window.addEventListener('frameprojectschanged', function () {
+		refreshTextFields();
+	});
 
 	window.CSVImporter = {
 		loadFile: loadFile,
