@@ -106,6 +106,7 @@ The Design Frame workspace can add labeled fields before a project is published:
 - A custom image cell may contain an image filename from the selected art folder, including a subfolder path, or an HTTP(S), data-image, blob, or app-relative URL. A blank mapped cell clears the image slot for that row.
 - Custom field definitions and labels are part of the card snapshot, so Frame Designer project save/load and CSV template capture retain them.
 - The CSV **Template** value selects a saved Frame Designer project by its exact name. **Frame Type** and **Frame Variant** must be blank on that row.
+- Rows with a saved **Template** can render without first capturing a session template. Capturing the current card supplies the fallback only for rows whose Template cell is blank.
 - When a row selects a built-in Frame Type/Variant, template-only custom text and image fields are removed so values from a previously previewed custom template cannot remain visible.
 
 ## Next V1 phases
