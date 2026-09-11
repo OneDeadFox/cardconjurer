@@ -923,6 +923,11 @@ textarea.input {
 	box-shadow: 0 0px 16px black;
 	transition: 0.05s;
 }
+.frame-element.design-selected {
+	outline: 0.2rem solid #ff9f43;
+	outline-offset: -0.2rem;
+	background: rgba(255, 159, 67, 0.14);
+}
 .frame-element.frame-element-hidden {
 	opacity: 0.5;
 }
@@ -1055,6 +1060,9 @@ textarea.input {
 
 .frame-element-editor.opened, .textbox-editor.opened {
 	display: grid;
+}
+.textbox-editor-restore {
+	grid-column: 1 / -1;
 }
 .frame-element-editor > .frame-element-editor-title, .textbox-editor > .textbox-editor-title {
 	grid-column: 1 / -2;

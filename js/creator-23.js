@@ -429,6 +429,8 @@ function registerCurrentFrameLayoutTemplate() {
 			if (card) {
 				card.frameLayoutSource = layoutKey;
 				card.frameLayoutLabel = layoutLabel;
+				captureCurrentDesignDefaults(false);
+				clearDesignUndoHistory();
 			}
 			syncFrameLayoutTemplateControls();
 			setFrameLayoutTemplateStatus('Applied ' + layoutLabel + '.');
@@ -759,6 +761,267 @@ function ensureFrameEditorDefaults(frame) {
 	}
 	return frame.editorDefaults;
 }
+
+var DESIGN_UNDO_LIMIT = 30;
+var designUndoHistory = [];
+var designEditorUndoStart = null;
+var designUndoApplying = false;
+var designLayerSequence = 0;
+function ensureDesignLayerId(frame) {
+	if (!frame) return '';
+	if (!frame.designLayerId) {
+		designLayerSequence++;
+		const uniquePart = window.crypto?.randomUUID
+			? window.crypto.randomUUID()
+			: Date.now() + '-' + designLayerSequence + '-' + Math.random().toString(16).slice(2);
+		frame.designLayerId = 'layer-' + uniquePart;
+	}
+	return frame.designLayerId;
+}
+function cloneDesignValue(value) {
+	return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+function applyFrameEditorState(frame, state) {
+	if (!frame || !state) return;
+	frame.bounds = cloneDesignValue(state.bounds || {});
+	if (state.ogBounds === undefined) delete frame.ogBounds;
+	else frame.ogBounds = cloneDesignValue(state.ogBounds);
+	frame.opacity = state.opacity;
+	frame.erase = !!state.erase;
+	frame.preserveAlpha = !!state.preserveAlpha;
+	frame.colorOverlayCheck = !!state.colorOverlayCheck;
+	frame.colorOverlay = state.colorOverlay;
+	frame.hslHue = state.hslHue;
+	frame.hslSaturation = state.hslSaturation;
+	frame.hslLightness = state.hslLightness;
+	frame.rotation = state.rotation;
+	frame.flipX = !!state.flipX;
+	frame.flipY = !!state.flipY;
+	frame.hidden = !!state.hidden;
+}
+function currentDesignDefaultsSnapshot() {
+	const textDefaults = {};
+	Object.entries(card.text || {}).forEach(([key, value]) => {
+		textDefaults[key] = cloneDesignValue(value);
+		delete textDefaults[key].text;
+	});
+	return {
+		text: textDefaults,
+		artBounds: cloneDesignValue(card.artBounds),
+		artPlacement: {x:Number(card.artX)||0, y:Number(card.artY)||0, zoom:Number(card.artZoom)||0, rotate:Number(card.artRotate)||0},
+		setSymbolBounds: cloneDesignValue(card.setSymbolBounds),
+		setSymbolPlacement: {x:Number(card.setSymbolX)||0, y:Number(card.setSymbolY)||0, zoom:Number(card.setSymbolZoom)||0},
+		watermarkBounds: cloneDesignValue(card.watermarkBounds),
+		watermarkPlacement: {
+			x:Number(card.watermarkX)||0, y:Number(card.watermarkY)||0, zoom:Number(card.watermarkZoom)||0,
+			opacity:card.watermarkOpacity === undefined ? 0.4 : Number(card.watermarkOpacity)
+		}
+	};
+}
+function captureCurrentDesignDefaults(rebaseFrameLayers = true) {
+	if (!card) return null;
+	card.designDefaults = currentDesignDefaultsSnapshot();
+	if (rebaseFrameLayers) {
+		(card.frames || []).forEach(frame => {
+			ensureDesignLayerId(frame);
+			frame.editorDefaults = getFrameEditorState(frame);
+		});
+	}
+	return card.designDefaults;
+}
+function saveCurrentDesignAsDefaults() {
+	return captureCurrentDesignDefaults(true);
+}
+function createDesignStateSnapshot() {
+	return {
+		frames:(card.frames || []).map(frame => ({id:ensureDesignLayerId(frame), state:getFrameEditorState(frame)})),
+		text:cloneDesignValue(card.text || {}),
+		artBounds:cloneDesignValue(card.artBounds),
+		artPlacement:{x:Number(card.artX)||0, y:Number(card.artY)||0, zoom:Number(card.artZoom)||0, rotate:Number(card.artRotate)||0},
+		setSymbolBounds:cloneDesignValue(card.setSymbolBounds),
+		setSymbolPlacement:{x:Number(card.setSymbolX)||0, y:Number(card.setSymbolY)||0, zoom:Number(card.setSymbolZoom)||0},
+		watermarkBounds:cloneDesignValue(card.watermarkBounds),
+		watermarkPlacement:{
+			x:Number(card.watermarkX)||0, y:Number(card.watermarkY)||0, zoom:Number(card.watermarkZoom)||0,
+			opacity:card.watermarkOpacity === undefined ? 0.4 : Number(card.watermarkOpacity)
+		}
+	};
+}
+function designStatesMatch(left, right) {
+	return JSON.stringify(left) === JSON.stringify(right);
+}
+function updateDesignUndoStatus(message) {
+	const status = document.querySelector('#design-undo-status');
+	if (!status) return;
+	status.textContent = message || (designUndoHistory.length
+		? designUndoHistory.length + ' change' + (designUndoHistory.length == 1 ? '' : 's') + ' available to undo (maximum ' + DESIGN_UNDO_LIMIT + ').'
+		: 'No design changes to undo. Up to ' + DESIGN_UNDO_LIMIT + ' changes are retained.');
+}
+function clearDesignUndoHistory() {
+	designUndoHistory = [];
+	designEditorUndoStart = null;
+	updateDesignUndoStatus();
+}
+function commitDesignUndoSnapshot(before, label) {
+	if (!before || designUndoApplying) return false;
+	const after = createDesignStateSnapshot();
+	if (designStatesMatch(before, after)) return false;
+	designUndoHistory.push({state:before, label:label || 'Design change'});
+	if (designUndoHistory.length > DESIGN_UNDO_LIMIT) {
+		designUndoHistory.splice(0, designUndoHistory.length - DESIGN_UNDO_LIMIT);
+	}
+	updateDesignUndoStatus();
+	return true;
+}
+function setDesignPlacementInputs(prefix, placement) {
+	if (!placement) return;
+	const x=document.querySelector('#'+prefix+'-x');
+	const y=document.querySelector('#'+prefix+'-y');
+	const zoom=document.querySelector('#'+prefix+'-zoom');
+	const rotate=document.querySelector('#'+prefix+'-rotate');
+	const opacity=document.querySelector('#'+prefix+'-opacity');
+	if (x) x.value=placement.x*card.width;
+	if (y) y.value=placement.y*card.height;
+	if (zoom) zoom.value=placement.zoom*100;
+	if (rotate) rotate.value=placement.rotate||0;
+	if (opacity) opacity.value=placement.opacity*100;
+}
+async function applyDesignStateSnapshot(snapshot) {
+	if (!snapshot) return;
+	(snapshot.frames || []).forEach(record => {
+		const frame=(card.frames || []).find(item => ensureDesignLayerId(item)==record.id);
+		if (frame) {
+			applyFrameEditorState(frame,record.state);
+			syncFrameElementVisibility(frame);
+		}
+	});
+	card.text=cloneDesignValue(snapshot.text||{});
+	card.artBounds=cloneDesignValue(snapshot.artBounds);
+	card.artX=snapshot.artPlacement.x; card.artY=snapshot.artPlacement.y;
+	card.artZoom=snapshot.artPlacement.zoom; card.artRotate=snapshot.artPlacement.rotate;
+	card.setSymbolBounds=cloneDesignValue(snapshot.setSymbolBounds);
+	card.setSymbolX=snapshot.setSymbolPlacement.x; card.setSymbolY=snapshot.setSymbolPlacement.y;
+	card.setSymbolZoom=snapshot.setSymbolPlacement.zoom;
+	card.watermarkBounds=cloneDesignValue(snapshot.watermarkBounds);
+	card.watermarkX=snapshot.watermarkPlacement.x; card.watermarkY=snapshot.watermarkPlacement.y;
+	card.watermarkZoom=snapshot.watermarkPlacement.zoom; card.watermarkOpacity=snapshot.watermarkPlacement.opacity;
+	setDesignPlacementInputs('art',snapshot.artPlacement);
+	setDesignPlacementInputs('setSymbol',snapshot.setSymbolPlacement);
+	setDesignPlacementInputs('watermark',snapshot.watermarkPlacement);
+	const textKeys=Object.keys(card.text);
+	if (textKeys.length) {
+		selectedTextIndex=Math.min(selectedTextIndex,textKeys.length-1);
+		const selectedText=card.text[textKeys[selectedTextIndex]];
+		const editor=document.querySelector('#text-editor');
+		const fontSize=document.querySelector('#text-editor-font-size');
+		if (editor) editor.value=selectedText.text||'';
+		if (fontSize) fontSize.value=selectedText.fontSize||0;
+	}
+	if (selectedFrame && card.frames.includes(selectedFrame)) refreshSelectedFrameEditor();
+	drawFrames();
+	await drawText();
+	watermarkEdited();
+	drawCard();
+}
+async function undoDesignChange() {
+	if (!designUndoHistory.length || designUndoApplying) {
+		updateDesignUndoStatus('No design changes are available to undo.');
+		return false;
+	}
+	const entry=designUndoHistory.pop();
+	designUndoApplying=true;
+	try {
+		await applyDesignStateSnapshot(entry.state);
+		updateDesignUndoStatus('Undid: '+entry.label+'. '+designUndoHistory.length+' earlier change'+(designUndoHistory.length==1?'':'s')+' remain.');
+		return true;
+	} finally {
+		designUndoApplying=false;
+	}
+}
+function getSelectedTextDefault() {
+	const key=Object.keys(card.text||{})[selectedTextIndex];
+	return {key:key,value:key?card.designDefaults?.text?.[key]:null};
+}
+function restoreSelectedTextFieldDefaults() {
+	const target=getSelectedTextDefault();
+	if (!target.key || !target.value) {
+		notify('This text field has no default in the current layout. Save the Frame Designer project to make the current position its default.',5);
+		return;
+	}
+	const undoSnapshot=createDesignStateSnapshot();
+	const currentText=card.text[target.key]?.text||'';
+	card.text[target.key]=Object.assign(cloneDesignValue(target.value),{text:currentText});
+	textboxEditor();
+	drawTextBuffer();
+	drawCard();
+	commitDesignUndoSnapshot(undoSnapshot,'Restore text field default');
+}
+function restoreArtLayoutDefault() {
+	const defaults=card.designDefaults;
+	if (!defaults?.artBounds) {notify('This layout has no saved art default.',5);return;}
+	const undoSnapshot=createDesignStateSnapshot();
+	card.artBounds=cloneDesignValue(defaults.artBounds);
+	card.artX=defaults.artPlacement.x; card.artY=defaults.artPlacement.y;
+	card.artZoom=defaults.artPlacement.zoom; card.artRotate=defaults.artPlacement.rotate;
+	setDesignPlacementInputs('art',defaults.artPlacement);
+	drawCard();
+	commitDesignUndoSnapshot(undoSnapshot,'Restore art default');
+}
+function restoreSetSymbolLayoutDefault() {
+	const defaults=card.designDefaults;
+	if (!defaults?.setSymbolBounds) {notify('This layout has no saved set-symbol default.',5);return;}
+	const undoSnapshot=createDesignStateSnapshot();
+	card.setSymbolBounds=cloneDesignValue(defaults.setSymbolBounds);
+	card.setSymbolX=defaults.setSymbolPlacement.x; card.setSymbolY=defaults.setSymbolPlacement.y;
+	card.setSymbolZoom=defaults.setSymbolPlacement.zoom;
+	setDesignPlacementInputs('setSymbol',defaults.setSymbolPlacement);
+	drawCard();
+	commitDesignUndoSnapshot(undoSnapshot,'Restore set symbol default');
+}
+function restoreWatermarkLayoutDefault() {
+	const defaults=card.designDefaults;
+	if (!defaults?.watermarkBounds) {notify('This layout has no saved watermark default.',5);return;}
+	const undoSnapshot=createDesignStateSnapshot();
+	card.watermarkBounds=cloneDesignValue(defaults.watermarkBounds);
+	card.watermarkX=defaults.watermarkPlacement.x; card.watermarkY=defaults.watermarkPlacement.y;
+	card.watermarkZoom=defaults.watermarkPlacement.zoom; card.watermarkOpacity=defaults.watermarkPlacement.opacity;
+	setDesignPlacementInputs('watermark',defaults.watermarkPlacement);
+	watermarkEdited();
+	commitDesignUndoSnapshot(undoSnapshot,'Restore watermark default');
+}
+function isDesignEditorControl(element) {
+	if (!element || activeFrameWorkspace!='design') return false;
+	const insideEditor=element.closest('#frame-element-editor, #textbox-editor, #creator-menu-art, #creator-menu-setSymbol, #creator-menu-watermark');
+	if (!insideEditor || !element.matches('input, select')) return false;
+	return !['file','text','url','search'].includes(String(element.type||'').toLowerCase());
+}
+function beginDesignEditorUndo(event) {
+	if (designUndoApplying || !isDesignEditorControl(event.target) || designEditorUndoStart) return;
+	designEditorUndoStart={state:createDesignStateSnapshot(),label:event.target.getAttribute('aria-label')||event.target.id||'Editor change'};
+}
+function finishDesignEditorUndo(event) {
+	if (!designEditorUndoStart || designUndoApplying || !isDesignEditorControl(event.target)) return;
+	const pending=designEditorUndoStart;
+	designEditorUndoStart=null;
+	commitDesignUndoSnapshot(pending.state,pending.label);
+}
+function initializeDesignUndoInteractions() {
+	if (document.body.dataset.designUndoReady) return;
+	document.body.dataset.designUndoReady='true';
+	document.addEventListener('focusin',beginDesignEditorUndo,true);
+	document.addEventListener('pointerdown',beginDesignEditorUndo,true);
+	document.addEventListener('wheel',beginDesignEditorUndo,true);
+	document.addEventListener('change',finishDesignEditorUndo);
+	document.addEventListener('keydown',event => {
+		if (!(event.ctrlKey||event.metaKey) || event.key.toLowerCase()!='z' || event.shiftKey) return;
+		const editingText=event.target.matches?.('textarea, input[type="text"], input[type="url"], input[type="search"]');
+		if (activeFrameWorkspace!='design' || editingText || !designUndoHistory.length) return;
+		event.preventDefault();
+		undoDesignChange();
+	});
+	updateDesignUndoStatus();
+}
+
 function drawFrameLayerImage(context, image, x, y, width, height, frame) {
 	const rotation = Number(frame.rotation) || 0;
 	const scaleHorizontal = frame.flipX ? -1 : 1;
@@ -810,6 +1073,7 @@ async function duplicateSelectedFrame() {
 	const copy = JSON.parse(JSON.stringify(selectedFrame, (key, value) => key == 'image' ? undefined : value));
 	copy.name = (copy.name || 'Frame Layer') + ' Copy';
 	copy.masks = copy.masks || [];
+	delete copy.designLayerId;
 	delete copy.editorDefaults;
 	ensureFrameEditorDefaults(copy);
 	card.frames.unshift(copy);
@@ -820,9 +1084,10 @@ async function duplicateSelectedFrame() {
 	drawFrames();
 }
 function resetSelectedFrame() {
-	if (!selectedFrame || !confirm('Reset this layer\'s editable controls to the values it had when it was added?')) {
+	if (!selectedFrame || !confirm('Restore this layer to the default values for the current layout or saved project?')) {
 		return;
 	}
+	const undoSnapshot = createDesignStateSnapshot();
 	const defaults = cloneFrameEditorValue(ensureFrameEditorDefaults(selectedFrame));
 	selectedFrame.bounds = defaults.bounds || {};
 	if (defaults.ogBounds === undefined) {
@@ -845,6 +1110,7 @@ function resetSelectedFrame() {
 	syncFrameElementVisibility(selectedFrame);
 	refreshSelectedFrameEditor();
 	drawFrames();
+	commitDesignUndoSnapshot(undoSnapshot, 'Restore frame component default');
 }
 
 var frameComponentRecipes = {
@@ -907,6 +1173,7 @@ function cloneFrameForComponent(frame, mask) {
 	copy.designComponentPending = false;
 	copy.designComponentDecomposed = true;
 	delete copy.designComponentMasks;
+	delete copy.designLayerId;
 	delete copy.editorDefaults;
 	return copy;
 }
@@ -1366,6 +1633,7 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	var frameToAdd = loadingFrame
 		? loadingFrame
 		: JSON.parse(JSON.stringify(availableFrames[selectedFrameIndex]));
+	ensureDesignLayerId(frameToAdd);
 	var maskThumbnail = true;
 	if (!loadingFrame) {
 		// Keep an untouched copy of the pack's component masks. When an unmasked
@@ -1453,6 +1721,10 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	}
 	var frameElement = document.createElement('div');
 	frameElement.classList = 'draggable frame-element';
+	frameElement.dataset.designLayerId = frameToAdd.designLayerId;
+	if (frameToAdd === selectedFrame) {
+		frameElement.classList.add('design-selected');
+	}
 	frameElement.draggable = 'true';
 	frameElement.ondragstart = dragStart;
 	frameElement.ondragend = dragEnd;
@@ -1506,6 +1778,11 @@ function frameElementClicked(event) {
 	if (!event.target.classList.contains('frame-element-close')) {
 		var selectedFrameElement = event.target.closest('.frame-element');
 		selectedFrame = card.frames[Array.from(selectedFrameElement.parentElement.children).indexOf(selectedFrameElement)];
+		ensureDesignLayerId(selectedFrame);
+		Array.from(document.querySelectorAll('#frame-list .frame-element')).forEach(element => {
+			element.classList.toggle('design-selected', element === selectedFrameElement);
+		});
+		setFrameDesignMode('frames');
 		document.querySelector('#frame-element-editor').classList.add('opened');
 		selectedFrame.bounds = selectedFrame.bounds || {};
 		if (selectedFrame.ogBounds == undefined) {
@@ -1563,6 +1840,7 @@ function frameElementClicked(event) {
 			selectMaskElement.appendChild(maskOption);
 		});
 		selectMaskElement.selectedIndex = 0;
+		drawCard();
 	}
 }
 function frameElementMaskRemoved() {
@@ -1775,6 +2053,9 @@ function textboxEditor() {
 	document.querySelector('#textbox-editor-width').onchange = (event) => {selectedTextbox.width = (event.target.value / card.width); textEdited();}
 	document.querySelector('#textbox-editor-height').value = scaleHeight(selectedTextbox.height || 1);
 	document.querySelector('#textbox-editor-height').onchange = (event) => {selectedTextbox.height = (event.target.value / card.height); textEdited();}
+}
+function restoreCurrentTextboxDefault() {
+	restoreSelectedTextFieldDefaults();
 }
 function textEdited() {
 	card.text[Object.keys(card.text)[selectedTextIndex]].text = curlyQuotes(document.querySelector('#text-editor').value);
@@ -3806,7 +4087,10 @@ function drawLayoutHighlights() {
 		return;
 	}
 	if (activeFrameDesignMode == 'frames') {
-		(card.frames || []).slice().reverse().forEach((frame, reverseIndex) => {
+		const editableFrames = selectedFrame && (card.frames || []).includes(selectedFrame)
+			? [selectedFrame]
+			: (card.frames || []).slice().reverse();
+		editableFrames.forEach((frame, reverseIndex) => {
 			frame.bounds = frame.bounds || {x:0, y:0, width:1, height:1};
 			const frameIndex = card.frames.indexOf(frame);
 			drawLayoutHighlightBox(frame.bounds, '#ff9f43', frame.name || 'Frame Component', {
@@ -3986,7 +4270,8 @@ function finishLayoutHighlightDrag(event) {
 	if (!layoutHighlightDrag) {
 		return;
 	}
-	const area = layoutHighlightDrag.area;
+	const completedDrag = layoutHighlightDrag;
+	const area = completedDrag.area;
 	layoutHighlightDrag = null;
 	if (event?.pointerId !== undefined && previewCanvas.hasPointerCapture?.(event.pointerId)) {
 		previewCanvas.releasePointerCapture(event.pointerId);
@@ -4004,6 +4289,8 @@ function finishLayoutHighlightDrag(event) {
 	} else {
 		drawCard();
 	}
+	commitDesignUndoSnapshot(completedDrag.undoSnapshot,
+		area.kind == 'frame' ? 'Move or resize frame component' : 'Move or resize layout field');
 }
 function initializeLayoutHighlightInteractions() {
 	if (!previewCanvas || previewCanvas.dataset.layoutEditingReady) {
@@ -4024,6 +4311,7 @@ function initializeLayoutHighlightInteractions() {
 			area:hit.area,
 			action:hit.action,
 			startPoint:point,
+			undoSnapshot:createDesignStateSnapshot(),
 			original:{
 				x:Number(bounds.x) || 0,
 				y:Number(bounds.y) || 0,
@@ -4057,6 +4345,7 @@ function initializeLayoutHighlightInteractions() {
 	});
 }
 initializeLayoutHighlightInteractions();
+initializeDesignUndoInteractions();
 
 //DRAWING THE CARD (putting it all together)
 function drawCard() {
@@ -5556,6 +5845,9 @@ async function loadCardData(cardData, failureLabel) {
 	// Clear the draggable frames, then restore a fresh copy of the supplied card data.
 	document.querySelector('#frame-list').innerHTML = null;
 	card = cardData ? JSON.parse(JSON.stringify(cardData)) : null;
+	selectedFrame = null;
+	document.querySelector('#frame-element-editor')?.classList.remove('opened');
+	clearDesignUndoHistory();
 	if (!card) {
 		notify((failureLabel || 'The saved card') + ' failed to load.', 5);
 		return false;

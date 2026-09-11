@@ -97,7 +97,7 @@
 						<h4 class='input-description margin-bottom'>Layer Actions</h4>
 						<div class='input-grid'>
 							<button class='input' onclick='duplicateSelectedFrame();'>Duplicate Layer</button>
-							<button class='input' onclick='resetSelectedFrame();'>Reset Layer</button>
+							<button class='input' onclick='resetSelectedFrame();'>Restore to Default</button>
 						</div>
 					</div>
 					<div>
@@ -131,6 +131,7 @@
 				<h5 class='input-description'>Height</h5>
 				<input id='textbox-editor-height' class='input' type='number' placeholder='X' step='1'>
 			</div>
+			<button class='input textbox-editor-restore' onclick='restoreCurrentTextboxDefault();'>Restore to Default</button>
 		</div>
 		<!-- Regular stuff -->
 		<div class='creator-grid margin-bottom-large'>
@@ -226,6 +227,8 @@
 								<option value='frames'>Frame Components</option>
 							</select>
 							<h5 id='frame-design-mode-status' class='padding margin-bottom input-description'>Drag a field label to move it, drag an outlined edge to resize it, or double-click its label to open its editor.</h5>
+							<button class='input margin-bottom' onclick='undoDesignChange();'>Undo Last Design Change (Ctrl+Z)</button>
+							<h5 id='design-undo-status' class='padding margin-bottom input-description'>No design changes to undo. Up to 30 changes are retained.</h5>
 							<h5 id='frame-decomposition-status' class='padding input-description'>Newly added unmasked built-in frames will be split into editable components when this tab opens.</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>
@@ -364,7 +367,10 @@
 								<button class='input' onclick="toggleTextTag('bold');">Bold</button>
 							</div>
 							<h5 class='margin-bottom padding input-description'>Edit the placement and size of the selected textbox</h5>
-							<button class='input' onclick='textboxEditor();'>Edit Bounds</button>
+							<div class='input-grid'>
+								<button class='input' onclick='textboxEditor();'>Edit Bounds</button>
+								<button class='input' onclick='restoreSelectedTextFieldDefaults();'>Restore Layout Default</button>
+							</div>
 							<h5 class='margin-bottom padding input-description'>Adjust font size</h5>
 							<input id="text-editor-font-size" class="input" type="number" placeholder="0" value="0" step="1" oninput="fontSizedEdited();">
 						</div>
@@ -492,6 +498,7 @@
 							</div>
 							<div class='input-grid'>
 								<button class='input' onclick='autoFitArt();'>Auto Fit Art</button>
+								<button class='input' onclick='restoreArtLayoutDefault();'>Restore Layout Default</button>
 								<label class='checkbox-container input' title='Do not auto-fit art when changing frames'>Preserve art position
 									<input id='art-preserve-position' type='checkbox' onchange='setPreserveArtPosition();'>
 									<span class='checkmark'></span>
@@ -560,7 +567,8 @@
 								<input id='setSymbol-zoom' type='number' class='input' oninput='setSymbolEdited();' value=100 step=0.1 min=0 aria-label='Set Symbol Scale'>
 							</div>
 							<div class='input-grid'>
-								<button class='input' onclick='resetSetSymbol();'>Reset Set Symbol</button>
+								<button class='input' onclick='resetSetSymbol();'>Fit Set Symbol</button>
+								<button class='input' onclick='restoreSetSymbolLayoutDefault();'>Restore Layout Default</button>
 							</div>
 						</div>
 						<div class='readable-background padding margin-bottom'>
@@ -735,7 +743,8 @@
 								<input id='watermark-zoom' type='number' class='input' oninput='watermarkEdited();' value=100 step=0.1 min=0 aria-label='Watermark Scale'>
 							</div>
 							<div class='input-grid'>
-								<button class='input' onclick='resetWatermark();'>Reset Watermark</button>
+								<button class='input' onclick='resetWatermark();'>Fit Watermark</button>
+								<button class='input' onclick='restoreWatermarkLayoutDefault();'>Restore Layout Default</button>
 							</div>
 						</div>
 						<div class='readable-background padding'>

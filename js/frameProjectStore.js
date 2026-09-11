@@ -478,6 +478,9 @@
 			return;
 		}
 		try {
+			if (typeof saveCurrentDesignAsDefaults === 'function') {
+				saveCurrentDesignAsDefaults();
+			}
 			var id = (!asNew && currentProjectId) ? currentProjectId : makeId('project');
 			var previous = await getOne(PROJECT_STORE, id);
 			var now = new Date().toISOString();
@@ -515,6 +518,9 @@
 			}
 			var hydrated = await hydrateProjectSnapshot(project.card);
 			await loadCardData(hydrated, project.name);
+			if (!hydrated.designDefaults && typeof saveCurrentDesignAsDefaults === 'function') {
+				saveCurrentDesignAsDefaults();
+			}
 			currentProjectId = project.id;
 			var input = document.querySelector('#frame-project-name');
 			if (input) { input.value = project.name; }
