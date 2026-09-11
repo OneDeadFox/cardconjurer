@@ -336,6 +336,132 @@ function toggleCreatorTabs(event, target) {
 	selectSelectable(event);
 }
 var activeFrameWorkspace = 'browse';
+function getCurrentFrameLayoutSelection() {
+	const groupSelect = document.querySelector('#selectFrameGroup');
+	const packSelect = document.querySelector('#selectFramePack');
+	const groupValue = groupSelect?.value || '';
+	const packValue = packSelect?.value || '';
+	return {
+		groupValue: groupValue,
+		packValue: packValue,
+		groupLabel: groupSelect?.selectedOptions?.[0]?.textContent?.trim() || groupValue,
+		packLabel: packSelect?.selectedOptions?.[0]?.textContent?.trim() || packValue,
+		key: groupValue && packValue ? groupValue + ':' + packValue : ''
+	};
+}
+function setFrameLayoutTemplateStatus(message, isError = false) {
+	const status = document.querySelector('#frame-layout-template-status');
+	if (!status) {
+		return;
+	}
+	status.textContent = message;
+	status.classList.toggle('error', isError);
+}
+function syncFrameLayoutTemplateControls() {
+	const browseGroup = document.querySelector('#selectFrameGroup');
+	const browsePack = document.querySelector('#selectFramePack');
+	const designGroup = document.querySelector('#frame-layout-template-group');
+	const designPack = document.querySelector('#frame-layout-template-pack');
+	if (browseGroup && designGroup) {
+		if (!designGroup.options.length) {
+			designGroup.innerHTML = browseGroup.innerHTML;
+		}
+		designGroup.value = browseGroup.value;
+	}
+	if (browsePack && designPack) {
+		designPack.innerHTML = browsePack.innerHTML;
+		designPack.value = browsePack.value;
+	}
+	const applyButton = document.querySelector('#apply-frame-layout-template');
+	const versionButton = document.querySelector('#loadFrameVersion');
+	if (applyButton) {
+		applyButton.disabled = !versionButton || versionButton.disabled || typeof versionButton.onclick != 'function';
+	}
+}
+function selectFrameLayoutGroup(value) {
+	const browseGroup = document.querySelector('#selectFrameGroup');
+	const applyButton = document.querySelector('#apply-frame-layout-template');
+	if (!browseGroup || !value) {
+		return;
+	}
+	browseGroup.value = value;
+	if (applyButton) {
+		applyButton.disabled = true;
+	}
+	setFrameLayoutTemplateStatus('Loading layout variants...');
+	loadScript('/js/frames/group' + value + '.js').catch(() => {
+		setFrameLayoutTemplateStatus('That frame type could not be loaded.', true);
+	});
+}
+function selectFrameLayoutPack(value) {
+	const browsePack = document.querySelector('#selectFramePack');
+	const applyButton = document.querySelector('#apply-frame-layout-template');
+	if (!browsePack || !value) {
+		return;
+	}
+	browsePack.value = value;
+	if (applyButton) {
+		applyButton.disabled = true;
+	}
+	setFrameLayoutTemplateStatus('Loading layout template...');
+	loadScript('/js/frames/pack' + value + '.js').catch(() => {
+		setFrameLayoutTemplateStatus('That frame variant could not be loaded.', true);
+	});
+}
+function registerCurrentFrameLayoutTemplate() {
+	const versionButton = document.querySelector('#loadFrameVersion');
+	const selection = getCurrentFrameLayoutSelection();
+	if (!versionButton || versionButton.disabled || typeof versionButton.onclick != 'function' || !selection.key) {
+		syncFrameLayoutTemplateControls();
+		if (selection.packLabel) {
+			setFrameLayoutTemplateStatus(selection.packLabel + ' is an image-only frame pack and has no separate layout template.');
+		}
+		return false;
+	}
+	if (versionButton.onclick.frameLayoutTemplateKey != selection.key) {
+		const loadLayout = versionButton.onclick;
+		const layoutKey = selection.key;
+		const layoutLabel = selection.groupLabel + ' / ' + selection.packLabel;
+		const wrappedLoader = async function(event) {
+			const result = await loadLayout.call(this, event);
+			if (card) {
+				card.frameLayoutSource = layoutKey;
+				card.frameLayoutLabel = layoutLabel;
+			}
+			syncFrameLayoutTemplateControls();
+			setFrameLayoutTemplateStatus('Applied ' + layoutLabel + '.');
+			return result;
+		};
+		wrappedLoader.frameLayoutTemplateKey = layoutKey;
+		wrappedLoader.frameLayoutTemplateLoader = loadLayout;
+		versionButton.onclick = wrappedLoader;
+	}
+	syncFrameLayoutTemplateControls();
+	setFrameLayoutTemplateStatus('Ready to apply ' + selection.groupLabel + ' / ' + selection.packLabel + '.');
+	return true;
+}
+async function applyCurrentFrameLayout({force = false, source = 'design'} = {}) {
+	const selection = getCurrentFrameLayoutSelection();
+	const versionButton = document.querySelector('#loadFrameVersion');
+	if (!registerCurrentFrameLayoutTemplate() || !versionButton || !selection.key) {
+		return false;
+	}
+	if (!force && card?.frameLayoutSource == selection.key) {
+		return true;
+	}
+	setFrameLayoutTemplateStatus('Applying ' + selection.groupLabel + ' / ' + selection.packLabel + '...');
+	try {
+		await versionButton.onclick.call(versionButton);
+		if (source == 'browse') {
+			setFrameLayoutTemplateStatus('Applied ' + selection.groupLabel + ' / ' + selection.packLabel + ' while adding the frame.');
+		}
+		return true;
+	} catch (error) {
+		console.error('Frame layout template failed to load.', error);
+		setFrameLayoutTemplateStatus('The selected layout template could not be applied.', true);
+		return false;
+	}
+}
 function toggleFrameWorkspace(event, target) {
 	if (!['browse', 'design'].includes(target)) {
 		return;
@@ -774,7 +900,10 @@ function loadFramePacks(framePackOptions = []) {
 		}
 		document.querySelector('#selectFramePack').appendChild(framePackOption);
 	});
-	loadScript("/js/frames/pack" + document.querySelector('#selectFramePack').value + ".js");
+	syncFrameLayoutTemplateControls();
+	const selectedPack = document.querySelector('#selectFramePack').value;
+	setFrameLayoutTemplateStatus('Loading ' + (document.querySelector('#selectFramePack').selectedOptions[0]?.textContent || selectedPack) + '...');
+	return loadScript("/js/frames/pack" + selectedPack + ".js");
 }
 function loadFramePack(frameOptions = availableFrames) {
 	resetDoubleClick();
@@ -798,8 +927,9 @@ function loadFramePack(frameOptions = availableFrames) {
 	})
 	document.querySelector('#mask-picker').innerHTML = '';
 	document.querySelector('#frame-picker').children[0].click();
+	registerCurrentFrameLayoutTemplate();
 	if (localStorage.getItem('autoLoadFrameVersion') == 'true') {
-		document.querySelector('#loadFrameVersion').click();
+		applyCurrentFrameLayout({force:true, source:'auto'});
 	}
 }
 function autoLoadFrameVersion() {
@@ -1071,6 +1201,9 @@ function setAutoframeNyx(value) {
 var autoFramePack;
 
 async function addFrame(additionalMasks = [], loadingFrame = false) {
+	if (!loadingFrame && activeFrameWorkspace == 'browse') {
+		await applyCurrentFrameLayout({source:'browse'});
+	}
 	var frameToAdd = JSON.parse(JSON.stringify(availableFrames[selectedFrameIndex]));
 	var maskThumbnail = true;
 	if (!loadingFrame) {
@@ -5398,6 +5531,7 @@ bindInputs('#frame-editor-hsl-lightness', '#frame-editor-hsl-lightness-slider');
 bindInputs('#show-guidelines', '#show-guidelines-2', true);
 
 // Load / init whatever
+syncFrameLayoutTemplateControls();
 loadScript('/js/frames/groupStandard-3.js');
 loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
 loadAvailableCards();
