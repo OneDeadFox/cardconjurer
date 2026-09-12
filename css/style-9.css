@@ -1061,6 +1061,33 @@ textarea.input {
 .frame-element-editor.opened, .textbox-editor.opened {
 	display: grid;
 }
+.canvas-design-toolbar {
+	position: fixed; left: 1rem; bottom: 1rem; z-index: 12;
+	display: none; gap: .4rem; padding: .5rem; border-radius: .6rem;
+	background: var(--color-primary); border: .2rem solid #333; box-shadow: .25rem .25rem .7rem #000;
+}
+.canvas-design-toolbar.opened { display: flex; }
+.canvas-design-toolbar .active { outline: .2rem solid #b784ff; }
+.canvas-design-menu {
+	position: fixed; z-index: 30; display: none; min-width: 14rem; padding: .5rem;
+	background: var(--color-primary); border: .2rem solid #333; border-radius: .5rem; box-shadow: .3rem .3rem .8rem #000;
+}
+.canvas-design-menu.opened { display: grid; gap: .35rem; }
+.canvas-design-draft {
+	position: fixed; z-index: 24; display: none; pointer-events: none;
+	border: .2rem dashed #b784ff; background: #b784ff33;
+}
+.canvas-design-draft.opened { display: block; }
+.canvas-element-editor {
+	display: none; position: fixed; z-index: 25; top: 2rem; left: 2rem; width: 28rem;
+	max-width: calc(100vw - 4rem); padding: 1rem; grid-template-columns: 1fr 1fr;
+	gap: .6rem; background: var(--color-primary); border: .35rem solid #333; border-radius: .8rem; box-shadow: .4rem .4rem 1rem #000;
+}
+.canvas-element-editor.opened { display: grid; }
+.canvas-element-editor-title { grid-column: 1 / -2; cursor: move; user-select: none; }
+.canvas-element-editor-close { cursor: pointer; justify-self: end; }
+.canvas-element-editor .wide { grid-column: 1 / -1; }
+.canvas-tool-crosshair { cursor: crosshair !important; }
 .textbox-editor-restore {
 	grid-column: 1 / -1;
 }

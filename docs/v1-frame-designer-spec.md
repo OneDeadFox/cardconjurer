@@ -116,10 +116,14 @@ Frame Designer projects can define any number of named Rules Ranges. A Rules Ran
 - Add, select, rename, and remove Rules Ranges in Design Frame.
 - Edit X, Y, width, and height in editor pixels.
 - Move and resize the purple range outline directly on the card canvas.
+- Set module flow independently to vertical or horizontal, and rotate the complete range without changing that flow.
+- Double-click or right-click a highlighted range to edit its name, bounds, rotation, and module flow in a floating Design Frame editor.
 - Preserve ranges in saved projects, project backups, and full-library backups as part of the card snapshot.
 - Include range changes in Design Frame undo history.
 - Rotate range bounds with the rest of the layout when switching between portrait and landscape.
 - Load older projects without Rules Range data as an empty range collection.
+
+Design Frame also provides canvas creation tools. Select Text, Image, or Range and drag on the preview to create an element at that bounding box. Right-click an empty point on the preview to create an element there with a default size. Right-clicking an existing highlighted text box, custom image, frame component, or Rules Range opens its floating geometry editor; **Open Full Editor** remains available for detailed settings.
 
 This foundation intentionally does not attach text fields or frame layers yet. The next phase adds repeatable modules, flexible/fixed height allocation, ordering, and module-relative contents without changing the existing Class or Planeswalker implementations.
 

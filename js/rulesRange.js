@@ -24,6 +24,7 @@
 		range.id = String(range.id || makeId());
 		range.name = String(range.name || 'Rules Range ' + ((index || 0) + 1));
 		range.direction = range.direction === 'horizontal' ? 'horizontal' : 'vertical';
+		range.rotation = Number(range.rotation) || 0;
 		range.bounds = range.bounds || {x:0.12, y:0.55, width:0.76, height:0.3};
 		range.bounds.x = Number(range.bounds.x) || 0;
 		range.bounds.y = Number(range.bounds.y) || 0;
@@ -106,7 +107,7 @@
 		if (typeof drawCard === 'function') drawCard();
 	}
 
-	function add() {
+	function add(bounds) {
 		if (!window.card) return;
 		var before = typeof createDesignStateSnapshot === 'function' ? createDesignStateSnapshot() : null;
 		var index = ranges().length;
@@ -114,7 +115,7 @@
 			id:makeId(),
 			name:'Rules Range ' + (index + 1),
 			direction:'vertical',
-			bounds:{x:0.12, y:0.55, width:0.76, height:0.3},
+			bounds:bounds || {x:0.12, y:0.55, width:0.76, height:0.3},
 			modules:[]
 		}, index);
 		ranges().push(range);
@@ -179,6 +180,7 @@
 		refresh:refresh,
 		refreshInputs:refreshInputs,
 		getSelected:selected,
+		getAll:ranges,
 		clone:clone
 	};
 
