@@ -125,15 +125,16 @@ Frame Designer projects can define any number of named Rules Ranges. A Rules Ran
 
 Design Frame also provides canvas creation tools. Select Text, Image, or Range and drag on the preview to create an element at that bounding box. Right-click an empty point on the preview to create an element there with a default size. Right-clicking an existing highlighted text box, custom image, frame component, or Rules Range opens its floating geometry editor; **Open Full Editor** remains available for detailed settings.
 
-This foundation intentionally does not attach text fields or frame layers yet. The next phase adds repeatable modules, flexible/fixed height allocation, ordering, and module-relative contents without changing the existing Class or Planeswalker implementations.
+Editable text boxes, image/frame components, and Rules Ranges display a small red **X** at a corner of their canvas highlight. Clicking it removes that element as an undoable Design Frame change.
+
+Rules Ranges now support ordered repeatable modules. Each module can reserve a fixed pixel size or consume a weighted share of the remaining space, and the allocation follows the range's vertical or horizontal module flow. If fixed sizes exceed the range, they are proportionally compressed and highlighted as an overflow condition. Module-relative text fields and frame layers remain the next phase.
 
 ## Next V1 phases
 
-1. Add repeatable modules and flexible/fixed height allocation within Rules Ranges.
-2. Attach text fields and frame layers using module-relative coordinates.
-3. Save reusable module templates such as Class Level and Planeswalker Ability.
-4. Expose Rules Range module fields to CSV mapping and collision-aware text fitting.
-5. Publish a project as a named Frame Type and Frame Variant in the normal frame browser.
+1. Attach text fields and frame layers using module-relative coordinates.
+2. Save reusable module templates such as Class Level and Planeswalker Ability.
+3. Expose Rules Range module fields to CSV mapping and collision-aware text fitting.
+4. Publish a project as a named Frame Type and Frame Variant in the normal frame browser.
 
 ## Deferred to V2
 

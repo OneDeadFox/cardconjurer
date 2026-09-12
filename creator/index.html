@@ -290,6 +290,22 @@
 								<input id='rules-range-width' type='number' min='10' class='input' placeholder='Width' onchange='RulesRange.updateBounds();' aria-label='Rules range width'>
 								<input id='rules-range-height' type='number' min='10' class='input' placeholder='Height' onchange='RulesRange.updateBounds();' aria-label='Rules range height'>
 							</div>
+							<h5 class='padding margin-bottom input-description'>Modules share the range’s available space. Fixed modules reserve pixels; flexible modules divide the remainder by weight.</h5>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='RulesRange.addModule();'>Add Module</button>
+								<button class='input' onclick='RulesRange.removeSelectedModule();'>Remove Module</button>
+								<button class='input' onclick='RulesRange.moveSelectedModule(-1);'>Move Up</button>
+								<button class='input' onclick='RulesRange.moveSelectedModule(1);'>Move Down</button>
+							</div>
+							<select id='rules-range-module-list' class='input margin-bottom' onchange='RulesRange.selectModule(this.value);' aria-label='Rules range modules'></select>
+							<input id='rules-range-module-name' type='text' class='input margin-bottom' placeholder='Module name' onchange='RulesRange.updateModule();' aria-label='Rules range module name'>
+							<div class='input-grid margin-bottom'>
+								<select id='rules-range-module-sizing' class='input' onchange='RulesRange.updateModule();' aria-label='Module sizing mode'>
+									<option value='flex'>Flexible</option>
+									<option value='fixed'>Fixed Pixels</option>
+								</select>
+								<input id='rules-range-module-size' type='number' min='1' step='1' class='input' placeholder='Flex weight' onchange='RulesRange.updateModule();' aria-label='Module size or flexible weight'>
+							</div>
 							<h5 id='rules-range-status' class='padding input-description'>No rules range selected.</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>
