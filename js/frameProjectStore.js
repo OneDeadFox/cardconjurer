@@ -1157,6 +1157,56 @@
 		container.appendChild(list);
 	}
 
+	function deleteProjectDatabase() {
+		return new Promise(async function (resolve, reject) {
+			try {
+				if (dbPromise) {
+					var database = await dbPromise;
+					database.close();
+				}
+				dbPromise = null;
+				var request = indexedDB.deleteDatabase(DATABASE_NAME);
+				request.onsuccess = function () { resolve(); };
+				request.onerror = function () {
+					reject(request.error || new Error('The project library could not be erased.'));
+				};
+				request.onblocked = function () {
+					reject(new Error('The project library is open in another Card Conjurer tab. Close the other tab and try again.'));
+				};
+			} catch (error) {
+				reject(error);
+			}
+		});
+	}
+
+	async function eraseAllProjectData(skipConfirmation) {
+		if (!skipConfirmation) {
+			var confirmed = confirm(
+				'Close the current project and permanently erase ALL Card Conjurer project data stored in this browser?\n\n' +
+				'This deletes every saved project, custom frame, mask, custom mana symbol, set-symbol family, and other saved project asset. This cannot be undone.\n\n' +
+				'Export the Entire Project Library first if you may want this data again.'
+			);
+			if (!confirmed) {
+				return false;
+			}
+		}
+		try {
+			await deleteProjectDatabase();
+			objectUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+			objectUrls.clear();
+			assets = [];
+			projects = [];
+			currentProjectId = '';
+			sessionStorage.removeItem('cardconjurer-new-project-name');
+			alert('All Card Conjurer project data stored in this browser has been erased.');
+			window.location.assign('/');
+			return true;
+		} catch (error) {
+			alert(error.message);
+			return false;
+		}
+	}
+
 	async function getProjectCardByName(name) {
 		await ensureReady();
 		var requested = String(name || '').trim().toLowerCase();
@@ -1913,6 +1963,7 @@
 		saveProject: function () { return saveProject(false); },
 		saveProjectAs: function () { return saveProject(true); },
 		startNewProject: startNewProject,
+		eraseAllProjectData: eraseAllProjectData,
 		loadSelectedProject: loadSelectedProject,
 		viewCurrentProjectAssets: viewCurrentProjectAssets,
 		deleteSelectedProject: deleteSelectedProject,
