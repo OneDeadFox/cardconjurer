@@ -1580,7 +1580,7 @@
 		await writable.close();
 	}
 
-	async function renderBatchCard(job, face) {
+	async function prepareBatchCard(job, face) {
 		var renderResult = renderResultForFace(job.result, face);
 		await applyPreviewToCurrentCard(renderResult);
 		await new Promise(function (resolve) {
@@ -1591,11 +1591,82 @@
 		if (typeof drawCard === 'function') {
 			drawCard();
 		}
+		return renderResult;
+	}
+
+	async function renderBatchCard(job, face) {
+		await prepareBatchCard(job, face);
 		return canvasToBlob(cardCanvas);
 	}
 
 	function facesForResult(result) {
 		return result.transform ? ['front', 'back'] : ['single'];
+	}
+
+	function batchFaceLabel(face) {
+		return face === 'front' ? 'Front' : face === 'back' ? 'Back' : 'Single face';
+	}
+
+	function currentMinimumTextFailures(job, face) {
+		var displayName = job.result.fields.name || 'Row ' + (job.rowIndex + 2);
+		return (Array.isArray(window.CardTextFitResults) ? window.CardTextFitResults : [])
+			.filter(function (fit) { return fit && fit.failed; })
+			.map(function (fit) {
+				return {
+					row:job.rowIndex + 2,
+					name:displayName,
+					face:batchFaceLabel(face),
+					field:fit.label || fit.key || 'Text field',
+					obstacles:Array.isArray(fit.obstacles) ? fit.obstacles.slice() : []
+				};
+			});
+	}
+
+	function minimumTextFailureMessage(failures) {
+		return failures.map(function (failure) {
+			var obstacle = failure.obstacles.length
+				? ' (overlaps ' + failure.obstacles.join(' and ') + ')'
+				: ' (exceeds its text box)';
+			return 'Row ' + failure.row + ' — ' + failure.name + ' — ' + failure.face +
+				' — ' + failure.field + obstacle;
+		}).join(' | ');
+	}
+
+	async function restoreSelectedCSVCard(rowIndex, selectedFace) {
+		if (rowIndex === null) {
+			return;
+		}
+		var selectedResult = buildCard(rowIndex);
+		var restoreFace = selectedFace === 'back' && selectedResult.transform ? 'back' :
+			(selectedResult.transform ? 'front' : 'single');
+		await applyPreviewToCurrentCard(renderResultForFace(selectedResult, restoreFace));
+	}
+
+	async function preflightBatchText(jobs, totalCards, status, progress) {
+		var checked = 0;
+		var failures = [];
+		var validationFailures = [];
+		progress.max = totalCards;
+		progress.value = 0;
+		for (var job of jobs) {
+			var displayName = job.result.fields.name || 'Row ' + (job.rowIndex + 2);
+			for (var face of facesForResult(job.result)) {
+				var faceLabel = batchFaceLabel(face);
+				status.textContent = 'Checking text readability ' + (checked + 1) + ' of ' + totalCards +
+					': ' + displayName + ' (' + faceLabel + ')…';
+				try {
+					await prepareBatchCard(job, face);
+					failures = failures.concat(currentMinimumTextFailures(job, face));
+				} catch (error) {
+					console.error('CSV text preflight failed:', job.rowIndex + 2, face, error);
+					validationFailures.push('Row ' + (job.rowIndex + 2) + ' — ' + displayName +
+						' — ' + faceLabel + ': ' + (error.message || 'could not be checked'));
+				}
+				checked++;
+				progress.value = checked;
+			}
+		}
+		return {failures:failures, validationFailures:validationFailures};
 	}
 
 	async function exportBatch() {
@@ -1628,6 +1699,7 @@
 		}
 
 		var chunks = new Map();
+		var allJobs = [];
 		var totalCards = 0;
 		for (var rowIndex = 0; rowIndex < csvState.rows.length; rowIndex++) {
 			var result = buildCard(rowIndex);
@@ -1638,13 +1710,46 @@
 			if (!chunks.has(chunkName)) {
 				chunks.set(chunkName, []);
 			}
-			chunks.get(chunkName).push({rowIndex: rowIndex, result: result});
+			var job = {rowIndex: rowIndex, result: result};
+			chunks.get(chunkName).push(job);
+			allJobs.push(job);
 			totalCards += facesForResult(result).length;
 		}
 		if (!totalCards) {
 			status.textContent = 'No CSV rows are marked for inclusion.';
 			return;
 		}
+
+		var selectedRow = document.querySelector('#csv-card-preview-row');
+		var selectedRowIndex = selectedRow && selectedRow.value !== '' ? Number(selectedRow.value) : null;
+		var selectedFaceElement = document.querySelector('#csv-card-preview-face');
+		var selectedFace = selectedFaceElement ? selectedFaceElement.value : 'front';
+		button.disabled = true;
+		var preflight;
+		try {
+			preflight = await preflightBatchText(allJobs, totalCards, status, progress);
+			await restoreSelectedCSVCard(selectedRowIndex, selectedFace);
+		} catch (error) {
+			console.error('CSV text preflight failed:', error);
+			status.textContent = 'Export was stopped before any files were created because text readability could not be checked: ' +
+				(error.message || 'unknown error');
+			button.disabled = false;
+			return;
+		}
+		button.disabled = false;
+		if (preflight.validationFailures.length) {
+			status.textContent = 'Export was stopped before any files were created because these cards could not be checked: ' +
+				preflight.validationFailures.join(' | ') + '.';
+			return;
+		}
+		if (preflight.failures.length) {
+			status.textContent = 'Export blocked before any PNG or ZIP files were created. ' +
+				preflight.failures.length + ' text field(s) reached the minimum readable size and still do not fit: ' +
+				minimumTextFailureMessage(preflight.failures) +
+				'. Shorten those CSV values or adjust their layout, then export again.';
+			return;
+		}
+		progress.value = 0;
 
 		var directoryHandle = null;
 		var usesFolderPicker = typeof window.showDirectoryPicker === 'function';
@@ -1669,10 +1774,6 @@
 		var failedCards = [];
 		var warningCards = [];
 		var usedZipNames = {};
-		var selectedRow = document.querySelector('#csv-card-preview-row');
-		var selectedRowIndex = selectedRow && selectedRow.value !== '' ? Number(selectedRow.value) : null;
-		var selectedFaceElement = document.querySelector('#csv-card-preview-face');
-		var selectedFace = selectedFaceElement ? selectedFaceElement.value : 'front';
 
 		try {
 			for (var chunkEntry of chunks.entries()) {
@@ -1725,11 +1826,7 @@
 				}
 			}
 
-			if (selectedRowIndex !== null) {
-				var selectedResult = buildCard(selectedRowIndex);
-				var restoreFace = selectedFace === 'back' && selectedResult.transform ? 'back' : 'front';
-				await applyPreviewToCurrentCard(renderResultForFace(selectedResult, restoreFace));
-			}
+			await restoreSelectedCSVCard(selectedRowIndex, selectedFace);
 			var resultMessage = 'Finished: ' + (totalCards - failedCards.length) + ' image(s) exported across ' +
 				chunks.size + ' ZIP file(s).';
 			if (failedCards.length) {
