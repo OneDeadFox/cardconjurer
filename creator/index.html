@@ -583,6 +583,44 @@
 							</div>
 						</div>
 						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Custom Set Symbol Families</h5>
+							<h5 class='padding margin-bottom input-description'>Save four images under one Set Code. CSV previews and exports will choose the matching image from each row's Rarity.</h5>
+							<input id='custom-set-symbol-family' class='input margin-bottom' type='text' maxlength='32' placeholder='Family / Set Code (example: furry)' aria-label='Custom set-symbol family code'>
+							<div class='input-grid margin-bottom'>
+								<div>
+									<h5 class='padding input-description'>Common</h5>
+									<input id='custom-set-symbol-file-c' type='file' accept='.png,.svg,.jpg,.jpeg,.webp,image/*' class='input' aria-label='Common set symbol image'>
+								</div>
+								<div>
+									<h5 class='padding input-description'>Uncommon</h5>
+									<input id='custom-set-symbol-file-u' type='file' accept='.png,.svg,.jpg,.jpeg,.webp,image/*' class='input' aria-label='Uncommon set symbol image'>
+								</div>
+							</div>
+							<div class='input-grid margin-bottom'>
+								<div>
+									<h5 class='padding input-description'>Rare</h5>
+									<input id='custom-set-symbol-file-r' type='file' accept='.png,.svg,.jpg,.jpeg,.webp,image/*' class='input' aria-label='Rare set symbol image'>
+								</div>
+								<div>
+									<h5 class='padding input-description'>Mythic</h5>
+									<input id='custom-set-symbol-file-m' type='file' accept='.png,.svg,.jpg,.jpeg,.webp,image/*' class='input' aria-label='Mythic set symbol image'>
+								</div>
+							</div>
+							<button class='input margin-bottom' onclick='FrameProjectStore.saveCustomSetSymbolFamily(document.querySelector("#custom-set-symbol-family").value, {c:document.querySelector("#custom-set-symbol-file-c").files[0],u:document.querySelector("#custom-set-symbol-file-u").files[0],r:document.querySelector("#custom-set-symbol-file-r").files[0],m:document.querySelector("#custom-set-symbol-file-m").files[0]});'>Save / Replace Family</button>
+							<select id='custom-set-symbol-list' class='input margin-bottom' onchange='FrameProjectStore.previewSelectedSetSymbolFamily();' aria-label='Saved custom set-symbol families'></select>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='FrameProjectStore.applySelectedSetSymbolFamily();'>Apply at Current Rarity</button>
+								<button class='input' onclick='FrameProjectStore.deleteSelectedSetSymbolFamily();'>Delete Family</button>
+							</div>
+							<div class='input-grid margin-bottom'>
+								<img id='custom-set-symbol-preview-c' hidden style='max-width:56px;max-height:56px;margin:auto;' alt='Common set symbol preview'>
+								<img id='custom-set-symbol-preview-u' hidden style='max-width:56px;max-height:56px;margin:auto;' alt='Uncommon set symbol preview'>
+								<img id='custom-set-symbol-preview-r' hidden style='max-width:56px;max-height:56px;margin:auto;' alt='Rare set symbol preview'>
+								<img id='custom-set-symbol-preview-m' hidden style='max-width:56px;max-height:56px;margin:auto;' alt='Mythic set symbol preview'>
+							</div>
+							<h5 id='custom-set-symbol-status' class='padding input-description'>Opening the custom set-symbol library...</h5>
+						</div>
+						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Position/scale your Set Symbol (X, Y, Scale)</h5>
 							<div class='input-grid margin-bottom'>
 								<input id='setSymbol-x' type='number' class='input' oninput='setSymbolEdited();' value=0 aria-label='Set Symbol X Position'>

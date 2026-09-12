@@ -452,6 +452,246 @@
 		setStatus('#custom-symbol-status', 'Inserted ' + code + ' into the selected text field.', false);
 	}
 
+	function normalizeSetSymbolFamily(value) {
+		return String(value || '').trim().toLowerCase();
+	}
+
+	function normalizeSetSymbolRarity(value) {
+		var rarity = String(value || '').trim().toLowerCase();
+		if (rarity.indexOf('mythic') === 0 || rarity === 'm') { return 'm'; }
+		if (rarity.indexOf('rare') === 0 || rarity === 'r') { return 'r'; }
+		if (rarity.indexOf('uncommon') === 0 || rarity === 'u') { return 'u'; }
+		return 'c';
+	}
+
+	function getCustomSetSymbolAssets() {
+		return assets.filter(function (asset) { return asset.kind === 'custom-set-symbol'; });
+	}
+
+	function getSetSymbolFamilies() {
+		var families = new Map();
+		getCustomSetSymbolAssets().forEach(function (asset) {
+			var family = normalizeSetSymbolFamily(asset.family);
+			if (!families.has(family)) {
+				families.set(family, {family:family, name:asset.familyName || asset.family, assets:{}});
+			}
+			families.get(family).assets[normalizeSetSymbolRarity(asset.rarity)] = asset;
+		});
+		return Array.from(families.values()).sort(function (left, right) {
+			return left.family.localeCompare(right.family);
+		});
+	}
+
+	function validateSetSymbolFamily(value) {
+		var family = normalizeSetSymbolFamily(value);
+		if (!/^[a-z][a-z0-9_-]{0,31}$/.test(family)) {
+			throw new Error('Set-symbol family codes must start with a letter and use only letters, numbers, hyphens, or underscores.');
+		}
+		return family;
+	}
+
+	function renderSetSymbolFamilyOptions(selectedFamily) {
+		var select = document.querySelector('#custom-set-symbol-list');
+		if (!select) {
+			return;
+		}
+		var families = getSetSymbolFamilies();
+		select.innerHTML = '';
+		if (!families.length) {
+			var empty = document.createElement('option');
+			empty.value = '';
+			empty.textContent = 'No custom set-symbol families saved';
+			select.appendChild(empty);
+			select.disabled = true;
+			['c','u','r','m'].forEach(function (rarity) {
+				var image = document.querySelector('#custom-set-symbol-preview-' + rarity);
+				if (image) { image.hidden = true; }
+			});
+			return;
+		}
+		select.disabled = false;
+		families.forEach(function (family) {
+			var option = document.createElement('option');
+			option.value = family.family;
+			option.textContent = family.family.toUpperCase();
+			select.appendChild(option);
+		});
+		if (selectedFamily && families.some(function (family) { return family.family === normalizeSetSymbolFamily(selectedFamily); })) {
+			select.value = normalizeSetSymbolFamily(selectedFamily);
+		}
+		previewSelectedSetSymbolFamily();
+	}
+
+	async function previewSelectedSetSymbolFamily() {
+		var select = document.querySelector('#custom-set-symbol-list');
+		var family = select ? normalizeSetSymbolFamily(select.value) : '';
+		var familyData = getSetSymbolFamilies().find(function (item) { return item.family === family; });
+		if (!familyData) {
+			return;
+		}
+		var input = document.querySelector('#custom-set-symbol-family');
+		if (input) { input.value = family; }
+		for (var rarity of ['c','u','r','m']) {
+			var preview = document.querySelector('#custom-set-symbol-preview-' + rarity);
+			var asset = familyData.assets[rarity];
+			if (preview && asset) {
+				preview.src = await getAssetSource(asset.id);
+				preview.alt = family.toUpperCase() + ' ' + rarity.toUpperCase() + ' set symbol';
+				preview.hidden = false;
+			}
+		}
+	}
+
+	async function saveCustomSetSymbolFamily(familyValue, files) {
+		try {
+			var family = validateSetSymbolFamily(familyValue);
+			files = files || {};
+			var existingFamily = getSetSymbolFamilies().find(function (item) { return item.family === family; });
+			var missing = ['c','u','r','m'].filter(function (rarity) {
+				return !(files[rarity] || (existingFamily && existingFamily.assets[rarity]));
+			});
+			if (missing.length) {
+				throw new Error('Choose all four rarity images for a new family. Missing: ' + missing.join(', ').toUpperCase() + '.');
+			}
+			if (!['c','u','r','m'].some(function (rarity) { return !!files[rarity]; })) {
+				throw new Error('Choose at least one replacement image.');
+			}
+			var now = new Date().toISOString();
+			for (var rarity of ['c','u','r','m']) {
+				var file = files[rarity];
+				if (!file) { continue; }
+				if (!String(file.type || '').startsWith('image/')) {
+					throw new Error('"' + file.name + '" is not an image file.');
+				}
+				var previous = existingFamily && existingFamily.assets[rarity];
+				var record = {
+					id: previous ? previous.id : makeId('asset'),
+					name: family.toUpperCase() + ' ' + rarity.toUpperCase(),
+					kind: 'custom-set-symbol',
+					family: family,
+					familyName: family.toUpperCase(),
+					rarity: rarity,
+					mimeType: file.type,
+					blob: file,
+					createdAt: previous ? previous.createdAt : now,
+					updatedAt: now
+				};
+				await putOne(ASSET_STORE, record);
+				if (objectUrls.has(record.id)) {
+					URL.revokeObjectURL(objectUrls.get(record.id));
+					objectUrls.delete(record.id);
+				}
+			}
+			['c','u','r','m'].forEach(function (rarity) {
+				var input = document.querySelector('#custom-set-symbol-file-' + rarity);
+				if (input) { input.value = ''; }
+			});
+			await refreshAssets(null, null, family);
+			setStatus('#custom-set-symbol-status', 'Saved the ' + family.toUpperCase() + ' Common, Uncommon, Rare, and Mythic set symbols.', false);
+		} catch (error) {
+			setStatus('#custom-set-symbol-status', error.message, true);
+		}
+	}
+
+	async function getCustomSetSymbolSource(familyValue, rarityValue) {
+		await ensureReady();
+		var family = normalizeSetSymbolFamily(familyValue);
+		var rarity = normalizeSetSymbolRarity(rarityValue);
+		var asset = getCustomSetSymbolAssets().find(function (item) {
+			return normalizeSetSymbolFamily(item.family) === family && normalizeSetSymbolRarity(item.rarity) === rarity;
+		});
+		if (!asset) {
+			return null;
+		}
+		return {
+			family: family,
+			rarity: rarity,
+			assetId: asset.id,
+			source: await getAssetSource(asset.id)
+		};
+	}
+
+	async function applyCustomSetSymbolFamily(familyValue, rarityValue) {
+		var resolved = await getCustomSetSymbolSource(familyValue, rarityValue);
+		if (!resolved) {
+			throw new Error('The custom set-symbol family "' + familyValue + '" does not contain the requested rarity.');
+		}
+		var loaded = await uploadSetSymbol(resolved.source, 'resetSetSymbol');
+		if (!loaded) {
+			throw new Error('The ' + resolved.family.toUpperCase() + ' set symbol could not be loaded.');
+		}
+		card.setSymbolFamily = resolved.family;
+		card.setSymbolRarity = resolved.rarity;
+		card.setSymbolAssetId = resolved.assetId;
+		card.setSymbolSource = resolved.source;
+		document.querySelector('#set-symbol-code').value = resolved.family;
+		document.querySelector('#set-symbol-rarity').value = resolved.rarity;
+		return resolved;
+	}
+
+	async function applySelectedSetSymbolFamily() {
+		var select = document.querySelector('#custom-set-symbol-list');
+		var family = select ? select.value : '';
+		if (!family) {
+			setStatus('#custom-set-symbol-status', 'Select a custom set-symbol family first.', true);
+			return;
+		}
+		try {
+			var rarity = document.querySelector('#set-symbol-rarity').value || document.querySelector('#info-rarity').value || 'c';
+			var resolved = await applyCustomSetSymbolFamily(family, rarity);
+			setStatus('#custom-set-symbol-status', 'Applied ' + resolved.family.toUpperCase() + '-' + resolved.rarity.toUpperCase() + ' to the current card.', false);
+		} catch (error) {
+			setStatus('#custom-set-symbol-status', error.message, true);
+		}
+	}
+
+	async function deleteSelectedSetSymbolFamily() {
+		var select = document.querySelector('#custom-set-symbol-list');
+		var family = select ? normalizeSetSymbolFamily(select.value) : '';
+		var familyData = getSetSymbolFamilies().find(function (item) { return item.family === family; });
+		if (!familyData) {
+			setStatus('#custom-set-symbol-status', 'Select a custom set-symbol family first.', true);
+			return;
+		}
+		var ids = Object.keys(familyData.assets).map(function (rarity) { return familyData.assets[rarity].id; });
+		var referencingProjects = projects.filter(function (project) {
+			var serialized = JSON.stringify(project.card || {}).toLowerCase();
+			return serialized.indexOf('"setsymbolfamily":"' + family + '"') !== -1 ||
+				ids.some(function (id) { return serialized.indexOf(id.toLowerCase()) !== -1; });
+		});
+		var warning = 'Delete all four symbols in the ' + family.toUpperCase() + ' family?';
+		if (referencingProjects.length) {
+			warning += '\n\nThis family is used by ' + referencingProjects.length + ' saved project' + (referencingProjects.length === 1 ? '' : 's') + '.';
+		}
+		if (!confirm(warning)) {
+			return;
+		}
+		for (var id of ids) {
+			await deleteOne(ASSET_STORE, id);
+			if (objectUrls.has(id)) {
+				URL.revokeObjectURL(objectUrls.get(id));
+				objectUrls.delete(id);
+			}
+		}
+		await refreshAssets();
+		setStatus('#custom-set-symbol-status', 'Deleted the ' + family.toUpperCase() + ' set-symbol family.', false);
+	}
+
+	function uniqueImportedSetSymbolFamily(value, claimedFamilies) {
+		var base = normalizeSetSymbolFamily(value).replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+		if (!/^[a-z]/.test(base)) { base = 'set-' + base; }
+		base = base.slice(0, 32) || 'imported-set';
+		var candidate = base;
+		var counter = 2;
+		while (claimedFamilies.has(candidate)) {
+			var suffix = counter === 2 ? '-imported' : '-imported-' + counter;
+			candidate = base.slice(0, 32 - suffix.length) + suffix;
+			counter++;
+		}
+		claimedFamilies.add(candidate);
+		return candidate;
+	}
+
 	function uniqueImportedSymbolToken(value, claimedTokens) {
 		var base = normalizeCustomSymbolToken(value).replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 		if (!/^[a-z]/.test(base)) {
@@ -474,7 +714,7 @@
 		if (!select) {
 			return;
 		}
-		var frameAssets = assets.filter(function (asset) { return asset.kind !== 'custom-symbol'; });
+		var frameAssets = assets.filter(function (asset) { return asset.kind !== 'custom-symbol' && asset.kind !== 'custom-set-symbol' && asset.kind !== 'set-symbol-single'; });
 		select.innerHTML = '';
 		if (!frameAssets.length) {
 			var empty = document.createElement('option');
@@ -496,12 +736,13 @@
 		}
 	}
 
-	async function refreshAssets(selectedId, selectedSymbolId) {
+	async function refreshAssets(selectedId, selectedSymbolId, selectedSetFamily) {
 		assets = (await getAll(ASSET_STORE)).sort(function (left, right) {
 			return left.name.localeCompare(right.name);
 		});
 		renderAssetOptions(selectedId);
 		await syncCustomManaSymbols(selectedSymbolId);
+		renderSetSymbolFamilyOptions(selectedSetFamily);
 		window.dispatchEvent(new CustomEvent('frameassetschanged'));
 	}
 
@@ -615,6 +856,27 @@
 		snapshot.customSymbols = getCustomSymbolAssets().map(function (asset) {
 			return {assetId: asset.id, token: asset.token};
 		});
+		snapshot.customSetSymbolFamily = [];
+		if (snapshot.setSymbolFamily) {
+			var family = normalizeSetSymbolFamily(snapshot.setSymbolFamily);
+			snapshot.customSetSymbolFamily = getCustomSetSymbolAssets()
+				.filter(function (asset) { return normalizeSetSymbolFamily(asset.family) === family; })
+				.map(function (asset) {
+					return {assetId: asset.id, family: family, rarity: normalizeSetSymbolRarity(asset.rarity)};
+				});
+			var activeSetSymbol = getCustomSetSymbolAssets().find(function (asset) {
+				return normalizeSetSymbolFamily(asset.family) === family &&
+					normalizeSetSymbolRarity(asset.rarity) === normalizeSetSymbolRarity(snapshot.setSymbolRarity);
+			});
+			if (activeSetSymbol) {
+				snapshot.setSymbolAssetId = activeSetSymbol.id;
+				snapshot.setSymbolSource = 'asset://' + activeSetSymbol.id;
+			}
+		} else if (String(snapshot.setSymbolSource || '').indexOf('data:') === 0 || String(snapshot.setSymbolSource || '').indexOf('blob:') === 0) {
+			var savedSetSymbol = await saveSourceAsset(snapshot.setSymbolSource, 'Project set symbol', 'set-symbol-single', snapshot.setSymbolAssetId);
+			snapshot.setSymbolAssetId = savedSetSymbol.id;
+			snapshot.setSymbolSource = 'asset://' + savedSetSymbol.id;
+		}
 		return snapshot;
 	}
 
@@ -648,6 +910,11 @@
 			for (var mask of frame.masks) {
 				await hydrateLayerImage(mask);
 			}
+		}
+		var setSymbolMatch = String(hydrated.setSymbolSource || '').match(/^asset:\/\/(.+)$/);
+		if (setSymbolMatch) {
+			hydrated.setSymbolAssetId = setSymbolMatch[1];
+			hydrated.setSymbolSource = await getAssetSource(setSymbolMatch[1]);
 		}
 		return hydrated;
 	}
@@ -921,6 +1188,10 @@
 				};
 				if (asset.kind === 'custom-symbol') {
 					metadata.token = asset.token;
+				} else if (asset.kind === 'custom-set-symbol') {
+					metadata.family = asset.family;
+					metadata.familyName = asset.familyName || asset.family;
+					metadata.rarity = normalizeSetSymbolRarity(asset.rarity);
 				}
 				if (blob) {
 					metadata.file = 'assets/' + String(index + 1).padStart(3, '0') + '-' + asset.id + '.' + archiveExtension(metadata.mimeType);
@@ -1011,6 +1282,32 @@
 		return value;
 	}
 
+	function rewriteSetSymbolFamilyReferences(value, familyMap, visited) {
+		visited = visited || new Set();
+		if (!value || typeof value !== 'object' || visited.has(value)) {
+			return value;
+		}
+		visited.add(value);
+		if (value.setSymbolFamily && familyMap[normalizeSetSymbolFamily(value.setSymbolFamily)]) {
+			var oldFamily = normalizeSetSymbolFamily(value.setSymbolFamily);
+			value.setSymbolFamily = familyMap[oldFamily];
+			if (String(value.infoSet || '').toLowerCase() === oldFamily) {
+				value.infoSet = familyMap[oldFamily].toUpperCase();
+			}
+		}
+		if (value.family && familyMap[normalizeSetSymbolFamily(value.family)]) {
+			value.family = familyMap[normalizeSetSymbolFamily(value.family)];
+		}
+		if (Array.isArray(value)) {
+			value.forEach(function (item) { rewriteSetSymbolFamilyReferences(item, familyMap, visited); });
+		} else {
+			Object.keys(value).forEach(function (key) {
+				rewriteSetSymbolFamilyReferences(value[key], familyMap, visited);
+			});
+		}
+		return value;
+	}
+
 	function uniqueImportedProjectName(value) {
 		var base = String(value || 'Imported Frame Project').trim() || 'Imported Frame Project';
 		var used = new Set(projects.map(function (project) { return String(project.name || '').trim().toLowerCase(); }));
@@ -1067,6 +1364,8 @@
 			var claimedTokens = new Set(getCustomSymbolAssets().map(function (asset) {
 				return normalizeCustomSymbolToken(asset.token);
 			}));
+			var familyMap = Object.create(null);
+			var claimedFamilies = new Set(getSetSymbolFamilies().map(function (family) { return family.family; }));
 			var now = new Date().toISOString();
 
 			for (var index = 0; index < assetMetadata.length; index++) {
@@ -1092,6 +1391,17 @@
 					}
 					record.token = uniqueImportedSymbolToken(oldToken, claimedTokens);
 					tokenMap[oldToken] = record.token;
+				} else if (record.kind === 'custom-set-symbol') {
+					var oldFamily = normalizeSetSymbolFamily(metadata.family);
+					if (!oldFamily) {
+						throw new Error('The project backup contains a set symbol without a family code.');
+					}
+					if (!familyMap[oldFamily]) {
+						familyMap[oldFamily] = uniqueImportedSetSymbolFamily(oldFamily, claimedFamilies);
+					}
+					record.family = familyMap[oldFamily];
+					record.familyName = record.family.toUpperCase();
+					record.rarity = normalizeSetSymbolRarity(metadata.rarity);
 				}
 				if (metadata.file) {
 					var archivePath = String(metadata.file);
@@ -1120,6 +1430,10 @@
 			}
 			var importedCard = rewriteAssetReferences(JSON.parse(JSON.stringify(manifest.project.card)), idMap);
 			importedCard = rewriteCustomSymbolReferences(importedCard, tokenMap);
+			importedCard = rewriteSetSymbolFamilyReferences(importedCard, familyMap);
+			if (importedCard.setSymbolAssetId && idMap[importedCard.setSymbolAssetId]) {
+				importedCard.setSymbolAssetId = idMap[importedCard.setSymbolAssetId];
+			}
 			var importedProject = {
 				id: makeId('project'),
 				name: uniqueImportedProjectName(manifest.project.name),
@@ -1148,10 +1462,12 @@
 		try {
 			await Promise.all([refreshAssets(), refreshProjects()]);
 			setStatus('#frame-project-status', 'Frame projects are stored on this device. Export a .ccproject backup to keep a portable copy.', false);
-			var frameAssetCount = assets.filter(function (asset) { return asset.kind !== 'custom-symbol'; }).length;
+			var frameAssetCount = assets.filter(function (asset) { return !['custom-symbol', 'custom-set-symbol', 'set-symbol-single'].includes(asset.kind); }).length;
 			var customSymbolCount = getCustomSymbolAssets().length;
 			setStatus('#frame-asset-status', frameAssetCount ? frameAssetCount + ' saved frame asset' + (frameAssetCount === 1 ? '' : 's') + ' available.' : 'No saved frame assets yet.', false);
 			setStatus('#custom-symbol-status', customSymbolCount ? customSymbolCount + ' custom symbol' + (customSymbolCount === 1 ? '' : 's') + ' ready.' : 'No custom symbols saved yet.', false);
+			var setFamilyCount = getSetSymbolFamilies().length;
+			setStatus('#custom-set-symbol-status', setFamilyCount ? setFamilyCount + ' custom set-symbol famil' + (setFamilyCount === 1 ? 'y' : 'ies') + ' ready.' : 'No custom set-symbol families saved yet.', false);
 		} catch (error) {
 			setStatus('#frame-project-status', error.message, true);
 			setStatus('#frame-asset-status', error.message, true);
@@ -1180,6 +1496,12 @@
 		deleteSelectedCustomSymbol: deleteSelectedCustomSymbol,
 		insertSelectedCustomSymbol: insertSelectedCustomSymbol,
 		previewSelectedCustomSymbol: previewSelectedCustomSymbol,
+		saveCustomSetSymbolFamily: saveCustomSetSymbolFamily,
+		previewSelectedSetSymbolFamily: previewSelectedSetSymbolFamily,
+		applySelectedSetSymbolFamily: applySelectedSetSymbolFamily,
+		deleteSelectedSetSymbolFamily: deleteSelectedSetSymbolFamily,
+		getCustomSetSymbolSource: getCustomSetSymbolSource,
+		applyCustomSetSymbolFamily: applyCustomSetSymbolFamily,
 		saveSourceAsset: saveSourceAsset,
 		getAssetSource: getAssetSource,
 		getAssets: function () { return assets.slice(); },

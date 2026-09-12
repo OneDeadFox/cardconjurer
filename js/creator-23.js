@@ -3691,14 +3691,27 @@ function artStopDrag(e) {
 //SET SYMBOL TAB
 function uploadSetSymbol(imageSource, otherParams) {
 	ImageLoadTracker.track(imageSource);
-	setSymbol.src = imageSource;
-	if (otherParams && otherParams == 'resetSetSymbol') {
-		setSymbol.onload = function() {
-			resetSetSymbol();
-			setSymbol.onload = setSymbolEdited;
-		};
-	}
+	return new Promise(function (resolve) {
+		var finished = false;
+		function finish(loaded) {
+			if (finished) {
+				return;
+			}
+			finished = true;
+			resolve(loaded);
+		}
+		setSymbol.addEventListener('load', function () { finish(true); }, {once:true});
+		setSymbol.addEventListener('error', function () { finish(false); }, {once:true});
+		setSymbol.src = imageSource;
+		if (otherParams && otherParams == 'resetSetSymbol') {
+			setSymbol.onload = function() {
+				resetSetSymbol();
+				setSymbol.onload = setSymbolEdited;
+			};
+		}
+	});
 }
+
 function setSymbolEdited() {
 	card.setSymbolSource = setSymbol.src;
 	if (document.querySelector('#lockSetSymbolURL').checked) {
@@ -3740,31 +3753,32 @@ function fetchSetSymbol() {
 	if (document.querySelector('#lockSetSymbolCode').checked) {
 		localStorage.setItem('lockSetSymbolCode', setCode);
 	}
-	var setRarity = document.querySelector('#set-symbol-rarity').value.toLowerCase().replace('uncommon', 'u').replace('common', 'c').replace('rare', 'r').replace('mythic', 'm') || 'c';
+	var setRarity = document.querySelector('#set-symbol-rarity').value.toLowerCase()
+		.replace('uncommon', 'u').replace('common', 'c').replace('rare', 'r').replace('mythic', 'm') || 'c';
+	var source;
 	if (['a22', 'a23', 'j22', 'hlw'].includes(setCode.toLowerCase())) {
-		uploadSetSymbol(fixUri(`/img/setSymbols/custom/${setCode.toLowerCase()}-${setRarity}.png`), 'resetSetSymbol');
+		source = fixUri('/img/setSymbols/custom/' + setCode.toLowerCase() + '-' + setRarity + '.png');
 	} else if (['cc', 'logan', 'joe'].includes(setCode.toLowerCase())) {
-		uploadSetSymbol(fixUri(`/img/setSymbols/custom/${setCode.toLowerCase()}-${setRarity}.svg`), 'resetSetSymbol');
-	} else if (document.querySelector("#set-symbol-source").value == 'gatherer') {
+		source = fixUri('/img/setSymbols/custom/' + setCode.toLowerCase() + '-' + setRarity + '.svg');
+	} else if (document.querySelector('#set-symbol-source').value == 'gatherer') {
 		if (setSymbolAliases.has(setCode.toLowerCase())) setCode = setSymbolAliases.get(setCode.toLowerCase());
-		uploadSetSymbol('http://gatherer.wizards.com/Handlers/Image.ashx?type=symbol&set=' + setCode + '&size=large&rarity=' + setRarity, 'resetSetSymbol');
-    } else if (document.querySelector("#set-symbol-source").value == 'hexproof') {
-        if (setSymbolAliases.has(setCode.toLowerCase())) setCode = setSymbolAliases.get(setCode.toLowerCase());
-        var hexproofUrl = 'https://api.hexproof.io/symbols/set/' + setCode + '/' + setRarity;
-        // Use CORS proxy for hexproof.io
-        if (params.get('noproxy') == null) {
-            hexproofUrl = 'https://corsproxy.io/?url=' + encodeURIComponent(hexproofUrl);
-        }
-        uploadSetSymbol(hexproofUrl, 'resetSetSymbol');
-	} else {
-		var extension = 'svg';
-		if (['xxxx'].includes(setCode.toLowerCase())) {
-			extension = 'png';
+		source = 'http://gatherer.wizards.com/Handlers/Image.ashx?type=symbol&set=' + setCode + '&size=large&rarity=' + setRarity;
+	} else if (document.querySelector('#set-symbol-source').value == 'hexproof') {
+		if (setSymbolAliases.has(setCode.toLowerCase())) setCode = setSymbolAliases.get(setCode.toLowerCase());
+		source = 'https://api.hexproof.io/symbols/set/' + setCode + '/' + setRarity;
+		if (params.get('noproxy') == null) {
+			source = 'https://corsproxy.io/?url=' + encodeURIComponent(source);
 		}
+	} else {
+		var extension = ['xxxx'].includes(setCode.toLowerCase()) ? 'png' : 'svg';
 		if (setSymbolAliases.has(setCode.toLowerCase())) setCode = setSymbolAliases.get(setCode.toLowerCase());
-		uploadSetSymbol(fixUri(`/img/setSymbols/official/${setCode.toLowerCase()}-${setRarity}.` + extension), 'resetSetSymbol');
+		source = fixUri('/img/setSymbols/official/' + setCode.toLowerCase() + '-' + setRarity + '.' + extension);
 	}
+	card.setSymbolFamily = '';
+	card.setSymbolAssetId = '';
+	return uploadSetSymbol(source, 'resetSetSymbol');
 }
+
 function lockSetSymbolCode() {
 	var savedValue = '';
 	if (document.querySelector('#lockSetSymbolCode').checked) {
@@ -5951,7 +5965,11 @@ async function loadCardData(cardData, failureLabel) {
 	document.querySelector('#setSymbol-x').value = scaleX(card.setSymbolX || 0) - scaleWidth(card.marginX || 0);
 	document.querySelector('#setSymbol-y').value = scaleY(card.setSymbolY || 0) - scaleHeight(card.marginY || 0);
 	document.querySelector('#setSymbol-zoom').value = (card.setSymbolZoom || 1) * 100;
-	uploadSetSymbol(card.setSymbolSource || '/img/blank.png');
+	if (card.setSymbolFamily) {
+		document.querySelector('#set-symbol-code').value = card.setSymbolFamily;
+		document.querySelector('#set-symbol-rarity').value = card.setSymbolRarity || card.infoRarity || 'c';
+	}
+	await uploadSetSymbol(card.setSymbolSource || '/img/blank.png');
 	document.querySelector('#watermark-x').value = scaleX(card.watermarkX || 0) - scaleWidth(card.marginX || 0);
 	document.querySelector('#watermark-y').value = scaleY(card.watermarkY || 0) - scaleHeight(card.marginY || 0);
 	document.querySelector('#watermark-zoom').value = (card.watermarkZoom || 1) * 100;

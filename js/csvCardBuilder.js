@@ -1363,6 +1363,48 @@
 		result.appliedFeatures = applied;
 	}
 
+	function normalizeCSVSetSymbolRarity(value) {
+		var rarity = String(value || '').trim().toLowerCase();
+		if (rarity.indexOf('mythic') === 0 || rarity === 'm') { return 'm'; }
+		if (rarity.indexOf('rare') === 0 || rarity === 'r') { return 'r'; }
+		if (rarity.indexOf('uncommon') === 0 || rarity === 'u') { return 'u'; }
+		return 'c';
+	}
+
+	async function applyMappedSetSymbol(result) {
+		var codeInput = document.querySelector('#set-symbol-code');
+		var rarityInput = document.querySelector('#set-symbol-rarity');
+		var mappedCode = String(result.fields.setCode || '').trim();
+		var setCode = mappedCode || String(card.setSymbolFamily || (codeInput && codeInput.value) || '').trim();
+		var rarity = normalizeCSVSetSymbolRarity(result.fields.rarity || card.infoRarity || (rarityInput && rarityInput.value));
+		if (!setCode) {
+			result.appliedSetSymbol = 'Captured template symbol';
+			return;
+		}
+		if (codeInput) { codeInput.value = setCode; }
+		if (rarityInput) { rarityInput.value = rarity; }
+		try {
+			if (window.FrameProjectStore && typeof FrameProjectStore.getCustomSetSymbolSource === 'function') {
+				var custom = await FrameProjectStore.getCustomSetSymbolSource(setCode, rarity);
+				if (custom) {
+					await FrameProjectStore.applyCustomSetSymbolFamily(setCode, rarity);
+					result.appliedSetSymbol = custom.family.toUpperCase() + '-' + custom.rarity.toUpperCase() + ' (custom)';
+					return;
+				}
+			}
+			if (typeof fetchSetSymbol === 'function') {
+				var loaded = await fetchSetSymbol();
+				if (!loaded) {
+					throw new Error('The symbol image was not found.');
+				}
+				result.appliedSetSymbol = setCode.toUpperCase() + '-' + rarity.toUpperCase();
+			}
+		} catch (error) {
+			result.warnings.push('Set symbol ' + setCode.toUpperCase() + '-' + rarity.toUpperCase() + ' could not be loaded.');
+			result.appliedSetSymbol = 'Unavailable';
+		}
+	}
+
 	async function applyPreviewToCurrentCard(result) {
 		await applyNamedProjectTemplate(result);
 		await applyBuiltInFrameTemplate(result);
@@ -1413,6 +1455,7 @@
 		await applyMappedArt(result);
 		await waitForCardFonts();
 		result.appliedFrameType = await applyMappedFrame(result);
+		await applyMappedSetSymbol(result);
 		result.appliedImageFields = await applyMappedImageFields(result);
 		applyMappedFeatures(result);
 
@@ -1731,6 +1774,7 @@
 				'Template: ' + (renderResult.appliedTemplateName || (renderResult.appliedBuiltInLayout ? 'CSV built-in layout' : 'captured session fallback')),
 				'Frame: ' + (renderResult.appliedFrameType || 'Captured template'),
 				'Art: ' + (renderResult.appliedArt || 'Captured template art'),
+				'Set symbol: ' + (renderResult.appliedSetSymbol || 'Captured template symbol'),
 				'Custom images: ' + ((renderResult.appliedImageFields || []).length),
 				'Feature controls: ' + ((renderResult.appliedFeatures || []).length)
 			];
