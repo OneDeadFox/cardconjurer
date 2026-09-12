@@ -267,8 +267,30 @@
 									<input id='layout-highlight-symbols' type='checkbox' checked onchange='drawCard();'>
 									<span class='checkmark'></span>
 								</label>
+								<label class='checkbox-container input'>Rules Ranges
+									<input id='layout-highlight-rules-ranges' type='checkbox' checked onchange='drawCard();'>
+									<span class='checkmark'></span>
+								</label>
 							</div>
-							<h5 class='padding input-description'><span style='color:#43d9ff'>Text</span> · <span style='color:#52e36f'>Art</span> · <span style='color:#ff59d6'>Custom images</span> · <span style='color:#ffd34e'>Symbols and watermark</span></h5>
+							<h5 class='padding input-description'><span style='color:#43d9ff'>Text</span> · <span style='color:#52e36f'>Art</span> · <span style='color:#ff59d6'>Custom images</span> · <span style='color:#ffd34e'>Symbols and watermark</span> · <span style='color:#b784ff'>Rules ranges</span></h5>
+						</div>
+						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Rules Ranges</h5>
+							<h5 class='padding margin-bottom input-description'>Define a shared layout area that will contain repeatable rules modules. Drag its purple label to move it or drag an outlined edge to resize it.</h5>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='RulesRange.add();'>Add Rules Range</button>
+								<button class='input' onclick='RulesRange.removeSelected();'>Remove Selected</button>
+							</div>
+							<select id='rules-range-list' class='input margin-bottom' onchange='RulesRange.select(this.value);' aria-label='Rules ranges'></select>
+							<input id='rules-range-name' type='text' class='input margin-bottom' placeholder='Rules range name' onchange='RulesRange.renameSelected(this.value);' aria-label='Rules range name'>
+							<h5 class='padding margin-bottom input-description'>Range bounds in editor pixels</h5>
+							<div class='input-grid margin-bottom'>
+								<input id='rules-range-x' type='number' class='input' placeholder='X' onchange='RulesRange.updateBounds();' aria-label='Rules range X'>
+								<input id='rules-range-y' type='number' class='input' placeholder='Y' onchange='RulesRange.updateBounds();' aria-label='Rules range Y'>
+								<input id='rules-range-width' type='number' min='10' class='input' placeholder='Width' onchange='RulesRange.updateBounds();' aria-label='Rules range width'>
+								<input id='rules-range-height' type='number' min='10' class='input' placeholder='Height' onchange='RulesRange.updateBounds();' aria-label='Rules range height'>
+							</div>
+							<h5 id='rules-range-status' class='padding input-description'>No rules range selected.</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>
 							<h5 class='margin-bottom padding input-description'>Frame Construction Resources</h5>
@@ -1250,6 +1272,7 @@
 	</div>
 	<script defer src='/js/autoFrame.js'></script>
 	<script defer src='/js/creator-23.js'></script>
+	<script defer src='/js/rulesRange.js'></script>
 	<script defer src='/js/frameProjectStore.js'></script>
 	<script defer src='/js/frameResourceLibrary.js'></script>
 	<script defer src='/js/csvImport.js'></script>

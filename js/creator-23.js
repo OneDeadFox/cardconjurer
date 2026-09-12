@@ -533,6 +533,9 @@ async function setCardOrientation(value, options = {}) {
 	rotateEnvelopeBounds(card.artBounds, clockwise);
 	rotateEnvelopeBounds(card.setSymbolBounds, clockwise);
 	rotateEnvelopeBounds(card.watermarkBounds, clockwise);
+	(card.rulesRanges || []).forEach(function (range) {
+		rotateEnvelopeBounds(range && range.bounds, clockwise);
+	});
 
 	var artPlacement = {x:Number(card.artX)||0, y:Number(card.artY)||0};
 	rotateRasterPlacement(artPlacement, (Number(art.width)||0)*(Number(card.artZoom)||0),
@@ -1199,6 +1202,7 @@ function createDesignStateSnapshot() {
 		},
 		frames:(card.frames || []).map(frame => ({id:ensureDesignLayerId(frame), state:getFrameEditorState(frame)})),
 		text:cloneDesignValue(card.text || {}),
+		rulesRanges:cloneDesignValue(card.rulesRanges || []),
 		bottomInfo:cloneDesignValue(card.bottomInfo),
 		designDefaults:cloneDesignValue(card.designDefaults),
 		artBounds:cloneDesignValue(card.artBounds),
@@ -1273,6 +1277,7 @@ async function applyDesignStateSnapshot(snapshot) {
 		}
 	});
 	card.text=cloneDesignValue(snapshot.text||{});
+	card.rulesRanges=cloneDesignValue(snapshot.rulesRanges||[]);
 	card.bottomInfo=cloneDesignValue(snapshot.bottomInfo);
 	card.designDefaults=cloneDesignValue(snapshot.designDefaults);
 	card.artBounds=cloneDesignValue(snapshot.artBounds);
@@ -1298,6 +1303,7 @@ async function applyDesignStateSnapshot(snapshot) {
 		if (fontSize) fontSize.value=selectedText.fontSize||0;
 	}
 	if (selectedFrame && card.frames.includes(selectedFrame)) refreshSelectedFrameEditor();
+	if (window.RulesRange) RulesRange.refresh();
 	drawFrames();
 	await drawText();
 	watermarkEdited();
@@ -4749,7 +4755,7 @@ function setFrameDesignMode(value) {
 }
 function shouldDrawLayoutHighlights() {
 	const frameSection = document.querySelector('#creator-menu-frame');
-	const hasFieldHighlight = ['layout-highlight-text', 'layout-highlight-art', 'layout-highlight-images', 'layout-highlight-symbols'].some(layoutHighlightEnabled);
+	const hasFieldHighlight = ['layout-highlight-text', 'layout-highlight-art', 'layout-highlight-images', 'layout-highlight-symbols', 'layout-highlight-rules-ranges'].some(layoutHighlightEnabled);
 	return activeFrameWorkspace == 'design' && frameSection && !frameSection.classList.contains('hidden') &&
 		(activeFrameDesignMode == 'frames' || hasFieldHighlight);
 }
@@ -4879,6 +4885,14 @@ function drawLayoutHighlights() {
 				rotation:card.watermarkRotate
 			});
 		}
+	}
+	if (layoutHighlightEnabled('layout-highlight-rules-ranges')) {
+		(card.rulesRanges || []).forEach(function (range) {
+			if (!range || !range.bounds) return;
+			drawLayoutHighlightBox(range.bounds, '#b784ff', range.name || 'Rules Range', {
+				kind:'rulesRange', key:range.id || '', target:range.bounds
+			});
+		});
 	}
 }
 function layoutHighlightPoint(event) {
@@ -5033,6 +5047,10 @@ function openLayoutHighlightEditor(area) {
 		}
 		return;
 	}
+	if (area.kind == 'rulesRange') {
+		if (window.RulesRange) RulesRange.select(area.key);
+		return;
+	}
 	if (area.kind == 'art') activateCreatorEditorTab('art');
 	if (area.kind == 'setSymbol') activateCreatorEditorTab('setSymbol');
 	if (area.kind == 'watermark') activateCreatorEditorTab('watermark');
@@ -5060,6 +5078,7 @@ function finishLayoutHighlightDrag(event) {
 	} else {
 		drawCard();
 	}
+	if (area.kind == 'rulesRange' && window.RulesRange) RulesRange.refreshInputs();
 	commitDesignUndoSnapshot(completedDrag.undoSnapshot,
 		area.kind == 'frame' ? 'Move or resize frame component' : 'Move or resize layout field');
 }
@@ -6626,6 +6645,7 @@ async function loadCardData(cardData, failureLabel) {
 
 	card.frames = card.frames || [];
 	card.text = card.text || {};
+	card.rulesRanges = card.rulesRanges || [];
 	card.manaSymbols = card.manaSymbols || [];
 	card.orientation = currentCardOrientation();
 	card.landscape = card.orientation === 'landscape';
@@ -6683,6 +6703,7 @@ async function loadCardData(cardData, failureLabel) {
 	if (card.onload) {
 		await loadScript(card.onload);
 	}
+	if (window.RulesRange) RulesRange.refresh();
 	for (const manaSymbolScript of card.manaSymbols) {
 		await loadScript(manaSymbolScript);
 	}

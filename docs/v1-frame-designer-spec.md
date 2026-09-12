@@ -109,12 +109,27 @@ The Design Frame workspace can add labeled fields before a project is published:
 - Rows with a saved **Template** can render without first capturing a session template. Capturing the current card supplies the fallback only for rows whose Template cell is blank.
 - When a row selects a built-in Frame Type/Variant, template-only custom text and image fields are removed so values from a previously previewed custom template cannot remain visible.
 
+## Rules Range foundation
+
+Frame Designer projects can define any number of named Rules Ranges. A Rules Range is a persistent outer layout boundary reserved for a future stack of repeatable rules modules.
+
+- Add, select, rename, and remove Rules Ranges in Design Frame.
+- Edit X, Y, width, and height in editor pixels.
+- Move and resize the purple range outline directly on the card canvas.
+- Preserve ranges in saved projects, project backups, and full-library backups as part of the card snapshot.
+- Include range changes in Design Frame undo history.
+- Rotate range bounds with the rest of the layout when switching between portrait and landscape.
+- Load older projects without Rules Range data as an empty range collection.
+
+This foundation intentionally does not attach text fields or frame layers yet. The next phase adds repeatable modules, flexible/fixed height allocation, ordering, and module-relative contents without changing the existing Class or Planeswalker implementations.
+
 ## Next V1 phases
 
-1. Direct manipulation handles on the card canvas.
-2. Portrait and landscape project orientation.
-3. Publish a project as a named Frame Type and Frame Variant in the normal frame browser.
-4. Export/import a portable project package containing its project data and image assets.
+1. Add repeatable modules and flexible/fixed height allocation within Rules Ranges.
+2. Attach text fields and frame layers using module-relative coordinates.
+3. Save reusable module templates such as Class Level and Planeswalker Ability.
+4. Expose Rules Range module fields to CSV mapping and collision-aware text fitting.
+5. Publish a project as a named Frame Type and Frame Variant in the normal frame browser.
 
 ## Deferred to V2
 
