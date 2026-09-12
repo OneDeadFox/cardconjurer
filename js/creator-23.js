@@ -390,6 +390,27 @@ function rotatePositionedBounds(bounds, oldWidth, oldHeight, clockwise) {
 	bounds.y = (rotatedCenterY - pixelHeight / 2) / newHeight;
 	return bounds;
 }
+function rotateTextOriginBounds(bounds, oldWidth, oldHeight, clockwise) {
+	if (!bounds) return bounds;
+	var x = Number(bounds.x) || 0;
+	var y = Number(bounds.y) || 0;
+	var width = Number(bounds.width);
+	var height = Number(bounds.height);
+	if (!Number.isFinite(width)) width = 1;
+	if (!Number.isFinite(height)) height = 1;
+	var pixelWidth = width * oldWidth;
+	var pixelHeight = height * oldHeight;
+	if (clockwise) {
+		bounds.x = 1 - y;
+		bounds.y = x;
+	} else {
+		bounds.x = y;
+		bounds.y = 1 - x;
+	}
+	bounds.width = pixelWidth / oldHeight;
+	bounds.height = pixelHeight / oldWidth;
+	return bounds;
+}
 function rotateRasterPlacement(placement, pixelWidth, pixelHeight, oldWidth, oldHeight, clockwise) {
 	if (!placement) return placement;
 	var centerX = (Number(placement.x) || 0) * oldWidth + pixelWidth / 2;
@@ -402,7 +423,10 @@ function rotateRasterPlacement(placement, pixelWidth, pixelHeight, oldWidth, old
 }
 function rotateTextDefinition(definition, oldWidth, oldHeight, clockwise) {
 	if (!definition) return;
-	rotatePositionedBounds(definition, oldWidth, oldHeight, clockwise);
+	rotateTextOriginBounds(definition, oldWidth, oldHeight, clockwise);
+	if (Number.isFinite(Number(definition.size))) {
+		definition.size = Number(definition.size) * oldHeight / oldWidth;
+	}
 	definition.rotation = normalizeRotationDegrees((Number(definition.rotation) || 0) + (clockwise ? 90 : -90));
 }
 function rotateTextCollection(collection, oldWidth, oldHeight, clockwise) {
@@ -466,10 +490,15 @@ function prepareNewDesignElementForOrientation(element) {
 	var rotation = normalizeRotationDegrees(card && card.orientationRotation);
 	if (rotation === 90) {
 		var bounds = element.bounds || element;
-		rotatePositionedBounds(bounds, card.height, card.width, true);
 		if (element.bounds) {
+			rotatePositionedBounds(bounds, card.height, card.width, true);
 			element.maskCanvasBounds = element.maskCanvasBounds || {x:0, y:0, width:1, height:1};
 			rotatePositionedBounds(element.maskCanvasBounds, card.height, card.width, true);
+		} else {
+			rotateTextOriginBounds(bounds, card.height, card.width, true);
+			if (Number.isFinite(Number(element.size))) {
+				element.size = Number(element.size) * card.width / card.height;
+			}
 		}
 		element.rotation = normalizeRotationDegrees((Number(element.rotation) || 0) + 90);
 	}
@@ -2445,6 +2474,317 @@ function fontSizedEdited() {
 	card.text[Object.keys(card.text)[selectedTextIndex]].fontSize = document.querySelector('#text-editor-font-size').value;
 	drawTextBuffer();
 }
+
+var CARD_TEXT_COLLISION_MINIMUM_REDUCTION = 25;
+var cardTextFitResults = [];
+var cardTextCollisionWarnings = [];
+window.CardTextFitResults = [];
+window.CardTextCollisionWarnings = [];
+
+function normalizeCardTextSemantic(value) {
+	return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+function cardTextObjectKey(textObject) {
+	return Object.keys(card.text || {}).find(function (key) {
+		return card.text[key] === textObject;
+	}) || '';
+}
+function cardTextSemanticRole(textObject, key) {
+	var keyName = normalizeCardTextSemantic(key || cardTextObjectKey(textObject));
+	var label = normalizeCardTextSemantic(textObject && (textObject.csvFieldLabel || textObject.name));
+	if ((textObject && textObject.manaCost) || /^mana\d*$/.test(keyName) || /^manacost\d*$/.test(label)) return 'mana';
+	if (/^title\d*$/.test(keyName) || /^(title|cardtitle|cardname)\d*$/.test(label)) return 'title';
+	if (/^type\d*$/.test(keyName) || /^(type|typeline|cardtype)\d*$/.test(label)) return 'type';
+	if (/^rules\d*$/.test(keyName) || /^(rules|rulestext)\d*$/.test(label)) return 'rules';
+	if (/^pt\d*$/.test(keyName) || /^(pt|frontpt|reversept|powertoughness)\d*$/.test(label)) return 'pt';
+	if (/^rarity\d*$/.test(keyName) || /^rarity\d*$/.test(label)) return 'rarity';
+	return '';
+}
+function cardTextHasVisibleContent(textObject) {
+	if (!textObject || textObject.hidden) return false;
+	var visible = String(textObject.text || '')
+		.replace(/{[^{}]*}/g, '')
+		.replace(/[\s\uFFEE]+/g, '');
+	return visible.length > 0 || /{[^{}]+}/.test(String(textObject.text || ''));
+}
+function cardTextPixelRect(textObject, widthOverride, heightOverride) {
+	var width = widthOverride === undefined ? scaleWidth(Number(textObject.width) || 1) : widthOverride;
+	var height = heightOverride === undefined ? scaleHeight(Number(textObject.height) || 1) : heightOverride;
+	var x = scaleX(Number(textObject.x) || 0);
+	var y = scaleY(Number(textObject.y) || 0);
+	return {
+		x:x,
+		y:y,
+		width:Math.max(1, width),
+		height:Math.max(1, height),
+		rotation:Number(textObject.rotation) || 0,
+		pivotX:x,
+		pivotY:y
+	};
+}
+function cardTextRotatedCorners(rect) {
+	var pivotX = Number.isFinite(Number(rect.pivotX)) ? Number(rect.pivotX) : rect.x + rect.width / 2;
+	var pivotY = Number.isFinite(Number(rect.pivotY)) ? Number(rect.pivotY) : rect.y + rect.height / 2;
+	var radians = (Number(rect.rotation) || 0) * Math.PI / 180;
+	var cosine = Math.cos(radians);
+	var sine = Math.sin(radians);
+	return [
+		{x:rect.x, y:rect.y},
+		{x:rect.x + rect.width, y:rect.y},
+		{x:rect.x + rect.width, y:rect.y + rect.height},
+		{x:rect.x, y:rect.y + rect.height}
+	].map(function (point) {
+		var relativeX = point.x - pivotX;
+		var relativeY = point.y - pivotY;
+		return {
+			x:pivotX + relativeX * cosine - relativeY * sine,
+			y:pivotY + relativeX * sine + relativeY * cosine
+		};
+	});
+}
+function cardTextRectInLocalCoordinates(rect, targetRect) {
+	var targetPivotX = Number.isFinite(Number(targetRect.pivotX)) ? Number(targetRect.pivotX) : targetRect.x;
+	var targetPivotY = Number.isFinite(Number(targetRect.pivotY)) ? Number(targetRect.pivotY) : targetRect.y;
+	var radians = -(Number(targetRect.rotation) || 0) * Math.PI / 180;
+	var cosine = Math.cos(radians);
+	var sine = Math.sin(radians);
+	var points = cardTextRotatedCorners(rect).map(function (point) {
+		var relativeX = point.x - targetPivotX;
+		var relativeY = point.y - targetPivotY;
+		return {
+			x:targetPivotX + relativeX * cosine - relativeY * sine - targetRect.x,
+			y:targetPivotY + relativeX * sine + relativeY * cosine - targetRect.y
+		};
+	});
+	return {
+		left:Math.min.apply(null, points.map(function (point) { return point.x; })),
+		right:Math.max.apply(null, points.map(function (point) { return point.x; })),
+		top:Math.min.apply(null, points.map(function (point) { return point.y; })),
+		bottom:Math.max.apply(null, points.map(function (point) { return point.y; }))
+	};
+}
+function estimateManaCostWidth(textObject) {
+	var textSize = Math.max(1,
+		(scaleHeight(Number(textObject.size) || 0.038)) + (parseInt(textObject.fontSize || '0') || 0));
+	var manaSpacing = textSize * 0.04 + (scaleWidth(Number(textObject.manaSpacing)) || 0);
+	var rawText = String(textObject.text || '');
+	var tokenPattern = /{([^{}]+)}/g;
+	var match;
+	var width = 0;
+	var matchedToken = false;
+	while ((match = tokenPattern.exec(rawText))) {
+		var token = match[1];
+		var manaSymbol = null;
+		try {
+			manaSymbol = getManaSymbol(token) || getManaSymbol(token.split('').reverse().join(''));
+		} catch (error) {
+			manaSymbol = null;
+		}
+		if (manaSymbol) {
+			width += (Number(manaSymbol.width) || 1) * textSize * 0.78 + manaSpacing * 2;
+			matchedToken = true;
+		}
+	}
+	if (!matchedToken) {
+		var measurementCanvas = estimateManaCostWidth.canvas ||
+			(estimateManaCostWidth.canvas = document.createElement('canvas'));
+		var measurementContext = measurementCanvas.getContext('2d');
+		measurementContext.font = (textObject.fontStyle || '') + textSize + 'px ' + (textObject.font || 'mplantin');
+		width = measurementContext.measureText(rawText.replace(/{[^{}]*}/g, '')).width;
+	}
+	return Math.max(1, width);
+}
+function estimateOneLineTextWidth(textObject) {
+	var textSize = Math.max(1,
+		(scaleHeight(Number(textObject.size) || 0.038)) + (parseInt(textObject.fontSize || '0') || 0));
+	var measurementCanvas = estimateOneLineTextWidth.canvas ||
+		(estimateOneLineTextWidth.canvas = document.createElement('canvas'));
+	var measurementContext = measurementCanvas.getContext('2d');
+	measurementContext.font = (textObject.fontStyle || '') + textSize + 'px ' + (textObject.font || 'mplantin');
+	var plainText = String(textObject.text || '')
+		.replace(/{[^{}]*}/g, '')
+		.replace(/~/g, typeof getInlineCardName === 'function' ? getInlineCardName() : '');
+	return Math.max(1, measurementContext.measureText(plainText).width);
+}
+function cardTextContentRect(textObject) {
+	var fieldRect = cardTextPixelRect(textObject);
+	var role = cardTextSemanticRole(textObject);
+	var contentWidth = role === 'mana'
+		? estimateManaCostWidth(textObject)
+		: (textObject.oneLine ? estimateOneLineTextWidth(textObject) : fieldRect.width);
+	var x = fieldRect.x;
+	if (textObject.align === 'right') {
+		x += fieldRect.width - contentWidth;
+	} else if (textObject.align === 'center') {
+		x += (fieldRect.width - contentWidth) / 2;
+	}
+	return {
+		x:x,
+		y:fieldRect.y,
+		width:contentWidth,
+		height:fieldRect.height,
+		rotation:fieldRect.rotation,
+		pivotX:fieldRect.x,
+		pivotY:fieldRect.y
+	};
+}
+function cardSetSymbolCollisionRect() {
+	var source = String((card && card.setSymbolSource) || (setSymbol && setSymbol.src) || '');
+	if (!source || source.includes('/img/blank.png')) return null;
+	var symbolZoom = Number(card.setSymbolZoom);
+	if (!Number.isFinite(symbolZoom) || symbolZoom <= 0) return null;
+	var imageWidth = (Number(setSymbol && (setSymbol.naturalWidth || setSymbol.width)) || 0) * symbolZoom;
+	var imageHeight = (Number(setSymbol && (setSymbol.naturalHeight || setSymbol.height)) || 0) * symbolZoom;
+	if (imageWidth > 1 && imageHeight > 1) {
+		return {
+			x:scaleX(Number(card.setSymbolX) || 0),
+			y:scaleY(Number(card.setSymbolY) || 0),
+			width:imageWidth,
+			height:imageHeight,
+			rotation:Number(card.setSymbolRotate) || 0
+		};
+	}
+	var bounds = card.setSymbolBounds;
+	if (!bounds) return null;
+	var fallbackWidth = scaleWidth(Number(bounds.width) || 0.12);
+	var fallbackHeight = scaleHeight(Number(bounds.height) || 0.04);
+	var fallbackX = scaleX(Number(bounds.x) || 0);
+	var fallbackY = scaleY(Number(bounds.y) || 0);
+	if (bounds.horizontal === 'right') fallbackX -= fallbackWidth;
+	else if (bounds.horizontal === 'center') fallbackX -= fallbackWidth / 2;
+	if (bounds.vertical === 'bottom') fallbackY -= fallbackHeight;
+	else if (bounds.vertical === 'center') fallbackY -= fallbackHeight / 2;
+	return {x:fallbackX, y:fallbackY, width:fallbackWidth, height:fallbackHeight, rotation:Number(card.setSymbolRotate) || 0};
+}
+function cardPowerToughnessCollisionRects() {
+	var activePTFields = Object.entries(card.text || {}).filter(function (entry) {
+		return cardTextSemanticRole(entry[1], entry[0]) === 'pt' && cardTextHasVisibleContent(entry[1]);
+	});
+	if (!activePTFields.length) return [];
+	var frameRects = (card.frames || []).filter(function (frame) {
+		if (!frame || frame.hidden || Number(frame.opacity) === 0) return false;
+		var label = normalizeCardTextSemantic((frame.componentLabel || '') + ' ' + (frame.name || ''));
+		return label.includes('powertoughness') || /^pt(inner|box|frame|background)/.test(label);
+	}).map(function (frame) {
+		var bounds = frame.bounds || {};
+		return {
+			x:scaleX(Number(bounds.x) || 0),
+			y:scaleY(Number(bounds.y) || 0),
+			width:scaleWidth(Number(bounds.width) || 1),
+			height:scaleHeight(Number(bounds.height) || 1),
+			rotation:Number(frame.rotation) || 0
+		};
+	});
+	if (frameRects.length) return frameRects;
+	return activePTFields.map(function (entry) {
+		return cardTextPixelRect(entry[1]);
+	});
+}
+function cardTextCollisionObstacles(textObject, role) {
+	var obstacles = [];
+	if (role === 'title') {
+		Object.entries(card.text || {}).forEach(function (entry) {
+			if (cardTextSemanticRole(entry[1], entry[0]) === 'mana' && cardTextHasVisibleContent(entry[1])) {
+				obstacles.push({label:entry[1].name || 'Mana Cost', rect:cardTextContentRect(entry[1])});
+			}
+		});
+	} else if (role === 'type') {
+		var setSymbolRect = cardSetSymbolCollisionRect();
+		if (setSymbolRect) obstacles.push({label:'Set/Rarity Symbol', rect:setSymbolRect});
+		Object.entries(card.text || {}).forEach(function (entry) {
+			if (cardTextSemanticRole(entry[1], entry[0]) === 'rarity' && cardTextHasVisibleContent(entry[1])) {
+				obstacles.push({label:entry[1].name || 'Rarity', rect:cardTextContentRect(entry[1])});
+			}
+		});
+	} else if (role === 'rules') {
+		cardPowerToughnessCollisionRects().forEach(function (rect) {
+			obstacles.push({label:'Power/Toughness Box', rect:rect});
+		});
+	}
+	return obstacles;
+}
+function getCardTextCollisionFit(textObject, originalWidth, originalHeight) {
+	var key = cardTextObjectKey(textObject);
+	var role = cardTextSemanticRole(textObject, key);
+	var result = {
+		key:key,
+		role:role,
+		label:textObject.name || key || 'Text field',
+		width:originalWidth,
+		height:originalHeight,
+		obstacles:[],
+		restricted:false
+	};
+	if (!cardTextHasVisibleContent(textObject) || !['title', 'type', 'rules'].includes(role)) return result;
+	var targetRect = cardTextPixelRect(textObject, originalWidth, originalHeight);
+	var horizontalPadding = Math.max(4, scaleWidth(0.008));
+	var verticalPadding = Math.max(4, scaleHeight(0.006));
+	cardTextCollisionObstacles(textObject, role).forEach(function (obstacle) {
+		var local = cardTextRectInLocalCoordinates(obstacle.rect, targetRect);
+		if ((role === 'title' || role === 'type') &&
+			local.bottom > 0 && local.top < originalHeight &&
+			local.left > 0 && local.left < result.width) {
+			result.width = Math.max(1, local.left - horizontalPadding);
+			result.obstacles.push(obstacle.label);
+		} else if (role === 'rules' &&
+			local.right > 0 && local.left < originalWidth &&
+			local.top > 0 && local.top < result.height) {
+			result.height = Math.max(1, local.top - verticalPadding);
+			result.obstacles.push(obstacle.label);
+		}
+	});
+	result.obstacles = Array.from(new Set(result.obstacles));
+	result.restricted = result.width < originalWidth || result.height < originalHeight;
+	return result;
+}
+function resetCardTextFitState() {
+	cardTextFitResults = [];
+	cardTextCollisionWarnings = [];
+	window.CardTextFitResults = [];
+	window.CardTextCollisionWarnings = [];
+}
+function recordCardTextFit(textObject, collisionFit, originalSize, finalSize, failed) {
+	if (!collisionFit || (!collisionFit.restricted && !failed)) return;
+	var reduction = Math.max(0, Math.round(originalSize - finalSize));
+	var obstacleLabel = collisionFit.obstacles.join(' and ') || 'a neighboring field';
+	var record = {
+		key:collisionFit.key,
+		label:collisionFit.label,
+		obstacles:collisionFit.obstacles.slice(),
+		reduction:reduction,
+		failed:!!failed
+	};
+	var existingIndex = cardTextFitResults.findIndex(function (item) { return item.key === record.key; });
+	if (existingIndex === -1) cardTextFitResults.push(record);
+	else cardTextFitResults[existingIndex] = record;
+	if (failed) {
+		var warning = collisionFit.restricted
+			? collisionFit.label + ' still overlaps ' + obstacleLabel +
+				' at the minimum {fontsize-25} size.'
+			: collisionFit.label + ' still exceeds its own text box at the minimum {fontsize-25} size.';
+		if (!cardTextCollisionWarnings.includes(warning)) cardTextCollisionWarnings.push(warning);
+	}
+}
+function publishCardTextFitState() {
+	window.CardTextFitResults = cardTextFitResults.slice();
+	window.CardTextCollisionWarnings = cardTextCollisionWarnings.slice();
+	var status = document.querySelector('#text-collision-status');
+	if (!status) return;
+	if (cardTextCollisionWarnings.length) {
+		status.textContent = 'Text collision warning: ' + cardTextCollisionWarnings.join(' ');
+		status.classList.add('error');
+		return;
+	}
+	status.classList.remove('error');
+	var adjusted = cardTextFitResults.filter(function (item) { return item.reduction > 0; });
+	if (adjusted.length) {
+		status.textContent = 'Automatically fitted: ' + adjusted.map(function (item) {
+			return item.label + ' −' + item.reduction + ' px';
+		}).join('; ') + '.';
+	} else {
+		status.textContent = 'No active text collisions.';
+	}
+}
 function drawTextBuffer() {
 	clearTimeout(writingText);
 	writingText = setTimeout(drawText, 500);
@@ -2457,10 +2797,12 @@ async function drawText() {
 	textContext.clearRect(0, 0, textCanvas.width, textCanvas.height);
 	prePTContext.clearRect(0, 0, prePTCanvas.width, prePTCanvas.height);
 	drawTextBetweenFrames = false;
+	resetCardTextFitState();
 	for (var textObject of Object.entries(card.text)) {
 		await writeText(textObject[1], textContext);
 		continue;
 	}
+	publishCardTextFitState();
 	if (drawTextBetweenFrames || redrawFrames) {
 		drawFrames();
 		if (!drawTextBetweenFrames) {
@@ -2637,6 +2979,14 @@ function writeText(textObject, targetContext) {
 	var textWidth = scaleWidth(textObject.width) || scaleWidth(1);
 	var textHeight = scaleHeight(textObject.height) || scaleHeight(1);
 	var startingTextSize = scaleHeight(textObject.size) || scaleHeight(0.038);
+	var originalStartingTextSize = startingTextSize;
+	var fontSizeModifier = parseInt(textObject.fontSize || '0') || 0;
+	var collisionMinimumTextSize = Math.max(1, Math.min(startingTextSize,
+		originalStartingTextSize - CARD_TEXT_COLLISION_MINIMUM_REDUCTION - fontSizeModifier));
+	var collisionFit = getCardTextCollisionFit(textObject, textWidth, textHeight);
+	var collisionFitFailed = false;
+	textWidth = collisionFit.width;
+	textHeight = collisionFit.height;
 	var textFontHeightRatio = 0.7;
 	var textBounded = textObject.bounded || true;
 	var textOneLine = textObject.oneLine || false;
@@ -3411,10 +3761,14 @@ function writeText(textObject, targetContext) {
 
 			//if the word goes past the max line width, go to the next line
 			if (wordToWrite && lineContext.measureText(wordToWrite).width + currentX >= textWidth && textArcRadius == 0) {
-				if (textOneLine && startingTextSize > 1) {
-					//doesn't fit... try again at a smaller text size?
-					startingTextSize -= 1;
+				if (textOneLine && startingTextSize > collisionMinimumTextSize) {
+					// Does not fit beside the active neighboring field. Retry at
+					// a smaller size, but never beyond the {fontsize-25} floor.
+					startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
 					continue outerloop;
+				}
+				if (textOneLine) {
+					collisionFitFailed = true;
 				}
 				newLine = true;
 			}
@@ -3498,10 +3852,14 @@ function writeText(textObject, targetContext) {
 					currentX += lineContext.measureText(wordToWrite).width;
 				}
 			}
-			if (currentY > textHeight && textBounded && !textOneLine && startingTextSize > 1 && textArcRadius == 0) {
-				//doesn't fit... try again at a smaller text size?
-				startingTextSize -= 1;
-				continue outerloop;
+			if (currentY > textHeight && textBounded && !textOneLine && textArcRadius == 0) {
+				if (startingTextSize > collisionMinimumTextSize) {
+					// Does not fit above the active neighboring field. Retry at
+					// a smaller size, but never beyond the {fontsize-25} floor.
+					startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
+					continue outerloop;
+				}
+				collisionFitFailed = true;
 			}
 			if (splitText.indexOf(word) == splitText.length - 1) {
 				//should manage vertical centering here
@@ -3522,6 +3880,8 @@ function writeText(textObject, targetContext) {
 						finalHorizontalAdjust = - horizontalAdjustUnit;
 					}
 				}
+				recordCardTextFit(textObject, collisionFit, originalStartingTextSize,
+					startingTextSize, collisionFitFailed);
 				var trueTargetContext = targetContext;
 				if (drawToPrePTCanvas) {
 					trueTargetContext = prePTContext;

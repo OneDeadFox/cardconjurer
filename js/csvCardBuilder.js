@@ -1505,6 +1505,13 @@
 		} else if (typeof drawCard === 'function') {
 			drawCard();
 		}
+		if (Array.isArray(window.CardTextCollisionWarnings)) {
+			window.CardTextCollisionWarnings.forEach(function (warning) {
+				if (!result.warnings.includes(warning)) {
+					result.warnings.push(warning);
+				}
+			});
+		}
 	}
 
 
@@ -1660,6 +1667,7 @@
 		progress.value = 0;
 		var completed = 0;
 		var failedCards = [];
+		var warningCards = [];
 		var usedZipNames = {};
 		var selectedRow = document.querySelector('#csv-card-preview-row');
 		var selectedRowIndex = selectedRow && selectedRow.value !== '' ? Number(selectedRow.value) : null;
@@ -1685,6 +1693,10 @@
 							displayName + (faceLabel ? ' (' + faceLabel + ')' : '') + '…';
 						try {
 							var pngBlob = await renderBatchCard(job, face);
+							if (Array.isArray(window.CardTextCollisionWarnings) && window.CardTextCollisionWarnings.length) {
+								warningCards.push(displayName + (faceLabel ? ' (' + faceLabel + ')' : '') +
+									': ' + window.CardTextCollisionWarnings.join(' '));
+							}
 							var outputBase = safeCardName + (faceLabel ? ' - ' + faceLabel : '');
 							var pngName = uniqueFileName(outputBase, '.png', usedCardNames);
 							zip.file(pngName, pngBlob);
@@ -1722,6 +1734,9 @@
 				chunks.size + ' ZIP file(s).';
 			if (failedCards.length) {
 				resultMessage += ' Failed: ' + failedCards.join(', ') + '.';
+			}
+			if (warningCards.length) {
+				resultMessage += ' Text warnings: ' + warningCards.join(' | ') + '.';
 			}
 			if (!usesFolderPicker && chunks.size > 1) {
 				resultMessage += ' If Edge blocked some ZIPs, allow multiple downloads and run the export again.';
