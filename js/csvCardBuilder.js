@@ -1614,8 +1614,10 @@
 			.map(function (fit) {
 				return {
 					row:job.rowIndex + 2,
+					rowIndex:job.rowIndex,
 					name:displayName,
 					face:batchFaceLabel(face),
+					faceKey:face,
 					field:fit.label || fit.key || 'Text field',
 					obstacles:Array.isArray(fit.obstacles) ? fit.obstacles.slice() : []
 				};
@@ -1630,6 +1632,59 @@
 			return 'Row ' + failure.row + ' — ' + failure.name + ' — ' + failure.face +
 				' — ' + failure.field + obstacle;
 		}).join(' | ');
+	}
+
+	function batchFaceKey(rowIndex, face) {
+		return rowIndex + ':' + face;
+	}
+
+	function batchExportReport(preflight, failedCards, warningCards, exportedImages, totalCards) {
+		var lines = [
+			'CardConjurer CSV Batch Export Report',
+			'Generated: ' + new Date().toLocaleString(),
+			'',
+			'Summary',
+			'-------',
+			'CSV card images checked: ' + totalCards,
+			'Images exported: ' + exportedImages,
+			'Images skipped: ' + (totalCards - exportedImages),
+			''
+		];
+
+		if (preflight.failures.length) {
+			lines.push('Unreadable text (image skipped)', '--------------------------------');
+			preflight.failures.forEach(function (failure) {
+				var obstacle = failure.obstacles.length
+					? 'overlaps ' + failure.obstacles.join(' and ')
+					: 'exceeds its text box';
+				lines.push('- Row ' + failure.row + ' | ' + failure.name + ' | ' + failure.face +
+					' | ' + failure.field + ' | ' + obstacle);
+			});
+			lines.push('');
+		}
+
+		if (preflight.validationFailures.length) {
+			lines.push('Preflight errors (image skipped)', '--------------------------------');
+			preflight.validationFailures.forEach(function (failure) {
+				lines.push('- Row ' + failure.row + ' | ' + failure.name + ' | ' + failure.face +
+					' | ' + failure.message);
+			});
+			lines.push('');
+		}
+
+		if (failedCards.length) {
+			lines.push('Render errors (image skipped)', '-----------------------------');
+			failedCards.forEach(function (failure) { lines.push('- ' + failure); });
+			lines.push('');
+		}
+
+		if (warningCards.length) {
+			lines.push('Warnings', '--------');
+			warningCards.forEach(function (warning) { lines.push('- ' + warning); });
+			lines.push('');
+		}
+
+		return lines.join('\r\n');
 	}
 
 	async function restoreSelectedCSVCard(rowIndex, selectedFace) {
@@ -1659,8 +1714,14 @@
 					failures = failures.concat(currentMinimumTextFailures(job, face));
 				} catch (error) {
 					console.error('CSV text preflight failed:', job.rowIndex + 2, face, error);
-					validationFailures.push('Row ' + (job.rowIndex + 2) + ' — ' + displayName +
-						' — ' + faceLabel + ': ' + (error.message || 'could not be checked'));
+					validationFailures.push({
+						row:job.rowIndex + 2,
+						rowIndex:job.rowIndex,
+						name:displayName,
+						face:faceLabel,
+						faceKey:face,
+						message:error.message || 'could not be checked'
+					});
 				}
 				checked++;
 				progress.value = checked;
@@ -1744,18 +1805,13 @@
 			return;
 		}
 		button.disabled = false;
-		if (preflight.validationFailures.length) {
-			status.textContent = 'Export was stopped before any files were created because these cards could not be checked: ' +
-				preflight.validationFailures.join(' | ') + '.';
-			return;
-		}
-		if (preflight.failures.length) {
-			status.textContent = 'Export blocked before any PNG or ZIP files were created. ' +
-				preflight.failures.length + ' text field(s) reached the minimum readable size and still do not fit: ' +
-				minimumTextFailureMessage(preflight.failures) +
-				'. Shorten those CSV values or adjust their layout, then export again.';
-			return;
-		}
+		var blockedFaceKeys = new Set();
+		preflight.failures.forEach(function (failure) {
+			blockedFaceKeys.add(batchFaceKey(failure.rowIndex, failure.faceKey));
+		});
+		preflight.validationFailures.forEach(function (failure) {
+			blockedFaceKeys.add(batchFaceKey(failure.rowIndex, failure.faceKey));
+		});
 		progress.value = 0;
 
 		var directoryHandle = null;
@@ -1781,6 +1837,8 @@
 		var failedCards = [];
 		var warningCards = [];
 		var usedZipNames = {};
+		var exportedImages = 0;
+		var exportedZipCount = 0;
 
 		try {
 			for (var chunkEntry of chunks.entries()) {
@@ -1796,6 +1854,11 @@
 					requestedName = String(requestedName).replace(/\.png$/i, '');
 					var safeCardName = sanitizeBaseName(requestedName, 'Card-' + (job.rowIndex + 2));
 					for (var face of facesForResult(job.result)) {
+						if (blockedFaceKeys.has(batchFaceKey(job.rowIndex, face))) {
+							completed++;
+							progress.value = completed;
+							continue;
+						}
 						var faceLabel = face === 'front' ? 'Front' : face === 'back' ? 'Back' : '';
 						status.textContent = 'Rendering ' + (completed + 1) + ' of ' + totalCards + ': ' +
 							displayName + (faceLabel ? ' (' + faceLabel + ')' : '') + '…';
@@ -1809,6 +1872,7 @@
 							var pngName = uniqueFileName(outputBase, '.png', usedCardNames);
 							zip.file(pngName, pngBlob);
 							addedCards++;
+							exportedImages++;
 						} catch (error) {
 							console.error('CSV batch face failed:', job.rowIndex + 2, face, error);
 							failedCards.push(displayName + (faceLabel ? ' (' + faceLabel + ')' : '') +
@@ -1830,19 +1894,36 @@
 						downloadBlob(zipBlob, zipName);
 						await new Promise(function (resolve) { setTimeout(resolve, 300); });
 					}
+					exportedZipCount++;
 				}
 			}
 
 			await restoreSelectedCSVCard(selectedRowIndex, selectedFace);
-			var resultMessage = 'Finished: ' + (totalCards - failedCards.length) + ' image(s) exported across ' +
-				chunks.size + ' ZIP file(s).';
+			var hasReportContent = preflight.failures.length || preflight.validationFailures.length ||
+				failedCards.length || warningCards.length;
+			if (hasReportContent) {
+				var reportText = batchExportReport(preflight, failedCards, warningCards, exportedImages, totalCards);
+				var reportBlob = new Blob([reportText], {type:'text/plain;charset=utf-8'});
+				var reportName = 'CSV Batch Export Report.txt';
+				if (usesFolderPicker && directoryHandle) {
+					await writeBlobToDirectory(directoryHandle, reportName, reportBlob);
+				} else {
+					downloadBlob(reportBlob, reportName);
+				}
+			}
+			var skippedImages = totalCards - exportedImages;
+			var resultMessage = 'Finished: ' + exportedImages + ' image(s) exported across ' +
+				exportedZipCount + ' ZIP file(s).';
+			if (skippedImages) {
+				resultMessage += ' Skipped ' + skippedImages + ' image(s); see CSV Batch Export Report.txt for details.';
+			}
 			if (failedCards.length) {
 				resultMessage += ' Failed: ' + failedCards.join(', ') + '.';
 			}
 			if (warningCards.length) {
 				resultMessage += ' Text warnings: ' + warningCards.join(' | ') + '.';
 			}
-			if (!usesFolderPicker && chunks.size > 1) {
+			if (!usesFolderPicker && exportedZipCount > 1) {
 				resultMessage += ' If Edge blocked some ZIPs, allow multiple downloads and run the export again.';
 			}
 			status.textContent = resultMessage;
