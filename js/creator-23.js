@@ -413,12 +413,16 @@ function rotateTextCollection(collection, oldWidth, oldHeight, clockwise) {
 function rotateFrameDefinition(frame, oldWidth, oldHeight, clockwise) {
 	if (!frame) return;
 	frame.bounds = frame.bounds || {x:0, y:0, width:1, height:1};
+	frame.maskCanvasBounds = frame.maskCanvasBounds || {x:0, y:0, width:1, height:1};
 	rotatePositionedBounds(frame.bounds, oldWidth, oldHeight, clockwise);
 	if (frame.ogBounds) rotatePositionedBounds(frame.ogBounds, oldWidth, oldHeight, clockwise);
+	rotatePositionedBounds(frame.maskCanvasBounds, oldWidth, oldHeight, clockwise);
 	frame.rotation = normalizeRotationDegrees((Number(frame.rotation) || 0) + (clockwise ? 90 : -90));
 	if (frame.editorDefaults) {
 		if (frame.editorDefaults.bounds) rotatePositionedBounds(frame.editorDefaults.bounds, oldWidth, oldHeight, clockwise);
 		if (frame.editorDefaults.ogBounds) rotatePositionedBounds(frame.editorDefaults.ogBounds, oldWidth, oldHeight, clockwise);
+		frame.editorDefaults.maskCanvasBounds = frame.editorDefaults.maskCanvasBounds || {x:0, y:0, width:1, height:1};
+		rotatePositionedBounds(frame.editorDefaults.maskCanvasBounds, oldWidth, oldHeight, clockwise);
 		frame.editorDefaults.rotation = normalizeRotationDegrees(
 			(Number(frame.editorDefaults.rotation) || 0) + (clockwise ? 90 : -90)
 		);
@@ -463,6 +467,10 @@ function prepareNewDesignElementForOrientation(element) {
 	if (rotation === 90) {
 		var bounds = element.bounds || element;
 		rotatePositionedBounds(bounds, card.height, card.width, true);
+		if (element.bounds) {
+			element.maskCanvasBounds = element.maskCanvasBounds || {x:0, y:0, width:1, height:1};
+			rotatePositionedBounds(element.maskCanvasBounds, card.height, card.width, true);
+		}
 		element.rotation = normalizeRotationDegrees((Number(element.rotation) || 0) + 90);
 	}
 	element.orientationPrepared = card ? card.orientation : 'portrait';
@@ -1054,6 +1062,7 @@ function getFrameEditorState(frame) {
 	return {
 		bounds: cloneFrameEditorValue(frame.bounds || {}),
 		ogBounds: cloneFrameEditorValue(frame.ogBounds),
+		maskCanvasBounds: cloneFrameEditorValue(frame.maskCanvasBounds),
 		opacity: frame.opacity === undefined ? 100 : Number(frame.opacity),
 		erase: !!frame.erase,
 		preserveAlpha: !!frame.preserveAlpha,
@@ -1099,6 +1108,8 @@ function applyFrameEditorState(frame, state) {
 	frame.bounds = cloneDesignValue(state.bounds || {});
 	if (state.ogBounds === undefined) delete frame.ogBounds;
 	else frame.ogBounds = cloneDesignValue(state.ogBounds);
+	if (state.maskCanvasBounds === undefined) delete frame.maskCanvasBounds;
+	else frame.maskCanvasBounds = cloneDesignValue(state.maskCanvasBounds);
 	frame.opacity = state.opacity;
 	frame.erase = !!state.erase;
 	frame.preserveAlpha = !!state.preserveAlpha;
@@ -1436,6 +1447,11 @@ function resetSelectedFrame() {
 	} else {
 		selectedFrame.ogBounds = defaults.ogBounds;
 	}
+	if (defaults.maskCanvasBounds === undefined) {
+		delete selectedFrame.maskCanvasBounds;
+	} else {
+		selectedFrame.maskCanvasBounds = defaults.maskCanvasBounds;
+	}
 	selectedFrame.opacity = defaults.opacity;
 	selectedFrame.erase = defaults.erase;
 	selectedFrame.preserveAlpha = defaults.preserveAlpha;
@@ -1603,10 +1619,22 @@ function drawFrames() {
 			frameMaskingContext.drawImage(black, 0, 0, frameMaskingCanvas.width, frameMaskingCanvas.height);
 			frameMaskingContext.globalCompositeOperation = 'source-in';
 			item.masks.forEach(mask => {
-				const maskX = scaleX((bounds.x || 0) - (ogBounds.x || 0) - ((ogBounds.x || 0) * ((bounds.width || 1) / (ogBounds.width || 1) - 1)));
-				const maskY = scaleY((bounds.y || 0) - (ogBounds.y || 0) - ((ogBounds.y || 0) * ((bounds.height || 1) / (ogBounds.height || 1) - 1)));
-				const maskWidth = scaleWidth((bounds.width || 1) / (ogBounds.width || 1));
-				const maskHeight = scaleHeight((bounds.height || 1) / (ogBounds.height || 1));
+				// Masks are authored against the complete source canvas. Keep that
+				// source canvas in the same local coordinate system as the frame
+				// image so card-level orientation changes rotate both together.
+				const maskCanvasBounds = item.maskCanvasBounds || {x:0, y:0, width:1, height:1};
+				const boundsWidth = Number(bounds.width) || 1;
+				const boundsHeight = Number(bounds.height) || 1;
+				const originalWidth = Number(ogBounds.width) || 1;
+				const originalHeight = Number(ogBounds.height) || 1;
+				const scaleHorizontal = boundsWidth / originalWidth;
+				const scaleVertical = boundsHeight / originalHeight;
+				const maskX = scaleX((Number(bounds.x) || 0) +
+					((Number(maskCanvasBounds.x) || 0) - (Number(ogBounds.x) || 0)) * scaleHorizontal);
+				const maskY = scaleY((Number(bounds.y) || 0) +
+					((Number(maskCanvasBounds.y) || 0) - (Number(ogBounds.y) || 0)) * scaleVertical);
+				const maskWidth = scaleWidth((Number(maskCanvasBounds.width) || 1) * scaleHorizontal);
+				const maskHeight = scaleHeight((Number(maskCanvasBounds.height) || 1) * scaleVertical);
 				drawFrameLayerMask(frameMaskingContext, mask.image, maskX, maskY, maskWidth, maskHeight, item, frameX + frameWidth / 2, frameY + frameHeight / 2);
 			});
 			if (item.preserveAlpha) { //preserves alpha, and blends colors using an alpha that only cares about the mask(s), and the user-set opacity value
