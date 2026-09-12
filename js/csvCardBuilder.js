@@ -1682,14 +1682,21 @@
 		var csvState = CSVImporter.getState();
 		if (!templateCard) {
 			var templateColumn = csvState.mappings.indexOf('field:template');
+			var frameTypeColumn = csvState.mappings.indexOf('field:frameType');
+			var frameVariantColumn = csvState.mappings.indexOf('field:frameVariant');
 			var includeColumn = csvState.mappings.indexOf('field:include');
-			var missingTemplateRow = csvState.rows.findIndex(function (row) {
+			var missingCardSourceRow = csvState.rows.findIndex(function (row) {
 				var includeValue = includeColumn === -1 ? '' : String(row[includeColumn] || '').trim().toLowerCase();
 				var included = includeColumn === -1 || !['false', 'no', 'n', '0', 'off', 'exclude', 'skip'].includes(includeValue);
-				return included && (templateColumn === -1 || !String(row[templateColumn] || '').trim());
+				var hasTemplate = templateColumn !== -1 && String(row[templateColumn] || '').trim();
+				var hasBuiltInFrame =
+					(frameTypeColumn !== -1 && String(row[frameTypeColumn] || '').trim()) ||
+					(frameVariantColumn !== -1 && String(row[frameVariantColumn] || '').trim());
+				return included && !hasTemplate && !hasBuiltInFrame;
 			});
-			if (missingTemplateRow !== -1) {
-				status.textContent = 'Row ' + (missingTemplateRow + 2) + ' needs a saved Template name, or capture the current card as the fallback template.';
+			if (missingCardSourceRow !== -1) {
+				status.textContent = 'Row ' + (missingCardSourceRow + 2) +
+					' needs Frame Type/Frame Variant, a saved Template name, or a captured fallback card.';
 				return;
 			}
 		}
