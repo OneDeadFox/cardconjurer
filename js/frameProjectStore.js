@@ -241,13 +241,242 @@
 		return asset.sourceUrl;
 	}
 
+	function normalizeCustomSymbolToken(value) {
+		return String(value || '').trim().replace(/^\{|\}$/g, '').toLowerCase();
+	}
+
+	function getCustomSymbolAssets() {
+		return assets.filter(function (asset) { return asset.kind === 'custom-symbol'; });
+	}
+
+	function customSymbolValidationError(token, ignoreId) {
+		token = normalizeCustomSymbolToken(token);
+		if (!/^[a-z][a-z0-9_-]{0,31}$/.test(token)) {
+			return 'Use 1-32 characters: start with a letter, then use letters, numbers, hyphens, or underscores.';
+		}
+		if (window.CardConjurerManaSymbols && window.CardConjurerManaSymbols.isReserved(token)) {
+			return 'The code {' + token + '} is reserved by Card Conjurer.';
+		}
+		var duplicate = getCustomSymbolAssets().find(function (asset) {
+			return asset.id !== ignoreId && normalizeCustomSymbolToken(asset.token) === token;
+		});
+		return duplicate ? 'A custom symbol already uses {' + token + '}.' : '';
+	}
+
+	function renderCustomSymbolOptions(selectedId) {
+		var select = document.querySelector('#custom-symbol-list');
+		if (!select) {
+			return;
+		}
+		var symbolAssets = getCustomSymbolAssets();
+		select.innerHTML = '';
+		if (!symbolAssets.length) {
+			var empty = document.createElement('option');
+			empty.value = '';
+			empty.textContent = 'No custom symbols saved';
+			select.appendChild(empty);
+			select.disabled = true;
+			var preview = document.querySelector('#custom-symbol-preview');
+			if (preview) {
+				preview.hidden = true;
+				preview.removeAttribute('src');
+			}
+			return;
+		}
+		select.disabled = false;
+		symbolAssets.sort(function (left, right) {
+			return String(left.token || '').localeCompare(String(right.token || ''));
+		}).forEach(function (asset) {
+			var option = document.createElement('option');
+			option.value = asset.id;
+			option.textContent = '{' + asset.token + '} — ' + asset.name;
+			select.appendChild(option);
+		});
+		if (selectedId && symbolAssets.some(function (asset) { return asset.id === selectedId; })) {
+			select.value = selectedId;
+		}
+		previewSelectedCustomSymbol();
+	}
+
+	async function previewSelectedCustomSymbol() {
+		var select = document.querySelector('#custom-symbol-list');
+		var asset = select && getCustomSymbolAssets().find(function (item) { return item.id === select.value; });
+		var preview = document.querySelector('#custom-symbol-preview');
+		if (!asset) {
+			if (preview) { preview.hidden = true; }
+			return;
+		}
+		var tokenInput = document.querySelector('#custom-symbol-token');
+		if (tokenInput) { tokenInput.value = asset.token || ''; }
+		if (preview) {
+			try {
+				preview.src = await getAssetSource(asset.id);
+				preview.alt = 'Preview of {' + asset.token + '}';
+				preview.hidden = false;
+			} catch (error) {
+				preview.hidden = true;
+			}
+		}
+	}
+
+	async function syncCustomManaSymbols(selectedId) {
+		if (!window.CardConjurerManaSymbols) {
+			return;
+		}
+		window.CardConjurerManaSymbols.clear();
+		var failures = [];
+		for (var asset of getCustomSymbolAssets()) {
+			try {
+				await window.CardConjurerManaSymbols.register(asset.token, await getAssetSource(asset.id));
+			} catch (error) {
+				failures.push('{' + asset.token + '}');
+			}
+		}
+		renderCustomSymbolOptions(selectedId);
+		var status = document.querySelector('#custom-symbol-status');
+		if (status && failures.length) {
+			setStatus('#custom-symbol-status', 'Could not load ' + failures.join(', ') + '. Replace or delete the affected symbol.', true);
+		}
+	}
+
+	async function saveCustomSymbol(token, file) {
+		token = normalizeCustomSymbolToken(token);
+		var existing = getCustomSymbolAssets().find(function (asset) {
+			return normalizeCustomSymbolToken(asset.token) === token;
+		});
+		var validationError = customSymbolValidationError(token, existing && existing.id);
+		if (validationError) {
+			setStatus('#custom-symbol-status', validationError, true);
+			return;
+		}
+		if (!file) {
+			setStatus('#custom-symbol-status', 'Choose a PNG, SVG, JPG, or WebP image first.', true);
+			return;
+		}
+		if (!String(file.type || '').startsWith('image/')) {
+			setStatus('#custom-symbol-status', '"' + file.name + '" is not an image file.', true);
+			return;
+		}
+		try {
+			var now = new Date().toISOString();
+			var record = {
+				id: existing ? existing.id : makeId('asset'),
+				name: extensionlessName(file.name),
+				kind: 'custom-symbol',
+				token: token,
+				mimeType: file.type,
+				blob: file,
+				createdAt: existing ? existing.createdAt : now,
+				updatedAt: now
+			};
+			await putOne(ASSET_STORE, record);
+			if (objectUrls.has(record.id)) {
+				URL.revokeObjectURL(objectUrls.get(record.id));
+				objectUrls.delete(record.id);
+			}
+			await refreshAssets(null, record.id);
+			var fileInput = document.querySelector('#custom-symbol-file');
+			if (fileInput) { fileInput.value = ''; }
+			setStatus('#custom-symbol-status', (existing ? 'Replaced ' : 'Saved ') + '{' + token + '}. It can now be used in any text or CSV field.', false);
+		} catch (error) {
+			setStatus('#custom-symbol-status', error.message, true);
+		}
+	}
+
+	async function renameSelectedCustomSymbol(token) {
+		var select = document.querySelector('#custom-symbol-list');
+		var asset = select && getCustomSymbolAssets().find(function (item) { return item.id === select.value; });
+		if (!asset) {
+			setStatus('#custom-symbol-status', 'Select a custom symbol first.', true);
+			return;
+		}
+		token = normalizeCustomSymbolToken(token);
+		var validationError = customSymbolValidationError(token, asset.id);
+		if (validationError) {
+			setStatus('#custom-symbol-status', validationError, true);
+			return;
+		}
+		var oldToken = asset.token;
+		asset.token = token;
+		asset.updatedAt = new Date().toISOString();
+		await putOne(ASSET_STORE, asset);
+		await refreshAssets(null, asset.id);
+		setStatus('#custom-symbol-status', 'Renamed {' + oldToken + '} to {' + token + '}. Existing card text is not changed automatically.', false);
+	}
+
+	async function deleteSelectedCustomSymbol() {
+		var select = document.querySelector('#custom-symbol-list');
+		var asset = select && getCustomSymbolAssets().find(function (item) { return item.id === select.value; });
+		if (!asset) {
+			setStatus('#custom-symbol-status', 'Select a custom symbol first.', true);
+			return;
+		}
+		var tokenPattern = '{' + normalizeCustomSymbolToken(asset.token) + '}';
+		var referencingProjects = projects.filter(function (project) {
+			var serialized = JSON.stringify(project.card || {}).toLowerCase();
+			return serialized.indexOf(tokenPattern) !== -1 || serialized.indexOf(asset.id.toLowerCase()) !== -1;
+		});
+		var warning = 'Delete the custom symbol ' + tokenPattern + '?';
+		if (referencingProjects.length) {
+			warning += '\n\nIt is used by ' + referencingProjects.length + ' saved project' + (referencingProjects.length === 1 ? '' : 's') + '.';
+		}
+		if (!confirm(warning)) {
+			return;
+		}
+		await deleteOne(ASSET_STORE, asset.id);
+		if (objectUrls.has(asset.id)) {
+			URL.revokeObjectURL(objectUrls.get(asset.id));
+			objectUrls.delete(asset.id);
+		}
+		await refreshAssets();
+		setStatus('#custom-symbol-status', 'Deleted ' + tokenPattern + '.', false);
+	}
+
+	function insertSelectedCustomSymbol() {
+		var select = document.querySelector('#custom-symbol-list');
+		var asset = select && getCustomSymbolAssets().find(function (item) { return item.id === select.value; });
+		var editor = document.querySelector('#text-editor');
+		if (!asset || !editor) {
+			setStatus('#custom-symbol-status', 'Select a custom symbol and text field first.', true);
+			return;
+		}
+		var code = '{' + asset.token + '}';
+		var start = editor.selectionStart === null ? editor.value.length : editor.selectionStart;
+		var end = editor.selectionEnd === null ? start : editor.selectionEnd;
+		editor.value = editor.value.slice(0, start) + code + editor.value.slice(end);
+		editor.focus();
+		editor.setSelectionRange(start + code.length, start + code.length);
+		if (typeof textEdited === 'function') {
+			textEdited();
+		}
+		setStatus('#custom-symbol-status', 'Inserted ' + code + ' into the selected text field.', false);
+	}
+
+	function uniqueImportedSymbolToken(value, claimedTokens) {
+		var base = normalizeCustomSymbolToken(value).replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+		if (!/^[a-z]/.test(base)) {
+			base = 'symbol-' + base;
+		}
+		base = base.slice(0, 32) || 'imported-symbol';
+		var candidate = base;
+		var counter = 2;
+		while (claimedTokens.has(candidate) || (window.CardConjurerManaSymbols && window.CardConjurerManaSymbols.isReserved(candidate))) {
+			var suffix = counter === 2 ? '-imported' : '-imported-' + counter;
+			candidate = base.slice(0, 32 - suffix.length) + suffix;
+			counter++;
+		}
+		claimedTokens.add(candidate);
+		return candidate;
+	}
+
 	function renderAssetOptions(selectedId) {
 		var select = document.querySelector('#frame-asset-list');
 		if (!select) {
 			return;
 		}
+		var frameAssets = assets.filter(function (asset) { return asset.kind !== 'custom-symbol'; });
 		select.innerHTML = '';
-		if (!assets.length) {
+		if (!frameAssets.length) {
 			var empty = document.createElement('option');
 			empty.value = '';
 			empty.textContent = 'No saved frame assets';
@@ -256,22 +485,23 @@
 			return;
 		}
 		select.disabled = false;
-		assets.forEach(function (asset) {
+		frameAssets.forEach(function (asset) {
 			var option = document.createElement('option');
 			option.value = asset.id;
 			option.textContent = asset.name + ' (' + (asset.kind || 'frame') + ')';
 			select.appendChild(option);
 		});
-		if (selectedId && assets.some(function (asset) { return asset.id === selectedId; })) {
+		if (selectedId && frameAssets.some(function (asset) { return asset.id === selectedId; })) {
 			select.value = selectedId;
 		}
 	}
 
-	async function refreshAssets(selectedId) {
+	async function refreshAssets(selectedId, selectedSymbolId) {
 		assets = (await getAll(ASSET_STORE)).sort(function (left, right) {
 			return left.name.localeCompare(right.name);
 		});
 		renderAssetOptions(selectedId);
+		await syncCustomManaSymbols(selectedSymbolId);
 		window.dispatchEvent(new CustomEvent('frameassetschanged'));
 	}
 
@@ -382,6 +612,9 @@
 		if (String(snapshot.artSource || '').indexOf('data:') === 0 || String(snapshot.artSource || '').indexOf('blob:') === 0) {
 			snapshot.artSource = '/img/blank.png';
 		}
+		snapshot.customSymbols = getCustomSymbolAssets().map(function (asset) {
+			return {assetId: asset.id, token: asset.token};
+		});
 		return snapshot;
 	}
 
@@ -578,6 +811,31 @@
 		return result;
 	}
 
+	function collectCustomSymbolTokens(value, knownTokens, result, visited) {
+		result = result || new Set();
+		visited = visited || new Set();
+		if (typeof value === 'string') {
+			value.replace(/\{([^{}]+)\}/g, function (match, token) {
+				token = normalizeCustomSymbolToken(token);
+				if (knownTokens.has(token)) {
+					result.add(token);
+				}
+				return match;
+			});
+			return result;
+		}
+		if (!value || typeof value !== 'object' || visited.has(value)) {
+			return result;
+		}
+		visited.add(value);
+		if (Array.isArray(value)) {
+			value.forEach(function (item) { collectCustomSymbolTokens(item, knownTokens, result, visited); });
+		} else {
+			Object.keys(value).forEach(function (key) { collectCustomSymbolTokens(value[key], knownTokens, result, visited); });
+		}
+		return result;
+	}
+
 	function archiveExtension(mimeType) {
 		var extensions = {
 			'image/png': 'png',
@@ -625,7 +883,14 @@
 				throw new Error('The selected frame project could not be found.');
 			}
 			var zip = new JSZip();
-			var assetIds = Array.from(collectAssetIds(project.card));
+			var assetIdSet = collectAssetIds(project.card);
+			var symbolsByToken = new Map(getCustomSymbolAssets().map(function (asset) {
+				return [normalizeCustomSymbolToken(asset.token), asset];
+			}));
+			collectCustomSymbolTokens(project.card, new Set(symbolsByToken.keys())).forEach(function (token) {
+				assetIdSet.add(symbolsByToken.get(token).id);
+			});
+			var assetIds = Array.from(assetIdSet);
 			var exportedAssets = [];
 			var linkedAssetWarnings = [];
 
@@ -654,6 +919,9 @@
 					createdAt: asset.createdAt || '',
 					updatedAt: asset.updatedAt || ''
 				};
+				if (asset.kind === 'custom-symbol') {
+					metadata.token = asset.token;
+				}
 				if (blob) {
 					metadata.file = 'assets/' + String(index + 1).padStart(3, '0') + '-' + asset.id + '.' + archiveExtension(metadata.mimeType);
 					zip.file(metadata.file, blob);
@@ -716,6 +984,33 @@
 		return value;
 	}
 
+	function rewriteCustomSymbolReferences(value, tokenMap, visited) {
+		visited = visited || new Set();
+		if (typeof value === 'string') {
+			return value.replace(/\{([^{}]+)\}/g, function (match, token) {
+				var replacement = tokenMap[normalizeCustomSymbolToken(token)];
+				return replacement ? '{' + replacement + '}' : match;
+			});
+		}
+		if (!value || typeof value !== 'object' || visited.has(value)) {
+			return value;
+		}
+		visited.add(value);
+		if (value.token && tokenMap[normalizeCustomSymbolToken(value.token)]) {
+			value.token = tokenMap[normalizeCustomSymbolToken(value.token)];
+		}
+		if (Array.isArray(value)) {
+			for (var index = 0; index < value.length; index++) {
+				value[index] = rewriteCustomSymbolReferences(value[index], tokenMap, visited);
+			}
+		} else {
+			Object.keys(value).forEach(function (key) {
+				value[key] = rewriteCustomSymbolReferences(value[key], tokenMap, visited);
+			});
+		}
+		return value;
+	}
+
 	function uniqueImportedProjectName(value) {
 		var base = String(value || 'Imported Frame Project').trim() || 'Imported Frame Project';
 		var used = new Set(projects.map(function (project) { return String(project.name || '').trim().toLowerCase(); }));
@@ -767,7 +1062,11 @@
 				throw new Error('This project contains too many assets to import safely.');
 			}
 			var idMap = Object.create(null);
+			var tokenMap = Object.create(null);
 			var importedAssets = [];
+			var claimedTokens = new Set(getCustomSymbolAssets().map(function (asset) {
+				return normalizeCustomSymbolToken(asset.token);
+			}));
 			var now = new Date().toISOString();
 
 			for (var index = 0; index < assetMetadata.length; index++) {
@@ -786,6 +1085,14 @@
 					createdAt: metadata.createdAt || now,
 					updatedAt: now
 				};
+				if (record.kind === 'custom-symbol') {
+					var oldToken = normalizeCustomSymbolToken(metadata.token);
+					if (!oldToken) {
+						throw new Error('The project backup contains a custom symbol without a code.');
+					}
+					record.token = uniqueImportedSymbolToken(oldToken, claimedTokens);
+					tokenMap[oldToken] = record.token;
+				}
 				if (metadata.file) {
 					var archivePath = String(metadata.file);
 					if (!/^assets\/[A-Za-z0-9._-]+$/.test(archivePath)) {
@@ -812,6 +1119,7 @@
 				throw new Error('The project backup is incomplete and is missing ' + missingIds.length + ' referenced asset' + (missingIds.length === 1 ? '' : 's') + '.');
 			}
 			var importedCard = rewriteAssetReferences(JSON.parse(JSON.stringify(manifest.project.card)), idMap);
+			importedCard = rewriteCustomSymbolReferences(importedCard, tokenMap);
 			var importedProject = {
 				id: makeId('project'),
 				name: uniqueImportedProjectName(manifest.project.name),
@@ -840,7 +1148,10 @@
 		try {
 			await Promise.all([refreshAssets(), refreshProjects()]);
 			setStatus('#frame-project-status', 'Frame projects are stored on this device. Export a .ccproject backup to keep a portable copy.', false);
-			setStatus('#frame-asset-status', assets.length ? assets.length + ' saved frame asset' + (assets.length === 1 ? '' : 's') + ' available.' : 'No saved frame assets yet.', false);
+			var frameAssetCount = assets.filter(function (asset) { return asset.kind !== 'custom-symbol'; }).length;
+			var customSymbolCount = getCustomSymbolAssets().length;
+			setStatus('#frame-asset-status', frameAssetCount ? frameAssetCount + ' saved frame asset' + (frameAssetCount === 1 ? '' : 's') + ' available.' : 'No saved frame assets yet.', false);
+			setStatus('#custom-symbol-status', customSymbolCount ? customSymbolCount + ' custom symbol' + (customSymbolCount === 1 ? '' : 's') + ' ready.' : 'No custom symbols saved yet.', false);
 		} catch (error) {
 			setStatus('#frame-project-status', error.message, true);
 			setStatus('#frame-asset-status', error.message, true);
@@ -864,6 +1175,11 @@
 		deleteSelectedProject: deleteSelectedProject,
 		exportSelectedProject: exportSelectedProject,
 		importProjectFile: importProjectFile,
+		saveCustomSymbol: saveCustomSymbol,
+		renameSelectedCustomSymbol: renameSelectedCustomSymbol,
+		deleteSelectedCustomSymbol: deleteSelectedCustomSymbol,
+		insertSelectedCustomSymbol: insertSelectedCustomSymbol,
+		previewSelectedCustomSymbol: previewSelectedCustomSymbol,
 		saveSourceAsset: saveSourceAsset,
 		getAssetSource: getAssetSource,
 		getAssets: function () { return assets.slice(); },

@@ -733,6 +733,75 @@ function findManaSymbolIndex(string) {
 function getManaSymbol(key) {
 	return mana.get(key);
 }
+
+const builtInManaSymbolNames = new Set(mana.keys());
+const customManaSymbolNames = new Set();
+const reservedCustomSymbolCodes = new Set([
+	'line', 'lns', 'linenospace', 'bullet', 'bar', 'i', '/i', 'bold', '/bold',
+	'left', 'center', 'right', 'justify-left', 'justify-center', 'justify-right',
+	'planechase', 'indent', '/indent', 'savex', 'loadx', 'savex2', 'loadx2',
+	'manacolordefault', 'fixtextalign', 'divider', 'flavor', 'oldflavor', 'cardname'
+]);
+const reservedCustomSymbolPrefixes = [
+	'ruby:', 'conditionalcolor', 'fontcolor', 'fontsize', 'font', 'outlinecolor',
+	'outline', 'linecap', 'linejoin', 'upinline', 'up', 'down', 'left', 'right',
+	'shadow', 'elemid', 'ptshift', 'rollcolor', 'roll', 'permashift', 'arcradius',
+	'arcstart', 'rotate', 'manacolor', 'kerning'
+];
+
+function normalizeCustomManaSymbolName(value) {
+	return String(value || '').trim().replace(/^\{|\}$/g, '').toLowerCase();
+}
+
+function isReservedCustomManaSymbolName(value) {
+	const name = normalizeCustomManaSymbolName(value);
+	if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name)) {
+		return true;
+	}
+	return builtInManaSymbolNames.has(name) ||
+		reservedCustomSymbolCodes.has(name) ||
+		reservedCustomSymbolPrefixes.some(prefix => name.startsWith(prefix));
+}
+
+function registerCustomManaSymbol(name, source) {
+	name = normalizeCustomManaSymbolName(name);
+	if (isReservedCustomManaSymbolName(name)) {
+		return Promise.reject(new Error('The custom symbol code {' + name + '} is reserved.'));
+	}
+	return new Promise((resolve, reject) => {
+		const symbolImage = new Image();
+		symbolImage.crossOrigin = 'anonymous';
+		symbolImage.onload = () => {
+			mana.set(name, {
+				name: name,
+				path: source,
+				matchColor: false,
+				width: 1,
+				height: 1,
+				image: symbolImage,
+				custom: true
+			});
+			customManaSymbolNames.add(name);
+			drawTextBuffer();
+			resolve(true);
+		};
+		symbolImage.onerror = () => reject(new Error('The image for {' + name + '} could not be loaded.'));
+		symbolImage.src = source;
+	});
+}
+
+function clearCustomManaSymbols() {
+	customManaSymbolNames.forEach(name => mana.delete(name));
+	customManaSymbolNames.clear();
+	drawTextBuffer();
+}
+
+window.CardConjurerManaSymbols = {
+	register: registerCustomManaSymbol,
+	clear: clearCustomManaSymbols,
+	isReserved: isReservedCustomManaSymbolName,
+	normalize: normalizeCustomManaSymbolName
+};
 //FRAME TAB
 function cloneFrameEditorValue(value) {
 	return value === undefined ? undefined : JSON.parse(JSON.stringify(value));

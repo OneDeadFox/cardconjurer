@@ -381,6 +381,23 @@
 							<input id="text-editor-font-size" class="input" type="number" placeholder="0" value="0" step="1" oninput="fontSizedEdited();">
 						</div>
 						<div class='readable-background padding margin-bottom'>
+							<h5 class='margin-bottom padding input-description'>Custom Mana Symbols</h5>
+							<h5 class='padding input-description'>Upload a symbol, assign a code, then use it anywhere text accepts a code—for example, {fox}.</h5>
+							<div class='input-grid margin-bottom'>
+								<input id='custom-symbol-token' class='input' type='text' maxlength='32' placeholder='Symbol code (example: fox)' aria-label='Custom mana symbol code'>
+								<button class='input' onclick='FrameProjectStore.saveCustomSymbol(document.querySelector("#custom-symbol-token").value, document.querySelector("#custom-symbol-file").files[0]);'>Save / Replace</button>
+							</div>
+							<input id='custom-symbol-file' type='file' accept='.png,.svg,.jpg,.jpeg,.webp,image/*' class='input margin-bottom' aria-label='Choose a custom mana symbol image'>
+							<select id='custom-symbol-list' class='input margin-bottom' onchange='FrameProjectStore.previewSelectedCustomSymbol();' aria-label='Saved custom mana symbols'></select>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='FrameProjectStore.insertSelectedCustomSymbol();'>Insert Code</button>
+								<button class='input' onclick='FrameProjectStore.renameSelectedCustomSymbol(document.querySelector("#custom-symbol-token").value);'>Rename Selected</button>
+							</div>
+							<button class='input margin-bottom' onclick='FrameProjectStore.deleteSelectedCustomSymbol();'>Delete Selected Symbol</button>
+							<img id='custom-symbol-preview' hidden alt='Custom mana symbol preview' style='display:block;max-width:72px;max-height:72px;margin:0 auto 8px;'>
+							<h5 id='custom-symbol-status' class='padding input-description'>Opening the custom symbol library...</h5>
+						</div>
+						<div class='readable-background padding margin-bottom'>
 							<h5 class='collapsible collapsed padding input-description' onclick='toggleCollapse(event);'>
 								Text Code / Mana Symbol Code Reference
 							</h5>
