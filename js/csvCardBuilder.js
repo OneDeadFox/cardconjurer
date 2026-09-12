@@ -753,6 +753,7 @@
 			cardId: mapped.fields.cardId || '',
 			frameType: mapped.fields.frameType || '',
 			frameVariant: mapped.fields.frameVariant || '',
+			orientation: mapped.fields.orientation || '',
 			template: requestedTemplate,
 			outputFilename: mapped.fields.outputFilename || '',
 			transform: transform,
@@ -1405,6 +1406,40 @@
 		}
 	}
 
+	async function applyMappedOrientation(result) {
+		if (typeof setCardOrientation !== 'function') {
+			return '';
+		}
+		var requested = String((result.fields || {}).orientation || '').trim().toLowerCase();
+		var aliases = {
+			portrait:'portrait',
+			vertical:'portrait',
+			standard:'portrait',
+			landscape:'landscape',
+			horizontal:'landscape',
+			battle:'landscape'
+		};
+		var templateOrientation = result.card && Number(result.card.width) > Number(result.card.height)
+			? 'landscape'
+			: 'portrait';
+		var target = templateOrientation;
+		if (requested) {
+			if (!aliases[requested]) {
+				result.warnings.push('Card Orientation "' + requested +
+					'" is not recognized. Use Portrait or Landscape; the template orientation was retained.');
+			} else {
+				target = aliases[requested];
+			}
+		}
+		await setCardOrientation(target, {recordUndo:false});
+		card.orientation = target;
+		card.landscape = target === 'landscape';
+		card.csvImport = card.csvImport || {};
+		card.csvImport.orientation = target;
+		result.appliedOrientation = target;
+		return target;
+	}
+
 	async function applyPreviewToCurrentCard(result) {
 		await applyNamedProjectTemplate(result);
 		await applyBuiltInFrameTemplate(result);
@@ -1428,6 +1463,7 @@
 			}
 		}
 		card.csvImport = JSON.parse(JSON.stringify(result.card.csvImport));
+		await applyMappedOrientation(result);
 
 		['infoNumber', 'infoRarity', 'infoSet', 'infoLanguage', 'infoYear', 'infoArtist'].forEach(function (key) {
 			if (hasOwn(result.card, key)) {
@@ -1773,6 +1809,7 @@
 				'P/T: ' + ((card.text.pt && card.text.pt.text) || '(blank)'),
 				'Template: ' + (renderResult.appliedTemplateName || (renderResult.appliedBuiltInLayout ? 'CSV built-in layout' : 'captured session fallback')),
 				'Frame: ' + (renderResult.appliedFrameType || 'Captured template'),
+				'Orientation: ' + (renderResult.appliedOrientation || currentCardOrientation()),
 				'Art: ' + (renderResult.appliedArt || 'Captured template art'),
 				'Set symbol: ' + (renderResult.appliedSetSymbol || 'Captured template symbol'),
 				'Custom images: ' + ((renderResult.appliedImageFields || []).length),

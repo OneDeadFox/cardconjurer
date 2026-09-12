@@ -227,6 +227,12 @@
 								<option value='frames'>Frame Components</option>
 							</select>
 							<h5 id='frame-design-mode-status' class='padding margin-bottom input-description'>Drag a field label to move it, drag an outlined edge to resize it, or double-click its label to open its editor.</h5>
+							<h5 class='margin-bottom padding input-description'>Card Orientation</h5>
+							<select id='card-orientation' class='input margin-bottom' onchange='setCardOrientation(this.value);' aria-label='Card orientation'>
+								<option value='portrait'>Portrait</option>
+								<option value='landscape'>Landscape</option>
+							</select>
+							<h5 id='card-orientation-status' class='padding margin-bottom input-description'>Portrait canvas. Changing orientation rotates every editable layout field and frame component together.</h5>
 							<button class='input margin-bottom' onclick='undoDesignChange();'>Undo Last Design Change (Ctrl+Z)</button>
 							<h5 id='design-undo-status' class='padding margin-bottom input-description'>No design changes to undo. Up to 30 changes are retained.</h5>
 							<h5 id='frame-decomposition-status' class='padding input-description'>Newly added unmasked built-in frames will be split into editable components when this tab opens.</h5>

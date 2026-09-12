@@ -988,6 +988,7 @@
 				noThumb: true,
 				masks: [],
 				bounds: {x: 0, y: 0, width: 1, height: 1},
+				designCreated: true,
 				opacity: 100
 			};
 			if (!texture.builtIn) {

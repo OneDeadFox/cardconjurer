@@ -88,6 +88,7 @@
 				['field:year', 'Year'],
 				['field:frameType', 'Frame Type'],
 				['field:frameVariant', 'Frame Variant'],
+				['field:orientation', 'Card Orientation'],
 				['field:template', 'Saved Frame Project (Template)']
 			]
 		}
@@ -223,6 +224,9 @@
 		framevariant: 'field:frameVariant',
 		framestyle: 'field:frameVariant',
 		framesubtype: 'field:frameVariant',
+		orientation: 'field:orientation',
+		cardorientation: 'field:orientation',
+		layoutorientation: 'field:orientation',
 		setsymbolx: 'feature:setSymbolX',
 		setsymboly: 'feature:setSymbolY',
 		setsymbolscale: 'feature:setSymbolZoom',

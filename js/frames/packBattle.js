@@ -20,16 +20,15 @@ document.querySelector('#loadFrameVersion').disabled = false;
 document.querySelector('#loadFrameVersion').onclick = async function() {
 	// Notification
 	//resets things so that every frame doesn't have to
-	var previousCardHeight = card.height
 	await resetCardIrregularities({canvas:[2814, 2010, 0, 0]});
 	replacementMasks = {'Right Half':'/img/frames/m15/battle/maskRightHalf.png'};
 	//sets card version
 	card.version = 'battle';
-	//rotation
+	//orientation
+	card.orientation = 'landscape';
 	card.landscape = true;
-	previewContext.translate(0, previousCardHeight / 2);
-	previewContext.rotate(-Math.PI / 2);
-	previewContext.scale(7/5, 5/7);
+	card.orientationRotation = 0;
+	syncCardOrientationState('landscape');
 	//art bounds
 	card.artBounds = {x:167/2100, y:60/1500, width:1873/2100, height:1371/1500};
 	autoFitArt();

@@ -145,7 +145,7 @@ window.FontLoadTracker = {
 };
 
 //card object
-var card = {width:getStandardWidth(), height:getStandardHeight(), marginX:0, marginY:0, frames:[], artSource:fixUri('/img/blank.png'), artX:0, artY:0, artZoom:1, artRotate:0, setSymbolSource:fixUri('/img/blank.png'), setSymbolX:0, setSymbolY:0, setSymbolZoom:1, watermarkSource:fixUri('/img/blank.png'), watermarkX:0, watermarkY:0, watermarkZoom:1, watermarkLeft:'none', watermarkRight:'none', watermarkOpacity:0.4, version:'', manaSymbols:[]};
+var card = {width:getStandardWidth(), height:getStandardHeight(), marginX:0, marginY:0, orientation:'portrait', orientationRotation:0, landscape:false, frames:[], artSource:fixUri('/img/blank.png'), artX:0, artY:0, artZoom:1, artRotate:0, setSymbolSource:fixUri('/img/blank.png'), setSymbolX:0, setSymbolY:0, setSymbolZoom:1, setSymbolRotate:0, watermarkSource:fixUri('/img/blank.png'), watermarkX:0, watermarkY:0, watermarkZoom:1, watermarkRotate:0, watermarkLeft:'none', watermarkRight:'none', watermarkOpacity:0.4, version:'', manaSymbols:[]};
 window.cardDrawingPromiseResolver = null;
 //core images/masks
 const black = new Image(); black.crossOrigin = 'anonymous'; black.src = fixUri('/img/black.png');
@@ -205,6 +205,10 @@ document.querySelector("#info-year").value = card.infoYear;
 var loadedVersions = [];
 //Card Object managament
 async function resetCardIrregularities({canvas = [getStandardWidth(), getStandardHeight(), 0, 0], resetOthers = true} = {}) {
+	var requestedOrientation = Number(canvas[0]) > Number(canvas[1]) ? 'landscape' : 'portrait';
+	if (currentCardOrientation() !== requestedOrientation) {
+		await setCardOrientation(requestedOrientation, {recordUndo:false, redraw:false});
+	}
 	//misc details
 	card.margins = false;
 	card.bottomInfoTranslate = {x:0, y:0};
@@ -212,19 +216,16 @@ async function resetCardIrregularities({canvas = [getStandardWidth(), getStandar
 	card.bottomInfoZoom = 1;
 	card.bottomInfoColor = 'white';
 	replacementMasks = {};
-	//rotation
-	if (card.landscape) {
-		// previewContext.scale(card.width/card.height, card.height/card.width);
-		// previewContext.rotate(Math.PI / 2);
-		// previewContext.translate(0, -card.width / 2);
-		previewContext.setTransform(1, 0, 0, 1, 0, 0);
-		card.landscape = false;
-	}
-	//card size
+	// Reset layout orientation before the selected frame pack applies its own coordinates.
+	previewContext.setTransform(1, 0, 0, 1, 0, 0);
 	card.width = canvas[0];
 	card.height = canvas[1];
 	card.marginX = canvas[2];
 	card.marginY = canvas[3];
+	card.orientationRotation = 0;
+	card.setSymbolRotate = 0;
+	card.watermarkRotate = 0;
+	syncCardOrientationState();
 	//canvases
 	canvasList.forEach(name => {
 		if (window[name + 'Canvas'].width != card.width * (1 + card.marginX) || window[name + 'Canvas'].height != card.height * (1 + card.marginY)) {
@@ -292,6 +293,7 @@ sizeCanvas('watermark');
 sizeCanvas('bottomInfo');
 sizeCanvas('guidelines');
 sizeCanvas('prePT');
+syncCardOrientationState();
 //Scaling
 function scaleX(input) {
 	return Math.round((input + card.marginX) * card.width);
@@ -304,6 +306,248 @@ function scaleY(input) {
 }
 function scaleHeight(input) {
 	return Math.round(input * card.height);
+}
+
+function normalizeCardOrientation(value) {
+	return String(value || '').toLowerCase() === 'landscape' ? 'landscape' : 'portrait';
+}
+function normalizeRotationDegrees(value) {
+	var rotation = Number(value) || 0;
+	rotation %= 360;
+	if (rotation < 0) rotation += 360;
+	return rotation;
+}
+function currentCardOrientation() {
+	if (card && Number(card.width) > Number(card.height)) {
+		return 'landscape';
+	}
+	return 'portrait';
+}
+function syncCardOrientationState(preferredOrientation) {
+	if (!card || !previewCanvas) return;
+	var inferred = currentCardOrientation();
+	var orientation = preferredOrientation ? normalizeCardOrientation(preferredOrientation) : inferred;
+	if ((orientation === 'landscape') !== (Number(card.width) > Number(card.height))) {
+		orientation = inferred;
+	}
+	card.orientation = orientation;
+	card.landscape = orientation === 'landscape';
+	if (card.orientationRotation === undefined) {
+		card.orientationRotation = 0;
+	}
+	var previewWidth = Math.max(1, Math.round(card.width * (1 + 2 * (Number(card.marginX) || 0)) / 2));
+	var previewHeight = Math.max(1, Math.round(card.height * (1 + 2 * (Number(card.marginY) || 0)) / 2));
+	if (previewCanvas.width !== previewWidth || previewCanvas.height !== previewHeight) {
+		previewCanvas.width = previewWidth;
+		previewCanvas.height = previewHeight;
+	}
+	previewContext.setTransform(1, 0, 0, 1, 0, 0);
+	var select = document.querySelector('#card-orientation');
+	if (select) select.value = orientation;
+	var status = document.querySelector('#card-orientation-status');
+	if (status) {
+		status.textContent = (orientation === 'landscape' ? 'Landscape' : 'Portrait') +
+			' canvas: ' + card.width + ' × ' + card.height +
+			'. Changing this rotates the complete editable layout.';
+	}
+}
+function rotateEnvelopeBounds(bounds, clockwise) {
+	if (!bounds) return bounds;
+	var x = Number(bounds.x) || 0;
+	var y = Number(bounds.y) || 0;
+	var width = Number(bounds.width) || 0;
+	var height = Number(bounds.height) || 0;
+	if (clockwise) {
+		bounds.x = 1 - y - height;
+		bounds.y = x;
+	} else {
+		bounds.x = y;
+		bounds.y = 1 - x - width;
+	}
+	bounds.width = height;
+	bounds.height = width;
+	return bounds;
+}
+function rotatePositionedBounds(bounds, oldWidth, oldHeight, clockwise) {
+	if (!bounds) return bounds;
+	var x = Number(bounds.x) || 0;
+	var y = Number(bounds.y) || 0;
+	var width = Number(bounds.width);
+	var height = Number(bounds.height);
+	if (!Number.isFinite(width)) width = 1;
+	if (!Number.isFinite(height)) height = 1;
+	var pixelWidth = width * oldWidth;
+	var pixelHeight = height * oldHeight;
+	var centerX = (x + width / 2) * oldWidth;
+	var centerY = (y + height / 2) * oldHeight;
+	var newWidth = oldHeight;
+	var newHeight = oldWidth;
+	var rotatedCenterX = clockwise ? oldHeight - centerY : centerY;
+	var rotatedCenterY = clockwise ? centerX : oldWidth - centerX;
+	bounds.width = pixelWidth / newWidth;
+	bounds.height = pixelHeight / newHeight;
+	bounds.x = (rotatedCenterX - pixelWidth / 2) / newWidth;
+	bounds.y = (rotatedCenterY - pixelHeight / 2) / newHeight;
+	return bounds;
+}
+function rotateRasterPlacement(placement, pixelWidth, pixelHeight, oldWidth, oldHeight, clockwise) {
+	if (!placement) return placement;
+	var centerX = (Number(placement.x) || 0) * oldWidth + pixelWidth / 2;
+	var centerY = (Number(placement.y) || 0) * oldHeight + pixelHeight / 2;
+	var rotatedCenterX = clockwise ? oldHeight - centerY : centerY;
+	var rotatedCenterY = clockwise ? centerX : oldWidth - centerX;
+	placement.x = (rotatedCenterX - pixelWidth / 2) / oldHeight;
+	placement.y = (rotatedCenterY - pixelHeight / 2) / oldWidth;
+	return placement;
+}
+function rotateTextDefinition(definition, oldWidth, oldHeight, clockwise) {
+	if (!definition) return;
+	rotatePositionedBounds(definition, oldWidth, oldHeight, clockwise);
+	definition.rotation = normalizeRotationDegrees((Number(definition.rotation) || 0) + (clockwise ? 90 : -90));
+}
+function rotateTextCollection(collection, oldWidth, oldHeight, clockwise) {
+	Object.values(collection || {}).forEach(function (definition) {
+		rotateTextDefinition(definition, oldWidth, oldHeight, clockwise);
+	});
+}
+function rotateFrameDefinition(frame, oldWidth, oldHeight, clockwise) {
+	if (!frame) return;
+	frame.bounds = frame.bounds || {x:0, y:0, width:1, height:1};
+	rotatePositionedBounds(frame.bounds, oldWidth, oldHeight, clockwise);
+	if (frame.ogBounds) rotatePositionedBounds(frame.ogBounds, oldWidth, oldHeight, clockwise);
+	frame.rotation = normalizeRotationDegrees((Number(frame.rotation) || 0) + (clockwise ? 90 : -90));
+	if (frame.editorDefaults) {
+		if (frame.editorDefaults.bounds) rotatePositionedBounds(frame.editorDefaults.bounds, oldWidth, oldHeight, clockwise);
+		if (frame.editorDefaults.ogBounds) rotatePositionedBounds(frame.editorDefaults.ogBounds, oldWidth, oldHeight, clockwise);
+		frame.editorDefaults.rotation = normalizeRotationDegrees(
+			(Number(frame.editorDefaults.rotation) || 0) + (clockwise ? 90 : -90)
+		);
+	}
+}
+function rotateDefaultPlacement(placement, image, oldWidth, oldHeight, clockwise, rotationProperty) {
+	if (!placement) return;
+	var zoom = Number(placement.zoom) || 0;
+	rotateRasterPlacement(
+		placement,
+		(Number(image && image.width) || 0) * zoom,
+		(Number(image && image.height) || 0) * zoom,
+		oldWidth,
+		oldHeight,
+		clockwise
+	);
+	if (rotationProperty) {
+		placement[rotationProperty] = normalizeRotationDegrees(
+			(Number(placement[rotationProperty]) || 0) + (clockwise ? 90 : -90)
+		);
+	}
+}
+function rotateStoredDesignDefaults(defaults, oldWidth, oldHeight, clockwise) {
+	if (!defaults) return;
+	rotateTextCollection(defaults.text, oldWidth, oldHeight, clockwise);
+	rotateEnvelopeBounds(defaults.artBounds, clockwise);
+	rotateEnvelopeBounds(defaults.setSymbolBounds, clockwise);
+	rotateEnvelopeBounds(defaults.watermarkBounds, clockwise);
+	rotateDefaultPlacement(defaults.artPlacement, art, oldWidth, oldHeight, clockwise, 'rotate');
+	rotateDefaultPlacement(defaults.setSymbolPlacement, setSymbol, oldWidth, oldHeight, clockwise, 'rotate');
+	rotateDefaultPlacement(defaults.watermarkPlacement, watermark, oldWidth, oldHeight, clockwise, 'rotate');
+	defaults.orientation = clockwise ? 'landscape' : 'portrait';
+	defaults.orientationRotation = normalizeRotationDegrees(
+		(Number(defaults.orientationRotation)||0) + (clockwise ? 90 : -90)
+	);
+	defaults.width = oldHeight;
+	defaults.height = oldWidth;
+}
+function prepareNewDesignElementForOrientation(element) {
+	if (!element || element.orientationPrepared) return element;
+	var rotation = normalizeRotationDegrees(card && card.orientationRotation);
+	if (rotation === 90) {
+		var bounds = element.bounds || element;
+		rotatePositionedBounds(bounds, card.height, card.width, true);
+		element.rotation = normalizeRotationDegrees((Number(element.rotation) || 0) + 90);
+	}
+	element.orientationPrepared = card ? card.orientation : 'portrait';
+	return element;
+}
+async function setCardOrientation(value, options = {}) {
+	if (!card) return false;
+	var target = normalizeCardOrientation(value);
+	var current = currentCardOrientation();
+	if (target === current) {
+		syncCardOrientationState(target);
+		if (options.redraw !== false) {
+			drawCard();
+		}
+		return true;
+	}
+	var before = options.recordUndo === false || typeof createDesignStateSnapshot !== 'function'
+		? null
+		: createDesignStateSnapshot();
+	var oldWidth = Number(card.width) || getStandardWidth();
+	var oldHeight = Number(card.height) || getStandardHeight();
+	var oldMarginX = Number(card.marginX) || 0;
+	var oldMarginY = Number(card.marginY) || 0;
+	var clockwise = current === 'portrait' && target === 'landscape';
+
+	(card.frames || []).forEach(function (frame) {
+		rotateFrameDefinition(frame, oldWidth, oldHeight, clockwise);
+	});
+	rotateTextCollection(card.text, oldWidth, oldHeight, clockwise);
+	rotateTextCollection(card.bottomInfo, oldWidth, oldHeight, clockwise);
+	rotateEnvelopeBounds(card.artBounds, clockwise);
+	rotateEnvelopeBounds(card.setSymbolBounds, clockwise);
+	rotateEnvelopeBounds(card.watermarkBounds, clockwise);
+
+	var artPlacement = {x:Number(card.artX)||0, y:Number(card.artY)||0};
+	rotateRasterPlacement(artPlacement, (Number(art.width)||0)*(Number(card.artZoom)||0),
+		(Number(art.height)||0)*(Number(card.artZoom)||0), oldWidth, oldHeight, clockwise);
+	card.artX = artPlacement.x;
+	card.artY = artPlacement.y;
+	card.artRotate = normalizeRotationDegrees((Number(card.artRotate)||0) + (clockwise ? 90 : -90));
+
+	var symbolPlacement = {x:Number(card.setSymbolX)||0, y:Number(card.setSymbolY)||0};
+	rotateRasterPlacement(symbolPlacement, (Number(setSymbol.width)||0)*(Number(card.setSymbolZoom)||0),
+		(Number(setSymbol.height)||0)*(Number(card.setSymbolZoom)||0), oldWidth, oldHeight, clockwise);
+	card.setSymbolX = symbolPlacement.x;
+	card.setSymbolY = symbolPlacement.y;
+	card.setSymbolRotate = normalizeRotationDegrees((Number(card.setSymbolRotate)||0) + (clockwise ? 90 : -90));
+
+	var watermarkPlacement = {x:Number(card.watermarkX)||0, y:Number(card.watermarkY)||0};
+	rotateRasterPlacement(watermarkPlacement, (Number(watermark.width)||0)*(Number(card.watermarkZoom)||0),
+		(Number(watermark.height)||0)*(Number(card.watermarkZoom)||0), oldWidth, oldHeight, clockwise);
+	card.watermarkX = watermarkPlacement.x;
+	card.watermarkY = watermarkPlacement.y;
+	card.watermarkRotate = normalizeRotationDegrees((Number(card.watermarkRotate)||0) + (clockwise ? 90 : -90));
+
+	rotateStoredDesignDefaults(card.designDefaults, oldWidth, oldHeight, clockwise);
+	card.width = oldHeight;
+	card.height = oldWidth;
+	card.marginX = oldMarginY;
+	card.marginY = oldMarginX;
+	card.orientation = target;
+	card.landscape = target === 'landscape';
+	card.orientationRotation = normalizeRotationDegrees(
+		(Number(card.orientationRotation)||0) + (clockwise ? 90 : -90)
+	);
+
+	canvasList.forEach(function (name) { sizeCanvas(name); });
+	syncCardOrientationState(target);
+	setDesignPlacementInputs('art', {x:card.artX, y:card.artY, zoom:card.artZoom, rotate:card.artRotate});
+	setDesignPlacementInputs('setSymbol', {x:card.setSymbolX, y:card.setSymbolY, zoom:card.setSymbolZoom, rotate:card.setSymbolRotate});
+	setDesignPlacementInputs('watermark', {x:card.watermarkX, y:card.watermarkY, zoom:card.watermarkZoom, rotate:card.watermarkRotate, opacity:card.watermarkOpacity});
+	if (selectedFrame && card.frames.includes(selectedFrame)) refreshSelectedFrameEditor();
+	if (options.redraw !== false) {
+		drawFrames();
+		await drawText();
+		if (card.bottomInfo && typeof bottomInfoEdited === 'function') {
+			await bottomInfoEdited();
+		}
+		if (typeof watermarkEdited === 'function') {
+			watermarkEdited();
+		}
+		drawCard();
+	}
+	if (before) commitDesignUndoSnapshot(before, 'Change card orientation');
+	return true;
 }
 //Other nifty functions
 function getElementIndex(element) {
@@ -875,14 +1119,19 @@ function currentDesignDefaultsSnapshot() {
 		delete textDefaults[key].text;
 	});
 	return {
+		orientation: currentCardOrientation(),
+		orientationRotation: Number(card.orientationRotation) || 0,
+		width: card.width,
+		height: card.height,
 		text: textDefaults,
 		artBounds: cloneDesignValue(card.artBounds),
 		artPlacement: {x:Number(card.artX)||0, y:Number(card.artY)||0, zoom:Number(card.artZoom)||0, rotate:Number(card.artRotate)||0},
 		setSymbolBounds: cloneDesignValue(card.setSymbolBounds),
-		setSymbolPlacement: {x:Number(card.setSymbolX)||0, y:Number(card.setSymbolY)||0, zoom:Number(card.setSymbolZoom)||0},
+		setSymbolPlacement: {x:Number(card.setSymbolX)||0, y:Number(card.setSymbolY)||0, zoom:Number(card.setSymbolZoom)||0, rotate:Number(card.setSymbolRotate)||0},
 		watermarkBounds: cloneDesignValue(card.watermarkBounds),
 		watermarkPlacement: {
 			x:Number(card.watermarkX)||0, y:Number(card.watermarkY)||0, zoom:Number(card.watermarkZoom)||0,
+			rotate:Number(card.watermarkRotate)||0,
 			opacity:card.watermarkOpacity === undefined ? 0.4 : Number(card.watermarkOpacity)
 		}
 	};
@@ -903,15 +1152,23 @@ function saveCurrentDesignAsDefaults() {
 }
 function createDesignStateSnapshot() {
 	return {
+		cardGeometry:{
+			width:card.width, height:card.height, marginX:Number(card.marginX)||0, marginY:Number(card.marginY)||0,
+			orientation:currentCardOrientation(), landscape:!!card.landscape,
+			orientationRotation:Number(card.orientationRotation)||0
+		},
 		frames:(card.frames || []).map(frame => ({id:ensureDesignLayerId(frame), state:getFrameEditorState(frame)})),
 		text:cloneDesignValue(card.text || {}),
+		bottomInfo:cloneDesignValue(card.bottomInfo),
+		designDefaults:cloneDesignValue(card.designDefaults),
 		artBounds:cloneDesignValue(card.artBounds),
 		artPlacement:{x:Number(card.artX)||0, y:Number(card.artY)||0, zoom:Number(card.artZoom)||0, rotate:Number(card.artRotate)||0},
 		setSymbolBounds:cloneDesignValue(card.setSymbolBounds),
-		setSymbolPlacement:{x:Number(card.setSymbolX)||0, y:Number(card.setSymbolY)||0, zoom:Number(card.setSymbolZoom)||0},
+		setSymbolPlacement:{x:Number(card.setSymbolX)||0, y:Number(card.setSymbolY)||0, zoom:Number(card.setSymbolZoom)||0, rotate:Number(card.setSymbolRotate)||0},
 		watermarkBounds:cloneDesignValue(card.watermarkBounds),
 		watermarkPlacement:{
 			x:Number(card.watermarkX)||0, y:Number(card.watermarkY)||0, zoom:Number(card.watermarkZoom)||0,
+			rotate:Number(card.watermarkRotate)||0,
 			opacity:card.watermarkOpacity === undefined ? 0.4 : Number(card.watermarkOpacity)
 		}
 	};
@@ -957,6 +1214,17 @@ function setDesignPlacementInputs(prefix, placement) {
 }
 async function applyDesignStateSnapshot(snapshot) {
 	if (!snapshot) return;
+	if (snapshot.cardGeometry) {
+		card.width=snapshot.cardGeometry.width;
+		card.height=snapshot.cardGeometry.height;
+		card.marginX=snapshot.cardGeometry.marginX;
+		card.marginY=snapshot.cardGeometry.marginY;
+		card.orientation=snapshot.cardGeometry.orientation;
+		card.landscape=!!snapshot.cardGeometry.landscape;
+		card.orientationRotation=snapshot.cardGeometry.orientationRotation||0;
+		canvasList.forEach(function(name){sizeCanvas(name);});
+		syncCardOrientationState(card.orientation);
+	}
 	(snapshot.frames || []).forEach(record => {
 		const frame=(card.frames || []).find(item => ensureDesignLayerId(item)==record.id);
 		if (frame) {
@@ -965,15 +1233,18 @@ async function applyDesignStateSnapshot(snapshot) {
 		}
 	});
 	card.text=cloneDesignValue(snapshot.text||{});
+	card.bottomInfo=cloneDesignValue(snapshot.bottomInfo);
+	card.designDefaults=cloneDesignValue(snapshot.designDefaults);
 	card.artBounds=cloneDesignValue(snapshot.artBounds);
 	card.artX=snapshot.artPlacement.x; card.artY=snapshot.artPlacement.y;
 	card.artZoom=snapshot.artPlacement.zoom; card.artRotate=snapshot.artPlacement.rotate;
 	card.setSymbolBounds=cloneDesignValue(snapshot.setSymbolBounds);
 	card.setSymbolX=snapshot.setSymbolPlacement.x; card.setSymbolY=snapshot.setSymbolPlacement.y;
-	card.setSymbolZoom=snapshot.setSymbolPlacement.zoom;
+	card.setSymbolZoom=snapshot.setSymbolPlacement.zoom; card.setSymbolRotate=snapshot.setSymbolPlacement.rotate||0;
 	card.watermarkBounds=cloneDesignValue(snapshot.watermarkBounds);
 	card.watermarkX=snapshot.watermarkPlacement.x; card.watermarkY=snapshot.watermarkPlacement.y;
-	card.watermarkZoom=snapshot.watermarkPlacement.zoom; card.watermarkOpacity=snapshot.watermarkPlacement.opacity;
+	card.watermarkZoom=snapshot.watermarkPlacement.zoom; card.watermarkRotate=snapshot.watermarkPlacement.rotate||0;
+	card.watermarkOpacity=snapshot.watermarkPlacement.opacity;
 	setDesignPlacementInputs('art',snapshot.artPlacement);
 	setDesignPlacementInputs('setSymbol',snapshot.setSymbolPlacement);
 	setDesignPlacementInputs('watermark',snapshot.watermarkPlacement);
@@ -1042,7 +1313,7 @@ function restoreSetSymbolLayoutDefault() {
 	const undoSnapshot=createDesignStateSnapshot();
 	card.setSymbolBounds=cloneDesignValue(defaults.setSymbolBounds);
 	card.setSymbolX=defaults.setSymbolPlacement.x; card.setSymbolY=defaults.setSymbolPlacement.y;
-	card.setSymbolZoom=defaults.setSymbolPlacement.zoom;
+	card.setSymbolZoom=defaults.setSymbolPlacement.zoom; card.setSymbolRotate=defaults.setSymbolPlacement.rotate||0;
 	setDesignPlacementInputs('setSymbol',defaults.setSymbolPlacement);
 	drawCard();
 	commitDesignUndoSnapshot(undoSnapshot,'Restore set symbol default');
@@ -1053,7 +1324,8 @@ function restoreWatermarkLayoutDefault() {
 	const undoSnapshot=createDesignStateSnapshot();
 	card.watermarkBounds=cloneDesignValue(defaults.watermarkBounds);
 	card.watermarkX=defaults.watermarkPlacement.x; card.watermarkY=defaults.watermarkPlacement.y;
-	card.watermarkZoom=defaults.watermarkPlacement.zoom; card.watermarkOpacity=defaults.watermarkPlacement.opacity;
+	card.watermarkZoom=defaults.watermarkPlacement.zoom; card.watermarkRotate=defaults.watermarkPlacement.rotate||0;
+	card.watermarkOpacity=defaults.watermarkPlacement.opacity;
 	setDesignPlacementInputs('watermark',defaults.watermarkPlacement);
 	watermarkEdited();
 	commitDesignUndoSnapshot(undoSnapshot,'Restore watermark default');
@@ -1702,6 +1974,9 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	var frameToAdd = loadingFrame
 		? loadingFrame
 		: JSON.parse(JSON.stringify(availableFrames[selectedFrameIndex]));
+	if (!loadingFrame && frameToAdd.designCreated) {
+		prepareNewDesignElementForOrientation(frameToAdd);
+	}
 	ensureDesignLayerId(frameToAdd);
 	var maskThumbnail = true;
 	if (!loadingFrame) {
@@ -1950,7 +2225,14 @@ async function uploadFrameOption(imageSource, otherParams) {
 	const assetName = window.FrameProjectStore
 		? FrameProjectStore.sourceFromParams(otherParams, fallbackName)
 		: fallbackName;
-	const uploadedFrame = {name:assetName, src:imageSource, noThumb:true, masks:[]};
+	const uploadedFrame = {
+		name:assetName,
+		src:imageSource,
+		noThumb:true,
+		masks:[],
+		bounds:{x:0, y:0, width:1, height:1},
+		designCreated:true
+	};
 	customCount ++;
 	if (window.FrameProjectStore) {
 		try {
@@ -3448,6 +3730,7 @@ async function addCustomTemplateField(kind) {
 				color: 'black',
 				align: 'left'
 			};
+			prepareNewDesignElementForOrientation(definition[textKey]);
 			loadTextOptions(definition, false);
 			var textIndex = Object.keys(card.text).indexOf(textKey);
 			var textOptions = document.querySelectorAll('#text-options .text-option');
@@ -3463,12 +3746,14 @@ async function addCustomTemplateField(kind) {
 				csvFieldLabel: label,
 				csvImageFieldKey: imageKey,
 				customField: true,
+				designCreated: true,
 				src: '/img/blank.png',
 				noThumb: true,
 				masks: [],
 				bounds: {x: 0.1, y: 0.1, width: 0.25, height: 0.25},
 				opacity: 100
 			};
+			prepareNewDesignElementForOrientation(frame);
 			card.frames = card.frames || [];
 			card.frames.unshift(frame);
 			await addFrame([], frame);
@@ -3831,7 +4116,7 @@ function watermarkEdited() {
 			watermarkContext.drawImage(right, scaleX(0), scaleY(0), scaleWidth(1), scaleHeight(1));
 			watermarkContext.globalCompositeOperation = 'source-in';
 			if (card.watermarkRight == 'default') {
-				watermarkContext.drawImage(watermark, scaleX(card.watermarkX), scaleY(card.watermarkY), watermark.width * card.watermarkZoom, watermark.height * card.watermarkZoom);
+				drawPlacedImage(watermarkContext, watermark, scaleX(card.watermarkX), scaleY(card.watermarkY), watermark.width * card.watermarkZoom, watermark.height * card.watermarkZoom, card.watermarkRotate);
 			} else {
 				watermarkContext.fillStyle = card.watermarkRight;
 				watermarkContext.fillRect(0, 0, watermarkCanvas.width, watermarkCanvas.height);
@@ -3839,13 +4124,13 @@ function watermarkEdited() {
 			watermarkContext.globalCompositeOperation = 'destination-over';
 		}
 		if (card.watermarkLeft == 'default') {
-			watermarkContext.drawImage(watermark, scaleX(card.watermarkX), scaleY(card.watermarkY), watermark.width * card.watermarkZoom, watermark.height * card.watermarkZoom);
+			drawPlacedImage(watermarkContext, watermark, scaleX(card.watermarkX), scaleY(card.watermarkY), watermark.width * card.watermarkZoom, watermark.height * card.watermarkZoom, card.watermarkRotate);
 		} else {
 			watermarkContext.fillStyle = card.watermarkLeft;
 			watermarkContext.fillRect(0, 0, watermarkCanvas.width, watermarkCanvas.height);
 		}
 		watermarkContext.globalCompositeOperation = 'destination-in';
-		watermarkContext.drawImage(watermark, scaleX(card.watermarkX), scaleY(card.watermarkY), watermark.width * card.watermarkZoom, watermark.height * card.watermarkZoom);
+		drawPlacedImage(watermarkContext, watermark, scaleX(card.watermarkX), scaleY(card.watermarkY), watermark.width * card.watermarkZoom, watermark.height * card.watermarkZoom, card.watermarkRotate);
 		watermarkContext.globalAlpha = card.watermarkOpacity;
 		watermarkContext.fillRect(0, 0, watermarkCanvas.width, watermarkCanvas.height);
 	}
@@ -4002,66 +4287,60 @@ function setDefaultCollector() {
 	};
 	localStorage.setItem('defaultCollector', JSON.stringify(defaultCollector));
 }
+function drawPlacedImage(context, image, x, y, width, height, rotation) {
+	var angle = Number(rotation) || 0;
+	if (!angle) {
+		context.drawImage(image, x, y, width, height);
+		return;
+	}
+	context.save();
+	context.translate(x + width / 2, y + height / 2);
+	context.rotate(angle * Math.PI / 180);
+	context.drawImage(image, -width / 2, -height / 2, width, height);
+	context.restore();
+}
 function drawSetSymbol(cardContext, setSymbol, bounds) {
-    if (!bounds) return;
-    
-    const symbolWidth = setSymbol.width * card.setSymbolZoom;
-    const symbolHeight = setSymbol.height * card.setSymbolZoom; 
-    const x = scaleX(card.setSymbolX);
-    const y = scaleY(card.setSymbolY);
+	if (!bounds) return;
+	var symbolWidth = setSymbol.width * card.setSymbolZoom;
+	var symbolHeight = setSymbol.height * card.setSymbolZoom;
+	var x = scaleX(card.setSymbolX);
+	var y = scaleY(card.setSymbolY);
+	var imageToDraw = setSymbol;
+	var drawWidth = symbolWidth;
+	var drawHeight = symbolHeight;
 
-    if (bounds.outlineWidth && bounds.outlineWidth > 0) {
-        // Create temp canvas for outlined symbol
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-        
-        // Scale the outline width the same way text outlines are scaled
-        const outlineWidth = scaleHeight(bounds.outlineWidth);
-        const margin = outlineWidth * 2;
-        tempCanvas.width = symbolWidth + margin;
-        tempCanvas.height = symbolHeight + margin;
-        
-        // Setup stroke style (similar to text outline system)
-        tempCtx.strokeStyle = bounds.outlineColor || 'black';
-        tempCtx.lineWidth = outlineWidth;
-        tempCtx.lineJoin = bounds.lineJoin || 'round';
-        tempCtx.lineCap = bounds.lineCap || 'round';
-        
-        // First pass: Draw outline by stroking the symbol multiple times in a circle pattern
-        const outlineSteps = Math.max(8, Math.ceil(outlineWidth * 2));
-        for (let i = 0; i < outlineSteps; i++) {
-            const angle = (i / outlineSteps) * Math.PI * 2;
-            const offsetX = Math.cos(angle) * (outlineWidth / 2);
-            const offsetY = Math.sin(angle) * (outlineWidth / 2);
-            
-            tempCtx.globalCompositeOperation = 'source-over';
-            tempCtx.drawImage(setSymbol, 
-                outlineWidth + offsetX, 
-                outlineWidth + offsetY, 
-                symbolWidth, 
-                symbolHeight);
-            
-            // Apply the outline color
-            tempCtx.globalCompositeOperation = 'source-in';
-            tempCtx.fillStyle = bounds.outlineColor || 'black';
-            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            tempCtx.globalCompositeOperation = 'destination-over';
-        }
-        
-        // Second pass: Draw the original symbol on top
-        tempCtx.globalCompositeOperation = 'source-over';
-        tempCtx.drawImage(setSymbol, outlineWidth, outlineWidth, symbolWidth, symbolHeight);
-
-        // Draw to main canvas
-        cardContext.drawImage(tempCanvas, 
-            x - outlineWidth, 
-            y - outlineWidth,
-            tempCanvas.width,
-            tempCanvas.height);
-    } else {
-        // Draw main symbol without outline (simple path)
-        cardContext.drawImage(setSymbol, x, y, symbolWidth, symbolHeight);
-    }
+	if (bounds.outlineWidth && bounds.outlineWidth > 0) {
+		var tempCanvas = document.createElement('canvas');
+		var tempCtx = tempCanvas.getContext('2d');
+		var outlineWidth = scaleHeight(bounds.outlineWidth);
+		var margin = outlineWidth * 2;
+		tempCanvas.width = symbolWidth + margin;
+		tempCanvas.height = symbolHeight + margin;
+		tempCtx.strokeStyle = bounds.outlineColor || 'black';
+		tempCtx.lineWidth = outlineWidth;
+		tempCtx.lineJoin = bounds.lineJoin || 'round';
+		tempCtx.lineCap = bounds.lineCap || 'round';
+		var outlineSteps = Math.max(8, Math.ceil(outlineWidth * 2));
+		for (var index = 0; index < outlineSteps; index++) {
+			var angle = (index / outlineSteps) * Math.PI * 2;
+			var offsetX = Math.cos(angle) * (outlineWidth / 2);
+			var offsetY = Math.sin(angle) * (outlineWidth / 2);
+			tempCtx.globalCompositeOperation = 'source-over';
+			tempCtx.drawImage(setSymbol, outlineWidth + offsetX, outlineWidth + offsetY, symbolWidth, symbolHeight);
+			tempCtx.globalCompositeOperation = 'source-in';
+			tempCtx.fillStyle = bounds.outlineColor || 'black';
+			tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+			tempCtx.globalCompositeOperation = 'destination-over';
+		}
+		tempCtx.globalCompositeOperation = 'source-over';
+		tempCtx.drawImage(setSymbol, outlineWidth, outlineWidth, symbolWidth, symbolHeight);
+		imageToDraw = tempCanvas;
+		x -= outlineWidth;
+		y -= outlineWidth;
+		drawWidth = tempCanvas.width;
+		drawHeight = tempCanvas.height;
+	}
+	drawPlacedImage(cardContext, imageToDraw, x, y, drawWidth, drawHeight, card.setSymbolRotate);
 }
 // DESIGN FRAME LAYOUT HIGHLIGHTS
 var activeFrameDesignMode = 'fields';
@@ -4187,7 +4466,9 @@ function drawLayoutHighlights() {
 	}
 	if (layoutHighlightEnabled('layout-highlight-text')) {
 		Object.entries(card.text || {}).forEach(item => {
-			drawLayoutHighlightBox(item[1], '#43d9ff', item[1].name || item[0], {kind:'text', key:item[0], target:item[1]});
+			drawLayoutHighlightBox(item[1], '#43d9ff', item[1].name || item[0], {
+				kind:'text', key:item[0], target:item[1], rotation:item[1].rotation
+			});
 		});
 	}
 	if (layoutHighlightEnabled('layout-highlight-art')) {
@@ -4205,12 +4486,14 @@ function drawLayoutHighlights() {
 		if (card.setSymbolBounds) {
 			drawLayoutHighlightBox(card.setSymbolBounds, '#ffd34e', 'Set Symbol', {
 				kind:'setSymbol', target:card.setSymbolBounds,
-				horizontal:card.setSymbolBounds.horizontal, vertical:card.setSymbolBounds.vertical
+				horizontal:card.setSymbolBounds.horizontal, vertical:card.setSymbolBounds.vertical,
+				rotation:card.setSymbolRotate
 			});
 		}
 		if (card.watermarkBounds) {
 			drawLayoutHighlightBox(card.watermarkBounds, '#ffd34e', 'Watermark', {
-				kind:'watermark', target:card.watermarkBounds, horizontal:'center', vertical:'center'
+				kind:'watermark', target:card.watermarkBounds, horizontal:'center', vertical:'center',
+				rotation:card.watermarkRotate
 			});
 		}
 	}
@@ -4226,6 +4509,20 @@ function pointInsideLayoutRectangle(point, rectangle, padding = 0) {
 	return point.x >= rectangle.x - padding && point.x <= rectangle.x + rectangle.width + padding &&
 		point.y >= rectangle.y - padding && point.y <= rectangle.y + rectangle.height + padding;
 }
+function pointInLayoutAreaCoordinates(point, area) {
+	var rotation = Number(area && area.rotation) || 0;
+	if (!rotation) return point;
+	var rectangle = area.rectangle;
+	var centerX = rectangle.x + rectangle.width / 2;
+	var centerY = rectangle.y + rectangle.height / 2;
+	var radians = -rotation * Math.PI / 180;
+	var deltaX = point.x - centerX;
+	var deltaY = point.y - centerY;
+	return {
+		x:centerX + deltaX * Math.cos(radians) - deltaY * Math.sin(radians),
+		y:centerY + deltaX * Math.sin(radians) + deltaY * Math.cos(radians)
+	};
+}
 function layoutHighlightHit(point, includeInterior = false) {
 	for (var index = layoutHighlightHitAreas.length - 1; index >= 0; index--) {
 		if (pointInsideLayoutRectangle(point, layoutHighlightHitAreas[index].labelRectangle)) {
@@ -4236,30 +4533,32 @@ function layoutHighlightHit(point, includeInterior = false) {
 	for (var areaIndex = layoutHighlightHitAreas.length - 1; areaIndex >= 0; areaIndex--) {
 		const area = layoutHighlightHitAreas[areaIndex];
 		const rectangle = area.rectangle;
-		if (!pointInsideLayoutRectangle(point, rectangle, threshold)) {
+		const localPoint = pointInLayoutAreaCoordinates(point, area);
+		if (!pointInsideLayoutRectangle(localPoint, rectangle, threshold)) {
 			continue;
 		}
-		const onLeft = Math.abs(point.x - rectangle.x) <= threshold;
-		const onRight = Math.abs(point.x - (rectangle.x + rectangle.width)) <= threshold;
-		const onTop = Math.abs(point.y - rectangle.y) <= threshold;
-		const onBottom = Math.abs(point.y - (rectangle.y + rectangle.height)) <= threshold;
+		const onLeft = Math.abs(localPoint.x - rectangle.x) <= threshold;
+		const onRight = Math.abs(localPoint.x - (rectangle.x + rectangle.width)) <= threshold;
+		const onTop = Math.abs(localPoint.y - rectangle.y) <= threshold;
+		const onBottom = Math.abs(localPoint.y - (rectangle.y + rectangle.height)) <= threshold;
 		const horizontal = onLeft ? 'left' : (onRight ? 'right' : '');
 		const vertical = onTop ? 'top' : (onBottom ? 'bottom' : '');
 		if (horizontal || vertical) {
 			return {area:area, action:[vertical, horizontal].filter(Boolean).join('-')};
 		}
-		if (includeInterior && pointInsideLayoutRectangle(point, rectangle)) {
+		if (includeInterior && pointInsideLayoutRectangle(localPoint, rectangle)) {
 			return {area:area, action:'open'};
 		}
 	}
 	return null;
 }
-function layoutHighlightCursor(action) {
+function layoutHighlightCursor(action, area) {
 	if (action == 'move') return 'move';
-	if (action == 'left' || action == 'right') return 'ew-resize';
-	if (action == 'top' || action == 'bottom') return 'ns-resize';
-	if (action == 'top-left' || action == 'bottom-right') return 'nwse-resize';
-	if (action == 'top-right' || action == 'bottom-left') return 'nesw-resize';
+	var quarterTurn = Math.round(normalizeRotationDegrees(area && area.rotation) / 90) % 2;
+	if (action == 'left' || action == 'right') return quarterTurn ? 'ns-resize' : 'ew-resize';
+	if (action == 'top' || action == 'bottom') return quarterTurn ? 'ew-resize' : 'ns-resize';
+	if (action == 'top-left' || action == 'bottom-right') return quarterTurn ? 'nesw-resize' : 'nwse-resize';
+	if (action == 'top-right' || action == 'bottom-left') return quarterTurn ? 'nwse-resize' : 'nesw-resize';
 	return action == 'open' ? 'pointer' : '';
 }
 function updateAnchoredCoordinate(original, delta, edge, anchor) {
@@ -4279,8 +4578,14 @@ function applyLayoutHighlightDrag(point) {
 		return;
 	}
 	const drag = layoutHighlightDrag;
-	const deltaX = (point.x - drag.startPoint.x) * cardCanvas.width / previewCanvas.width / card.width;
-	const deltaY = (point.y - drag.startPoint.y) * cardCanvas.height / previewCanvas.height / card.height;
+	var deltaPoint = point;
+	var deltaStart = drag.startPoint;
+	if (drag.action != 'move' && drag.area.rotation) {
+		deltaPoint = pointInLayoutAreaCoordinates(point, drag.area);
+		deltaStart = pointInLayoutAreaCoordinates(drag.startPoint, drag.area);
+	}
+	const deltaX = (deltaPoint.x - deltaStart.x) * cardCanvas.width / previewCanvas.width / card.width;
+	const deltaY = (deltaPoint.y - deltaStart.y) * cardCanvas.height / previewCanvas.height / card.height;
 	const target = drag.area.kind == 'frame' ? drag.area.target.bounds : drag.area.target;
 	const original = drag.original;
 	if (drag.action == 'move') {
@@ -4412,7 +4717,7 @@ function initializeLayoutHighlightInteractions() {
 			return;
 		}
 		const hit = shouldDrawLayoutHighlights() ? layoutHighlightHit(point, activeFrameDesignMode == 'frames') : null;
-		previewCanvas.style.cursor = layoutHighlightCursor(hit?.action || '');
+		previewCanvas.style.cursor = layoutHighlightCursor(hit?.action || '', hit?.area);
 	});
 	previewCanvas.addEventListener('pointerup', finishLayoutHighlightDrag);
 	previewCanvas.addEventListener('pointercancel', finishLayoutHighlightDrag);
@@ -5939,6 +6244,10 @@ async function loadCardData(cardData, failureLabel) {
 	card.frames = card.frames || [];
 	card.text = card.text || {};
 	card.manaSymbols = card.manaSymbols || [];
+	card.orientation = currentCardOrientation();
+	card.landscape = card.orientation === 'landscape';
+	card.orientationRotation = Number(card.orientationRotation) || 0;
+	syncCardOrientationState(card.orientation);
 
 	// Load values from the card into the editor inputs.
 	document.querySelector('#info-number').value = card.infoNumber || '';
