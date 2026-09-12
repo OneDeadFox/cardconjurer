@@ -11,7 +11,7 @@
 		<!-- Popups -->
 		<div id='frame-element-editor' class='frame-element-editor'>
 			<h2 class='frame-element-editor-title' title='Drag to move this editor'>Frame Image Editor</h2>
-			<h2 class='frame-element-editor-close' onclick='this.parentElement.classList.remove("opened");'>X</h2>
+			<h2 class='frame-element-editor-close' onclick='this.parentElement.classList.remove("opened"); window.CanvasDesignTools?.resume();'>X</h2>
 			<div class='frame-editor-number-grid'>
 				<div class='frame-editor-field'>
 					<h5 class='input-description'>X</h5>
@@ -114,7 +114,7 @@
 		</div>
 		<div id='textbox-editor' class='textbox-editor'>
 			<h2 class='textbox-editor-title'>Textbox Editor</h2>
-			<h2 class='textbox-editor-close' onclick='this.parentElement.classList.remove("opened");'>X</h2>
+			<h2 class='textbox-editor-close' onclick='this.parentElement.classList.remove("opened"); window.CanvasDesignTools?.resume();'>X</h2>
 			<div>
 				<h5 class='input-description'>X</h5>
 				<input id='textbox-editor-x' class='input' type='number' placeholder='X' step='1'>

@@ -4,6 +4,7 @@
 	var start = null;
 	var editorArea = null;
 	var editorUndo = null;
+	var suspended = false;
 	var counters = {text:0, image:0};
 
 	function designActive() {
@@ -75,14 +76,18 @@
 		drawTextBuffer(); drawFrames(); drawCard();
 	}
 	function closeEditor() { if(editorUndo)commitDesignUndoSnapshot(editorUndo,'Edit canvas element'); editorUndo=null; editorArea=null; document.querySelector('#canvas-element-editor').classList.remove('opened'); }
-	function fullEditor() { if(!editorArea)return; if(editorArea.kind==='text'){var i=Object.keys(card.text).indexOf(editorArea.key);activateCreatorEditorTab('text');var option=document.querySelector('#text-options')?.children[i];if(option)option.click();if(i>=0)textboxEditor();} else if(editorArea.kind==='frame'){selectedFrame=editorArea.target;activateCreatorEditorTab('frame');var i=card.frames.indexOf(editorArea.target);var e=document.querySelector('#frame-list')?.children[i];if(e)frameElementClicked({target:e});} else {activateCreatorEditorTab('frame');RulesRange.select(editorArea.key);} closeEditor(); }
-	function choose(next){tool=next;document.querySelectorAll('[data-canvas-tool]').forEach(function(b){b.classList.toggle('active',b.dataset.canvasTool===tool);});previewCanvas.classList.toggle('canvas-tool-crosshair',tool!=='select');}
+	function fullEditor() { if(!editorArea)return; if(editorArea.kind==='text'){var i=Object.keys(card.text).indexOf(editorArea.key);activateCreatorEditorTab('text');var option=document.querySelector('#text-options')?.children[i];if(option)option.click();if(i>=0)textboxEditor();} else if(editorArea.kind==='frame'){selectedFrame=editorArea.target;activateCreatorEditorTab('frame');var i=card.frames.indexOf(editorArea.target);var e=document.querySelector('#frame-list')?.children[i];if(e)frameElementDoubleClicked({target:e});} else {activateCreatorEditorTab('frame');RulesRange.select(editorArea.key);} closeEditor(); suspend(); }
+	function toolColor(kind){return kind==='text'?'#43d9ff':kind==='image'?'#ff59d6':'#b784ff';}
+	function choose(next){tool=next;document.querySelectorAll('[data-canvas-tool]').forEach(function(b){b.classList.toggle('active',b.dataset.canvasTool===tool);});previewCanvas.classList.toggle('canvas-tool-crosshair',tool!=='select');var draft=document.querySelector('#canvas-design-draft');if(draft&&tool!=='select'){var color=toolColor(tool);draft.style.borderColor=color;draft.style.background=color+'33';}}
+	function suspend(){suspended=true;choose('select');document.querySelector('.canvas-design-toolbar')?.classList.remove('opened');document.querySelector('#canvas-design-menu')?.classList.remove('opened');}
+	function resume(){suspended=false;document.querySelector('.canvas-design-toolbar')?.classList.toggle('opened',designActive());}
 	function showMenu(event){if(!designActive())return;event.preventDefault();var hit=layoutHighlightHit(point(event),true);if(hit&&openEditor(hit.area))return;var menu=document.querySelector('#canvas-design-menu');menu.dataset.x=point(event).x;menu.dataset.y=point(event).y;menu.style.left=Math.min(event.clientX,innerWidth-230)+'px';menu.style.top=Math.min(event.clientY,innerHeight-180)+'px';menu.classList.add('opened');}
 	function menuCreate(kind){var menu=document.querySelector('#canvas-design-menu');var p={x:Number(menu.dataset.x),y:Number(menu.dataset.y)};menu.classList.remove('opened');create(kind,pointBounds(p,kind));}
 	function buildUI(){
 		if (document.querySelector('#canvas-element-editor')) return;
 		document.body.insertAdjacentHTML('beforeend',`<div class="canvas-design-toolbar"><button class="input active" data-canvas-tool="select">Select</button><button class="input" data-canvas-tool="text">Text</button><button class="input" data-canvas-tool="image">Image</button><button class="input" data-canvas-tool="range">Range</button></div><div id="canvas-design-menu" class="canvas-design-menu"><button class="input" data-create="text">Add Text Box Here</button><button class="input" data-create="image">Add Image Container Here</button><button class="input" data-create="range">Add Rules Range Here</button></div><div id="canvas-design-draft" class="canvas-design-draft"></div><div id="canvas-element-editor" class="canvas-element-editor"><h2 id="canvas-element-title" class="canvas-element-editor-title">Element</h2><h2 class="canvas-element-editor-close">X</h2><label class="wide">Name<input id="canvas-element-name" class="input"></label><label>X<input id="canvas-element-x" class="input" type="number"></label><label>Y<input id="canvas-element-y" class="input" type="number"></label><label>Width<input id="canvas-element-width" class="input" type="number" min="10"></label><label>Height<input id="canvas-element-height" class="input" type="number" min="10"></label><label>Rotation<input id="canvas-element-rotation" class="input" type="number"></label><label id="canvas-element-flow-row">Module Flow<select id="canvas-element-flow" class="input"><option value="vertical">Vertical</option><option value="horizontal">Horizontal</option></select></label><button id="canvas-element-full" class="input wide">Open Full Editor</button></div>`);
-		function updateVisibility(){document.querySelector('.canvas-design-toolbar').classList.toggle('opened',designActive());if(!designActive()){choose('select');document.querySelector('#canvas-design-menu').classList.remove('opened');}}
+		function updateVisibility(){document.querySelector('.canvas-design-toolbar').classList.toggle('opened',designActive()&&!suspended);if(!designActive()||suspended){choose('select');document.querySelector('#canvas-design-menu').classList.remove('opened');}}
+		function contextChanged(){suspended=false;updateVisibility();}
 		document.querySelectorAll('[data-canvas-tool]').forEach(function(b){b.onclick=function(){choose(b.dataset.canvasTool);};});document.querySelectorAll('[data-create]').forEach(function(b){b.onclick=function(){menuCreate(b.dataset.create);};});
 		document.querySelectorAll('#canvas-element-editor input,#canvas-element-editor select').forEach(function(e){e.onchange=applyEditor;});document.querySelector('.canvas-element-editor-close').onclick=closeEditor;document.querySelector('#canvas-element-full').onclick=fullEditor;
 		var editor=document.querySelector('#canvas-element-editor'),handle=editor.querySelector('.canvas-element-editor-title');handle.addEventListener('pointerdown',function(e){var rect=editor.getBoundingClientRect(),ox=e.clientX-rect.left,oy=e.clientY-rect.top;function move(m){editor.style.left=Math.max(0,Math.min(innerWidth-editor.offsetWidth,m.clientX-ox))+'px';editor.style.top=Math.max(0,Math.min(innerHeight-editor.offsetHeight,m.clientY-oy))+'px';}function stop(){document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',stop);}document.addEventListener('pointermove',move);document.addEventListener('pointerup',stop);e.preventDefault();});
@@ -91,9 +96,9 @@
 		previewCanvas.addEventListener('contextmenu',showMenu);previewCanvas.addEventListener('pointerdown',function(e){if(tool==='select'||e.button!==0||!designActive())return;start=point(e);updateDraft(e);e.stopImmediatePropagation();e.preventDefault();},{capture:true});
 		document.addEventListener('pointermove',updateDraft);document.addEventListener('pointerup',finishDraft);
 		document.addEventListener('pointerdown',function(e){if(!e.target.closest('#canvas-design-menu'))document.querySelector('#canvas-design-menu').classList.remove('opened');});
-		window.addEventListener('frameworkspacechanged',updateVisibility);updateVisibility();
+		window.addEventListener('frameworkspacechanged',contextChanged);window.addEventListener('creatortabchanged',contextChanged);updateVisibility();
 	}
 	if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',buildUI);
 	else buildUI();
-	window.CanvasDesignTools={openEditor:openEditor,closeEditor:closeEditor,choose:choose};
+	window.CanvasDesignTools={openEditor:openEditor,closeEditor:closeEditor,choose:choose,suspend:suspend,resume:resume};
 })();

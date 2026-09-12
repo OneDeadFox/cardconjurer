@@ -619,6 +619,7 @@ function toggleCreatorTabs(event, target) {
 	Array.from(document.querySelector('#creator-menu-sections').children).forEach(element => element.classList.add('hidden'));
 	document.querySelector('#creator-menu-' + target).classList.remove('hidden');
 	selectSelectable(event);
+	window.dispatchEvent(new CustomEvent('creatortabchanged', {detail:{tab:target}}));
 	drawCard();
 }
 var activeFrameWorkspace = 'browse';
@@ -935,6 +936,7 @@ function dragOver(event, drag=true) {
 			element.ondragover = dragOver;
 			element.ontouchmove = touchMove;
 			element.onclick = frameElementClicked;
+			element.ondblclick = frameElementDoubleClicked;
 			element.children[3].onclick = removeFrame;
 		})
 		parentElement.innerHTML = null;
@@ -1451,8 +1453,8 @@ function syncFrameElementVisibility(frame) {
 function refreshSelectedFrameEditor() {
 	const index = card.frames.indexOf(selectedFrame);
 	const element = document.querySelector('#frame-list')?.children[index];
-	if (element) {
-		frameElementClicked({target: element});
+	if (element && activeFrameDesignMode == 'frames' && document.querySelector('#frame-element-editor')?.classList.contains('opened')) {
+		frameElementDoubleClicked({target: element});
 	}
 }
 async function duplicateSelectedFrame() {
@@ -2142,6 +2144,7 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	frameElement.ontouchend = dragEnd;
 	frameElement.ontouchmove = touchMove;
 	frameElement.onclick = frameElementClicked;
+	frameElement.ondblclick = frameElementDoubleClicked;
 	var frameElementImage = document.createElement('img');
 	if (frameToAdd.noThumb || frameToAdd.src.includes('/img/black.png')) {
 		frameElementImage.src = fixUri(frameToAdd.src);
@@ -2191,8 +2194,18 @@ function frameElementClicked(event) {
 		Array.from(document.querySelectorAll('#frame-list .frame-element')).forEach(element => {
 			element.classList.toggle('design-selected', element === selectedFrameElement);
 		});
+		drawCard();
+	}
+}
+function frameElementDoubleClicked(event) {
+	if (activeFrameWorkspace != 'design' || event.target.classList.contains('frame-element-close')) {
+		return;
+	}
+	frameElementClicked(event);
+	if (selectedFrame) {
 		setFrameDesignMode('frames');
 		document.querySelector('#frame-element-editor').classList.add('opened');
+		if (window.CanvasDesignTools) CanvasDesignTools.suspend();
 		selectedFrame.bounds = selectedFrame.bounds || {};
 		if (selectedFrame.ogBounds == undefined) {
 			selectedFrame.ogBounds = JSON.parse(JSON.stringify(selectedFrame.bounds));
@@ -2461,6 +2474,7 @@ function textOptionClicked(event) {
 function textboxEditor() {
 	var selectedTextbox = card.text[Object.keys(card.text)[selectedTextIndex]];
 	document.querySelector('#textbox-editor').classList.add('opened');
+	if (window.CanvasDesignTools) CanvasDesignTools.suspend();
 	document.querySelector('#textbox-editor-x').value = scaleWidth(selectedTextbox.x || 0);
 	document.querySelector('#textbox-editor-x').onchange = (event) => {selectedTextbox.x = (event.target.value / card.width); textEdited();}
 	document.querySelector('#textbox-editor-y').value = scaleHeight(selectedTextbox.y || 0);
@@ -4156,7 +4170,7 @@ async function addCustomTemplateField(kind) {
 			selectedFrame = frame;
 			var frameElement = document.querySelector('#frame-list')?.firstElementChild;
 			if (frameElement) {
-				frameElementClicked({target: frameElement});
+				frameElementDoubleClicked({target: frameElement});
 			}
 			setCustomTemplateFieldStatus('Added image field "' + label + '". Use the Frame Image Editor to set its position and size.', false);
 		} else {
@@ -5025,6 +5039,7 @@ function activateCreatorEditorTab(target) {
 		const selected = handler.includes('"' + target + '"') || handler.includes('`' + target + '`');
 		tab.classList.toggle('selected', selected);
 	});
+	window.dispatchEvent(new CustomEvent('creatortabchanged', {detail:{tab:target}}));
 	drawCard();
 }
 function openLayoutHighlightEditor(area) {
@@ -5046,7 +5061,7 @@ function openLayoutHighlightEditor(area) {
 		const frameIndex = card.frames.indexOf(area.target);
 		const frameElement = document.querySelector('#frame-list')?.children[frameIndex];
 		if (frameElement) {
-			frameElementClicked({target:frameElement});
+			frameElementDoubleClicked({target:frameElement});
 		}
 		return;
 	}
