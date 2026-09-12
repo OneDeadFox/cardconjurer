@@ -1607,15 +1607,31 @@
 		return face === 'front' ? 'Front' : face === 'back' ? 'Back' : 'Single face';
 	}
 
+	function batchReportIdentity(job, face) {
+		var fields = job.result.fields || {};
+		var cardName = face === 'back' ? (fields.altName || fields.name) : fields.name;
+		cardName = cardName || 'Row ' + (job.rowIndex + 2);
+		var requestedName = String(fields.outputFilename || cardName).replace(/\.png$/i, '');
+		var safeCardName = sanitizeBaseName(requestedName, 'Card-' + (job.rowIndex + 2));
+		var faceLabel = face === 'front' ? 'Front' : face === 'back' ? 'Back' : '';
+		return {
+			cardName:cardName,
+			imageName:safeCardName + (faceLabel ? ' - ' + faceLabel : '') + '.png',
+			artFile:face === 'back' ? (fields.altArtFile || fields.artFile || '') : (fields.artFile || '')
+		};
+	}
+
 	function currentMinimumTextFailures(job, face) {
-		var displayName = job.result.fields.name || 'Row ' + (job.rowIndex + 2);
+		var identity = batchReportIdentity(job, face);
 		return (Array.isArray(window.CardTextFitResults) ? window.CardTextFitResults : [])
 			.filter(function (fit) { return fit && fit.failed; })
 			.map(function (fit) {
 				return {
 					row:job.rowIndex + 2,
 					rowIndex:job.rowIndex,
-					name:displayName,
+					name:identity.cardName,
+					imageName:identity.imageName,
+					artFile:identity.artFile,
 					face:batchFaceLabel(face),
 					faceKey:face,
 					field:fit.label || fit.key || 'Text field',
@@ -1657,8 +1673,10 @@
 				var obstacle = failure.obstacles.length
 					? 'overlaps ' + failure.obstacles.join(' and ')
 					: 'exceeds its text box';
-				lines.push('- Row ' + failure.row + ' | ' + failure.name + ' | ' + failure.face +
-					' | ' + failure.field + ' | ' + obstacle);
+				lines.push('- Row ' + failure.row + ' | Card: ' + failure.name +
+					' | Image: ' + failure.imageName +
+					(failure.artFile ? ' | Art File: ' + failure.artFile : '') +
+					' | Face: ' + failure.face + ' | Field: ' + failure.field + ' | ' + obstacle);
 			});
 			lines.push('');
 		}
@@ -1666,21 +1684,33 @@
 		if (preflight.validationFailures.length) {
 			lines.push('Preflight errors (image skipped)', '--------------------------------');
 			preflight.validationFailures.forEach(function (failure) {
-				lines.push('- Row ' + failure.row + ' | ' + failure.name + ' | ' + failure.face +
-					' | ' + failure.message);
+				lines.push('- Row ' + failure.row + ' | Card: ' + failure.name +
+					' | Image: ' + failure.imageName +
+					(failure.artFile ? ' | Art File: ' + failure.artFile : '') +
+					' | Face: ' + failure.face + ' | ' + failure.message);
 			});
 			lines.push('');
 		}
 
 		if (failedCards.length) {
 			lines.push('Render errors (image skipped)', '-----------------------------');
-			failedCards.forEach(function (failure) { lines.push('- ' + failure); });
+			failedCards.forEach(function (failure) {
+				lines.push('- Row ' + failure.row + ' | Card: ' + failure.name +
+					' | Image: ' + failure.imageName +
+					(failure.artFile ? ' | Art File: ' + failure.artFile : '') +
+					' | Face: ' + failure.face + ' | ' + failure.message);
+			});
 			lines.push('');
 		}
 
 		if (warningCards.length) {
 			lines.push('Warnings', '--------');
-			warningCards.forEach(function (warning) { lines.push('- ' + warning); });
+			warningCards.forEach(function (warning) {
+				lines.push('- Row ' + warning.row + ' | Card: ' + warning.name +
+					' | Image: ' + warning.imageName +
+					(warning.artFile ? ' | Art File: ' + warning.artFile : '') +
+					' | Face: ' + warning.face + ' | ' + warning.message);
+			});
 			lines.push('');
 		}
 
@@ -1706,6 +1736,7 @@
 		for (var job of jobs) {
 			var displayName = job.result.fields.name || 'Row ' + (job.rowIndex + 2);
 			for (var face of facesForResult(job.result)) {
+				var identity = batchReportIdentity(job, face);
 				var faceLabel = batchFaceLabel(face);
 				status.textContent = 'Checking text readability ' + (checked + 1) + ' of ' + totalCards +
 					': ' + displayName + ' (' + faceLabel + ')…';
@@ -1717,7 +1748,9 @@
 					validationFailures.push({
 						row:job.rowIndex + 2,
 						rowIndex:job.rowIndex,
-						name:displayName,
+						name:identity.cardName,
+						imageName:identity.imageName,
+						artFile:identity.artFile,
 						face:faceLabel,
 						faceKey:face,
 						message:error.message || 'could not be checked'
@@ -1860,23 +1893,36 @@
 							continue;
 						}
 						var faceLabel = face === 'front' ? 'Front' : face === 'back' ? 'Back' : '';
+						var identity = batchReportIdentity(job, face);
 						status.textContent = 'Rendering ' + (completed + 1) + ' of ' + totalCards + ': ' +
 							displayName + (faceLabel ? ' (' + faceLabel + ')' : '') + '…';
 						try {
 							var pngBlob = await renderBatchCard(job, face);
-							if (Array.isArray(window.CardTextCollisionWarnings) && window.CardTextCollisionWarnings.length) {
-								warningCards.push(displayName + (faceLabel ? ' (' + faceLabel + ')' : '') +
-									': ' + window.CardTextCollisionWarnings.join(' '));
-							}
 							var outputBase = safeCardName + (faceLabel ? ' - ' + faceLabel : '');
 							var pngName = uniqueFileName(outputBase, '.png', usedCardNames);
+							if (Array.isArray(window.CardTextCollisionWarnings) && window.CardTextCollisionWarnings.length) {
+								warningCards.push({
+									row:job.rowIndex + 2,
+									name:identity.cardName,
+									imageName:pngName,
+									artFile:identity.artFile,
+									face:batchFaceLabel(face),
+									message:window.CardTextCollisionWarnings.join(' ')
+								});
+							}
 							zip.file(pngName, pngBlob);
 							addedCards++;
 							exportedImages++;
 						} catch (error) {
 							console.error('CSV batch face failed:', job.rowIndex + 2, face, error);
-							failedCards.push(displayName + (faceLabel ? ' (' + faceLabel + ')' : '') +
-								': ' + (error.message || 'render failed'));
+							failedCards.push({
+								row:job.rowIndex + 2,
+								name:identity.cardName,
+								imageName:identity.imageName,
+								artFile:identity.artFile,
+								face:batchFaceLabel(face),
+								message:error.message || 'render failed'
+							});
 						}
 						completed++;
 						progress.value = completed;
@@ -1918,10 +1964,10 @@
 				resultMessage += ' Skipped ' + skippedImages + ' image(s); see CSV Batch Export Report.txt for details.';
 			}
 			if (failedCards.length) {
-				resultMessage += ' Failed: ' + failedCards.join(', ') + '.';
+				resultMessage += ' Render failures: ' + failedCards.length + '.';
 			}
 			if (warningCards.length) {
-				resultMessage += ' Text warnings: ' + warningCards.join(' | ') + '.';
+				resultMessage += ' Text warnings: ' + warningCards.length + '.';
 			}
 			if (!usesFolderPicker && exportedZipCount > 1) {
 				resultMessage += ' If Edge blocked some ZIPs, allow multiple downloads and run the export again.';
