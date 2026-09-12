@@ -119,6 +119,26 @@ function bindInputs(query1, query2, checkbox = false) {
 	}
 }
 
+function startNewFrameProject(event) {
+	if (event) {
+		event.preventDefault();
+	}
+	var requestedName = window.prompt('Name the new Card Conjurer project:', 'Untitled Project');
+	if (requestedName === null) {
+		return;
+	}
+	requestedName = requestedName.trim() || 'Untitled Project';
+	if (document.querySelector('#previewCanvas') && window.FrameProjectStore) {
+		if (document.querySelector('.hamburger').classList.contains('opened')) {
+			toggleMenu();
+		}
+		FrameProjectStore.startNewProject(requestedName);
+		return;
+	}
+	sessionStorage.setItem('cardconjurer-new-project-name', requestedName);
+	openCardCreator(event);
+}
+
 function openCardCreator(event) {
 	if (event) {
 		event.preventDefault();

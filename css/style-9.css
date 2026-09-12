@@ -1279,3 +1279,50 @@ textarea.input {
 		grid-column: auto;
 	}
 }
+
+
+.project-assets-panel {
+	max-height: 24rem;
+	overflow: auto;
+	padding: 0.5rem;
+	background: var(--input-background);
+}
+
+.project-asset-list {
+	display: grid;
+	gap: 0.5rem;
+}
+
+.project-asset-row {
+	display: grid;
+	grid-template-columns: 4rem minmax(0, 1fr);
+	gap: 0.75rem;
+	align-items: center;
+	padding: 0.5rem;
+	background: var(--readable-background);
+}
+
+.project-asset-row > div:last-child {
+	display: grid;
+	min-width: 0;
+}
+
+.project-asset-row span {
+	overflow-wrap: anywhere;
+	color: var(--font-color-2);
+}
+
+.project-asset-preview {
+	width: 4rem;
+	height: 4rem;
+	display: grid;
+	place-items: center;
+	background: black;
+	overflow: hidden;
+}
+
+.project-asset-preview img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}

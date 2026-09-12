@@ -11,6 +11,7 @@
 	var projects = [];
 	var currentProjectId = '';
 	var objectUrls = new Map();
+	var blankProjectCard = null;
 
 	function makeId(prefix) {
 		if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -953,6 +954,209 @@
 		window.dispatchEvent(new CustomEvent('frameprojectschanged'));
 	}
 
+	function uniqueNewProjectName(value) {
+		var base = String(value || 'Untitled Project').trim() || 'Untitled Project';
+		var used = new Set(projects.map(function (project) {
+			return String(project.name || '').trim().toLowerCase();
+		}));
+		if (!used.has(base.toLowerCase())) {
+			return base;
+		}
+		var counter = 2;
+		var candidate = base + ' ' + counter;
+		while (used.has(candidate.toLowerCase())) {
+			counter++;
+			candidate = base + ' ' + counter;
+		}
+		return candidate;
+	}
+
+	async function startNewProject(requestedName, skipConfirmation) {
+		await ensureReady();
+		if (!skipConfirmation && !confirm('Start a new project? Save any changes you want to keep in the current project first.')) {
+			return false;
+		}
+		try {
+			var name = uniqueNewProjectName(requestedName);
+			var cleanCard = blankProjectCard ? JSON.parse(JSON.stringify(blankProjectCard)) : {
+				width: typeof getStandardWidth === 'function' ? getStandardWidth() : 2010,
+				height: typeof getStandardHeight === 'function' ? getStandardHeight() : 2814,
+				marginX: 0,
+				marginY: 0,
+				frames: [],
+				text: {},
+				artSource: '/img/blank.png',
+				setSymbolSource: '/img/blank.png',
+				watermarkSource: '/img/blank.png',
+				manaSymbols: []
+			};
+			if (typeof loadCardData !== 'function') {
+				throw new Error('Card Creator is not ready to start a new project.');
+			}
+			await loadCardData(cleanCard, name);
+			if (typeof saveCurrentDesignAsDefaults === 'function') {
+				saveCurrentDesignAsDefaults();
+			}
+			var now = new Date().toISOString();
+			var project = {
+				id: makeId('project'),
+				name: name,
+				schemaVersion: 1,
+				card: await createProjectSnapshot(),
+				createdAt: now,
+				updatedAt: now
+			};
+			await putOne(PROJECT_STORE, project);
+			currentProjectId = project.id;
+			await refreshProjects(project.id);
+			var nameInput = document.querySelector('#frame-project-name');
+			if (nameInput) { nameInput.value = name; }
+			await viewCurrentProjectAssets();
+			setStatus('#frame-project-status', 'Created and loaded new project "' + name + '".', false);
+			return true;
+		} catch (error) {
+			setStatus('#frame-project-status', error.message, true);
+			return false;
+		}
+	}
+
+	function projectAssetLabel(asset) {
+		if (asset.kind === 'custom-symbol') {
+			return 'Custom Mana Symbol {' + asset.token + '}';
+		}
+		if (asset.kind === 'custom-set-symbol') {
+			return 'Set Symbol ' + String(asset.family || '').toUpperCase() + '-' + String(asset.rarity || '').toUpperCase();
+		}
+		if (asset.kind === 'set-symbol-single') {
+			return 'Uploaded Set Symbol';
+		}
+		if (asset.kind === 'mask') {
+			return 'Mask';
+		}
+		return 'Frame Asset';
+	}
+
+	function addLinkedProjectAsset(descriptors, seen, type, name, source) {
+		source = String(source || '');
+		if (!source || source.indexOf('blank.png') !== -1 || source.indexOf('asset://') === 0) {
+			return;
+		}
+		var key = type + '|' + source;
+		if (seen.has(key)) {
+			return;
+		}
+		seen.add(key);
+		descriptors.push({type:type, name:name || type, source:source, stored:false});
+	}
+
+	async function viewCurrentProjectAssets() {
+		await ensureReady();
+		var container = document.querySelector('#current-project-assets');
+		if (!container) {
+			return;
+		}
+		container.innerHTML = '';
+		if (!currentProjectId) {
+			container.textContent = 'No project is currently loaded. Load or start a project to inspect its assets.';
+			return;
+		}
+		var project = await getOne(PROJECT_STORE, currentProjectId);
+		if (!project) {
+			container.textContent = 'The current project could not be found.';
+			return;
+		}
+		var projectCard = project.card || {};
+		var liveCard = typeof card === 'object' && card ? card : projectCard;
+		var assetIds = collectAssetIds(projectCard);
+		collectAssetIds(liveCard, assetIds);
+		var symbolsByToken = new Map(getCustomSymbolAssets().map(function (asset) {
+			return [normalizeCustomSymbolToken(asset.token), asset];
+		}));
+		collectCustomSymbolTokens(projectCard, new Set(symbolsByToken.keys())).forEach(function (token) {
+			assetIds.add(symbolsByToken.get(token).id);
+		});
+		collectCustomSymbolTokens(liveCard, new Set(symbolsByToken.keys())).forEach(function (token) {
+			assetIds.add(symbolsByToken.get(token).id);
+		});
+		var activeFamily = normalizeSetSymbolFamily(liveCard.setSymbolFamily || projectCard.setSymbolFamily);
+		if (activeFamily) {
+			getCustomSetSymbolAssets().forEach(function (asset) {
+				if (normalizeSetSymbolFamily(asset.family) === activeFamily) {
+					assetIds.add(asset.id);
+				}
+			});
+		}
+
+		var descriptors = [];
+		var seen = new Set();
+		for (var assetId of assetIds) {
+			var asset = assets.find(function (item) { return item.id === assetId; });
+			if (!asset) {
+				descriptors.push({type:'Missing Asset', name:assetId, source:'', missing:true});
+				continue;
+			}
+			seen.add('stored|' + asset.id);
+			var source = '';
+			try { source = await getAssetSource(asset.id); } catch (error) {}
+			descriptors.push({type:projectAssetLabel(asset), name:asset.name, source:source, stored:true});
+		}
+
+		(liveCard.frames || []).forEach(function (frame) {
+			if (!frame.assetId) {
+				addLinkedProjectAsset(descriptors, seen, 'Frame Layer', frame.name, frame.src);
+			}
+			(frame.masks || []).forEach(function (mask) {
+				if (!mask.assetId) {
+					addLinkedProjectAsset(descriptors, seen, 'Frame Mask', mask.name, mask.src);
+				}
+			});
+		});
+		addLinkedProjectAsset(descriptors, seen, 'Artwork', 'Card artwork', liveCard.artSource);
+		if (!liveCard.setSymbolAssetId) {
+			addLinkedProjectAsset(descriptors, seen, 'Set Symbol', 'Current set symbol', liveCard.setSymbolSource);
+		}
+		addLinkedProjectAsset(descriptors, seen, 'Watermark', 'Current watermark', liveCard.watermarkSource);
+
+		var heading = document.createElement('h5');
+		heading.className = 'padding input-description';
+		heading.textContent = project.name + ': ' + descriptors.length + ' asset' + (descriptors.length === 1 ? '' : 's');
+		container.appendChild(heading);
+		if (!descriptors.length) {
+			var empty = document.createElement('p');
+			empty.className = 'padding';
+			empty.textContent = 'This project does not contain any image assets yet.';
+			container.appendChild(empty);
+			return;
+		}
+		var list = document.createElement('div');
+		list.className = 'project-asset-list';
+		descriptors.forEach(function (descriptor) {
+			var row = document.createElement('div');
+			row.className = 'project-asset-row';
+			var preview = document.createElement('div');
+			preview.className = 'project-asset-preview';
+			if (descriptor.source) {
+				var image = document.createElement('img');
+				image.src = descriptor.source;
+				image.alt = descriptor.name;
+				preview.appendChild(image);
+			} else {
+				preview.textContent = descriptor.missing ? '!' : '—';
+			}
+			var details = document.createElement('div');
+			var type = document.createElement('strong');
+			type.textContent = descriptor.type;
+			var name = document.createElement('span');
+			name.textContent = descriptor.name;
+			details.appendChild(type);
+			details.appendChild(name);
+			row.appendChild(preview);
+			row.appendChild(details);
+			list.appendChild(row);
+		});
+		container.appendChild(list);
+	}
+
 	async function getProjectCardByName(name) {
 		await ensureReady();
 		var requested = String(name || '').trim().toLowerCase();
@@ -995,6 +1199,7 @@
 			await putOne(PROJECT_STORE, project);
 			currentProjectId = id;
 			await refreshProjects(id);
+			await viewCurrentProjectAssets();
 			setStatus('#frame-project-status', 'Saved frame project "' + name + '".', false);
 		} catch (error) {
 			setStatus('#frame-project-status', error.message, true);
@@ -1024,6 +1229,7 @@
 			currentProjectId = project.id;
 			var input = document.querySelector('#frame-project-name');
 			if (input) { input.value = project.name; }
+			await viewCurrentProjectAssets();
 			setStatus('#frame-project-status', 'Loaded frame project "' + project.name + '".', false);
 		} catch (error) {
 			setStatus('#frame-project-status', error.message, true);
@@ -1230,6 +1436,211 @@
 		}
 	}
 
+	async function archiveAsset(zip, asset, index, warnings) {
+		var blob = asset.blob || null;
+		if (!blob && asset.sourceUrl) {
+			try {
+				var response = await fetch(asset.sourceUrl);
+				if (response.ok) { blob = await response.blob(); }
+			} catch (error) {}
+		}
+		var metadata = {
+			id: asset.id,
+			name: asset.name,
+			kind: asset.kind || 'frame',
+			mimeType: (blob && blob.type) || asset.mimeType || '',
+			createdAt: asset.createdAt || '',
+			updatedAt: asset.updatedAt || ''
+		};
+		if (asset.kind === 'custom-symbol') {
+			metadata.token = asset.token;
+		} else if (asset.kind === 'custom-set-symbol') {
+			metadata.family = asset.family;
+			metadata.familyName = asset.familyName || asset.family;
+			metadata.rarity = normalizeSetSymbolRarity(asset.rarity);
+		}
+		if (blob) {
+			metadata.file = 'assets/' + String(index + 1).padStart(4, '0') + '-' + asset.id + '.' + archiveExtension(metadata.mimeType);
+			zip.file(metadata.file, blob);
+		} else if (asset.sourceUrl) {
+			metadata.sourceUrl = asset.sourceUrl;
+			warnings.push(asset.name);
+		} else {
+			throw new Error('The asset "' + asset.name + '" does not contain exportable image data.');
+		}
+		return metadata;
+	}
+
+	async function exportProjectLibrary() {
+		try {
+			await ensureReady();
+			ensureProjectArchiveSupport();
+			var zip = new JSZip();
+			var warnings = [];
+			var exportedAssets = [];
+			for (var index = 0; index < assets.length; index++) {
+				exportedAssets.push(await archiveAsset(zip, assets[index], index, warnings));
+			}
+			var manifest = {
+				format: 'cardconjurer-project-library',
+				formatVersion: 1,
+				exportedAt: new Date().toISOString(),
+				projects: JSON.parse(JSON.stringify(projects)),
+				assets: exportedAssets
+			};
+			zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+			var archive = await zip.generateAsync({
+				type: 'blob',
+				mimeType: 'application/zip',
+				compression: 'DEFLATE',
+				compressionOptions: {level: 6}
+			});
+			var date = new Date().toISOString().slice(0, 10);
+			downloadBlob(archive, 'CardConjurer-Project-Library-' + date + '.cclibrary');
+			var message = 'Exported ' + projects.length + ' project' + (projects.length === 1 ? '' : 's') +
+				' and ' + exportedAssets.length + ' asset' + (exportedAssets.length === 1 ? '' : 's') + '.';
+			if (warnings.length) {
+				message += ' ' + warnings.length + ' linked image' + (warnings.length === 1 ? '' : 's') + ' still require their original URL.';
+			}
+			setStatus('#frame-library-status', message, false);
+		} catch (error) {
+			setStatus('#frame-library-status', error.message, true);
+		}
+	}
+
+	async function putImportedLibraryBundle(assetRecords, projectRecords) {
+		var database = await openDatabase();
+		var transaction = database.transaction([ASSET_STORE, PROJECT_STORE], 'readwrite');
+		var assetStore = transaction.objectStore(ASSET_STORE);
+		var projectStore = transaction.objectStore(PROJECT_STORE);
+		assetRecords.forEach(function (asset) { assetStore.put(asset); });
+		projectRecords.forEach(function (project) { projectStore.put(project); });
+		await transactionFinished(transaction);
+	}
+
+	async function importProjectLibrary(file) {
+		if (!file) { return; }
+		try {
+			await ensureReady();
+			ensureProjectArchiveSupport();
+			var zip = await JSZip.loadAsync(file);
+			var manifestEntry = zip.file('manifest.json');
+			if (!manifestEntry) {
+				throw new Error('This file is not a Card Conjurer project-library backup.');
+			}
+			var manifest;
+			try {
+				manifest = JSON.parse(await manifestEntry.async('string'));
+			} catch (error) {
+				throw new Error('The library manifest is damaged or unreadable.');
+			}
+			if (!manifest || manifest.format !== 'cardconjurer-project-library' || manifest.formatVersion !== 1) {
+				throw new Error('This backup uses an unsupported project-library format.');
+			}
+			var assetMetadata = Array.isArray(manifest.assets) ? manifest.assets : [];
+			var projectMetadata = Array.isArray(manifest.projects) ? manifest.projects : [];
+			if (assetMetadata.length > 5000 || projectMetadata.length > 1000) {
+				throw new Error('This library contains too many records to import safely.');
+			}
+			var idMap = Object.create(null);
+			var tokenMap = Object.create(null);
+			var familyMap = Object.create(null);
+			var claimedTokens = new Set(getCustomSymbolAssets().map(function (asset) {
+				return normalizeCustomSymbolToken(asset.token);
+			}));
+			var claimedFamilies = new Set(getSetSymbolFamilies().map(function (family) { return family.family; }));
+			var importedAssets = [];
+			var now = new Date().toISOString();
+
+			for (var index = 0; index < assetMetadata.length; index++) {
+				var metadata = assetMetadata[index] || {};
+				var oldId = String(metadata.id || '');
+				if (!oldId || idMap[oldId]) {
+					throw new Error('The library contains an invalid or duplicate asset identifier.');
+				}
+				var record = {
+					id: makeId('asset'),
+					name: extensionlessName(metadata.name),
+					kind: metadata.kind || 'frame',
+					mimeType: metadata.mimeType || '',
+					createdAt: metadata.createdAt || now,
+					updatedAt: now
+				};
+				idMap[oldId] = record.id;
+				if (record.kind === 'custom-symbol') {
+					var oldToken = normalizeCustomSymbolToken(metadata.token);
+					if (!oldToken) { throw new Error('A custom mana symbol is missing its code.'); }
+					record.token = uniqueImportedSymbolToken(oldToken, claimedTokens);
+					tokenMap[oldToken] = record.token;
+				} else if (record.kind === 'custom-set-symbol') {
+					var oldFamily = normalizeSetSymbolFamily(metadata.family);
+					if (!oldFamily) { throw new Error('A set-symbol image is missing its family code.'); }
+					if (!familyMap[oldFamily]) {
+						familyMap[oldFamily] = uniqueImportedSetSymbolFamily(oldFamily, claimedFamilies);
+					}
+					record.family = familyMap[oldFamily];
+					record.familyName = record.family.toUpperCase();
+					record.rarity = normalizeSetSymbolRarity(metadata.rarity);
+				}
+				if (metadata.file) {
+					var archivePath = String(metadata.file);
+					if (!/^assets\/[A-Za-z0-9._-]+$/.test(archivePath)) {
+						throw new Error('The library contains an unsafe asset path.');
+					}
+					var entry = zip.file(archivePath);
+					if (!entry) { throw new Error('The library is missing "' + archivePath + '".'); }
+					var blob = await entry.async('blob');
+					record.blob = record.mimeType ? new Blob([blob], {type:record.mimeType}) : blob;
+					record.mimeType = record.blob.type || record.mimeType;
+				} else if (metadata.sourceUrl) {
+					record.sourceUrl = String(metadata.sourceUrl);
+				} else {
+					throw new Error('A library asset does not contain image data.');
+				}
+				importedAssets.push(record);
+			}
+
+			var claimedProjectNames = new Set(projects.map(function (project) {
+				return String(project.name || '').trim().toLowerCase();
+			}));
+			var importedProjects = [];
+			var missingReferences = 0;
+			projectMetadata.forEach(function (sourceProject) {
+				if (!sourceProject || !sourceProject.card) { return; }
+				var referencedIds = Array.from(collectAssetIds(sourceProject.card));
+				missingReferences += referencedIds.filter(function (id) { return !idMap[id]; }).length;
+				var importedCard = rewriteAssetReferences(JSON.parse(JSON.stringify(sourceProject.card)), idMap);
+				importedCard = rewriteCustomSymbolReferences(importedCard, tokenMap);
+				importedCard = rewriteSetSymbolFamilyReferences(importedCard, familyMap);
+				if (importedCard.setSymbolAssetId && idMap[importedCard.setSymbolAssetId]) {
+					importedCard.setSymbolAssetId = idMap[importedCard.setSymbolAssetId];
+				}
+				importedProjects.push({
+					id: makeId('project'),
+					name: uniqueImportedProjectName(sourceProject.name, claimedProjectNames),
+					schemaVersion: sourceProject.schemaVersion || 1,
+					card: importedCard,
+					createdAt: now,
+					updatedAt: now,
+					importedAt: now
+				});
+			});
+			await putImportedLibraryBundle(importedAssets, importedProjects);
+			await Promise.all([
+				refreshAssets(),
+				refreshProjects(importedProjects.length ? importedProjects[0].id : undefined)
+			]);
+			var message = 'Imported ' + importedProjects.length + ' project' + (importedProjects.length === 1 ? '' : 's') +
+				' and ' + importedAssets.length + ' asset' + (importedAssets.length === 1 ? '' : 's') + '.';
+			if (missingReferences) {
+				message += ' Warning: ' + missingReferences + ' project asset reference' + (missingReferences === 1 ? ' was' : 's were') + ' already missing from the backup.';
+			}
+			setStatus('#frame-library-status', message, !!missingReferences);
+		} catch (error) {
+			setStatus('#frame-library-status', error.message, true);
+		}
+	}
+
 	function rewriteAssetReferences(value, idMap, visited) {
 		visited = visited || new Set();
 		if (typeof value === 'string') {
@@ -1308,10 +1719,13 @@
 		return value;
 	}
 
-	function uniqueImportedProjectName(value) {
+	function uniqueImportedProjectName(value, claimedNames) {
 		var base = String(value || 'Imported Frame Project').trim() || 'Imported Frame Project';
-		var used = new Set(projects.map(function (project) { return String(project.name || '').trim().toLowerCase(); }));
+		var used = claimedNames || new Set(projects.map(function (project) {
+			return String(project.name || '').trim().toLowerCase();
+		}));
 		if (!used.has(base.toLowerCase())) {
+			used.add(base.toLowerCase());
 			return base;
 		}
 		var suffix = ' (Imported)';
@@ -1321,6 +1735,7 @@
 			candidate = base + suffix + ' ' + counter;
 			counter++;
 		}
+		used.add(candidate.toLowerCase());
 		return candidate;
 	}
 
@@ -1460,8 +1875,18 @@
 
 	async function init() {
 		try {
+			if (!blankProjectCard && typeof card === 'object' && card) {
+				blankProjectCard = JSON.parse(JSON.stringify(card, stripRuntimeImages));
+			}
 			await Promise.all([refreshAssets(), refreshProjects()]);
-			setStatus('#frame-project-status', 'Frame projects are stored on this device. Export a .ccproject backup to keep a portable copy.', false);
+			var pendingProjectName = sessionStorage.getItem('cardconjurer-new-project-name');
+			if (pendingProjectName !== null) {
+				sessionStorage.removeItem('cardconjurer-new-project-name');
+				setStatus('#frame-project-status', 'Starting new project...', false);
+				setTimeout(function () { startNewProject(pendingProjectName, true); }, 0);
+			} else {
+				setStatus('#frame-project-status', 'Frame projects are stored on this device. Export a .ccproject backup to keep a portable copy.', false);
+			}
 			var frameAssetCount = assets.filter(function (asset) { return !['custom-symbol', 'custom-set-symbol', 'set-symbol-single'].includes(asset.kind); }).length;
 			var customSymbolCount = getCustomSymbolAssets().length;
 			setStatus('#frame-asset-status', frameAssetCount ? frameAssetCount + ' saved frame asset' + (frameAssetCount === 1 ? '' : 's') + ' available.' : 'No saved frame assets yet.', false);
@@ -1487,10 +1912,14 @@
 		deleteSelectedAsset: deleteSelectedAsset,
 		saveProject: function () { return saveProject(false); },
 		saveProjectAs: function () { return saveProject(true); },
+		startNewProject: startNewProject,
 		loadSelectedProject: loadSelectedProject,
+		viewCurrentProjectAssets: viewCurrentProjectAssets,
 		deleteSelectedProject: deleteSelectedProject,
 		exportSelectedProject: exportSelectedProject,
 		importProjectFile: importProjectFile,
+		exportProjectLibrary: exportProjectLibrary,
+		importProjectLibrary: importProjectLibrary,
 		saveCustomSymbol: saveCustomSymbol,
 		renameSelectedCustomSymbol: renameSelectedCustomSymbol,
 		deleteSelectedCustomSymbol: deleteSelectedCustomSymbol,

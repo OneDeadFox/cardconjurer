@@ -323,7 +323,17 @@
 								<button class='input' onclick='document.querySelector("#frame-project-import").click();'>Import Project</button>
 							</div>
 							<input id='frame-project-import' type='file' accept='.ccproject,.zip,application/zip' hidden oninput='FrameProjectStore.importProjectFile(event.target.files[0]); this.value="";' aria-label='Import a Card Conjurer frame project backup'>
-							<h5 class='padding input-description'>Project backups include the editable layout and all saved images used by that project.</h5>
+							<h5 class='padding margin-bottom input-description'>Project backups include the editable layout and all saved images used by that project.</h5>
+							<h5 class='padding margin-bottom input-description'>Full Project Library</h5>
+							<div class='input-grid margin-bottom'>
+								<button class='input' onclick='FrameProjectStore.exportProjectLibrary();'>Export Entire Library</button>
+								<button class='input' onclick='document.querySelector("#frame-library-import").click();'>Import Library</button>
+							</div>
+							<input id='frame-library-import' type='file' accept='.cclibrary,.zip,application/zip' hidden oninput='FrameProjectStore.importProjectLibrary(event.target.files[0]); this.value="";' aria-label='Import a Card Conjurer project library'>
+							<h5 id='frame-library-status' class='padding margin-bottom input-description'>A library backup contains every saved project and every custom asset stored on this site.</h5>
+							<h5 class='padding margin-bottom input-description'>Current Project Assets</h5>
+							<button class='input margin-bottom' onclick='FrameProjectStore.viewCurrentProjectAssets();'>Refresh Project Assets</button>
+							<div id='current-project-assets' class='project-assets-panel'>Load or start a project to inspect its assets.</div>
 							<h5 id='frame-project-status' class='padding input-description'>Opening the Frame Designer project store...</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>
