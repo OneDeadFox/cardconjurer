@@ -3952,11 +3952,6 @@ function artDrag(e) {
 			const endY = parseInt(e.clientY);
 			var changeX = (endX - startX) * 2;
 			var changeY = (endY - startY) * 2;
-			if (card.landscape) {
-				const temp = changeX;
-				changeX = -changeY;
-				changeY = temp;
-			}
 			document.querySelector(`#${target}-x`).value = parseInt(document.querySelector(`#${target}-x`).value) + changeX;
 			document.querySelector(`#${target}-y`).value = parseInt(document.querySelector(`#${target}-y`).value) + changeY;
 			startX = endX;
