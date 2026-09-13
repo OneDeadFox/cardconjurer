@@ -3951,9 +3951,10 @@ function writeText(textObject, targetContext) {
 					trueTargetContext = prePTContext;
 				}
 				if (textObject.clipToBounds) {
+					var clipBounds=textObject.rangeClip||textObject;
 					trueTargetContext.save();
 					trueTargetContext.beginPath();
-					trueTargetContext.rect(textX, textY, textWidth, textHeight);
+					trueTargetContext.rect(scaleX(clipBounds.x), scaleY(clipBounds.y), scaleWidth(clipBounds.width), scaleHeight(clipBounds.height));
 					trueTargetContext.clip();
 				}
 				if (textRotation) {
@@ -5237,7 +5238,7 @@ function finishLayoutHighlightDrag(event) {
 	if (area.kind == 'rulesRange' && window.RulesRange) RulesRange.refreshInputs();
 	if (window.RulesRange) {
 		if (area.kind == 'rulesRange') RulesRange.syncElements();
-		if (area.kind == 'text') RulesRange.updateElementRelative('text', area.key);
+		if (area.kind == 'text') RulesRange.updateElementRelative('text', area.key,{resizeVertical:completedDrag.action.includes('top')||completedDrag.action.includes('bottom')});
 		if (area.kind == 'frame') RulesRange.updateElementRelative('frame', ensureDesignLayerId(area.target));
 	}
 	commitDesignUndoSnapshot(completedDrag.undoSnapshot,

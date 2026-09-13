@@ -1091,6 +1091,8 @@ textarea.input {
 #canvas-element-text-style { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 #canvas-element-text-style h3, #canvas-element-text-style #canvas-style-create-family { grid-column: 1 / -1; }
 #canvas-element-text-style label { min-width: 0; }
+#canvas-style-members { max-height: 11rem; overflow-y: auto; padding: .4rem; border: 1px solid #9974b2; }
+#canvas-style-members label { display: block; padding: .2rem 0; }
 .canvas-tool-crosshair { cursor: crosshair !important; }
 .textbox-editor-restore {
 	grid-column: 1 / -1;
