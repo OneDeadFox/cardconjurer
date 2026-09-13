@@ -569,6 +569,7 @@ async function setCardOrientation(value, options = {}) {
 	card.orientationRotation = normalizeRotationDegrees(
 		(Number(card.orientationRotation)||0) + (clockwise ? 90 : -90)
 	);
+	if (window.RulesRange) RulesRange.updateAllRelative();
 
 	canvasList.forEach(function (name) { sizeCanvas(name); });
 	syncCardOrientationState(target);
@@ -2206,6 +2207,8 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	bottomInfoEdited();
 }
 function removeFrame(event) {
+	var removedFrame = card.frames[getElementIndex(event.target.parentElement)];
+	if (removedFrame && window.RulesRange) RulesRange.removeElementReferences('frame', ensureDesignLayerId(removedFrame));
 	card.frames.splice(getElementIndex(event.target.parentElement), 1);
 	event.target.parentElement.remove();
 	drawFrames();
@@ -5066,6 +5069,7 @@ function deleteLayoutHighlightArea(area) {
 	if (!area) return false;
 	var before=createDesignStateSnapshot();
 	if (area.kind == 'text') {
+		if (window.RulesRange) RulesRange.removeElementReferences('text', area.key);
 		var textIndex=Object.keys(card.text).indexOf(area.key);
 		delete card.text[area.key];
 		document.querySelector('#text-options')?.children[textIndex]?.remove();
@@ -5075,6 +5079,7 @@ function deleteLayoutHighlightArea(area) {
 	} else if (area.kind == 'frame') {
 		var index=card.frames.indexOf(area.target);
 		if (index<0) return false;
+		if (window.RulesRange) RulesRange.removeElementReferences('frame', ensureDesignLayerId(area.target));
 		card.frames.splice(index,1);
 		document.querySelector('#frame-list')?.children[index]?.remove();
 		if (selectedFrame===area.target) selectedFrame=null;
@@ -5210,6 +5215,11 @@ function finishLayoutHighlightDrag(event) {
 		drawCard();
 	}
 	if (area.kind == 'rulesRange' && window.RulesRange) RulesRange.refreshInputs();
+	if (window.RulesRange) {
+		if (area.kind == 'rulesRange') RulesRange.syncElements();
+		if (area.kind == 'text') RulesRange.updateElementRelative('text', area.key);
+		if (area.kind == 'frame') RulesRange.updateElementRelative('frame', ensureDesignLayerId(area.target));
+	}
 	commitDesignUndoSnapshot(completedDrag.undoSnapshot,
 		area.kind == 'frame' ? 'Move or resize frame component' : 'Move or resize layout field');
 }

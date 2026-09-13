@@ -73,6 +73,7 @@
 		target.x=val('x')/card.width; target.y=val('y')/card.height; target.width=Math.max(10,val('width'))/card.width; target.height=Math.max(10,val('height'))/card.height;
 		var name=document.querySelector('#canvas-element-name').value.trim(); var rotation=val('rotation'); if(range){range.name=name||range.name;range.direction=document.querySelector('#canvas-element-flow').value;range.rotation=rotation;RulesRange.refresh();}
 		else if(editorArea.kind==='frame'){editorArea.target.rotation=rotation;if(name){editorArea.target.name=name;editorArea.target.csvFieldLabel=name;var frameIndex=card.frames.indexOf(editorArea.target);var heading=document.querySelector('#frame-list')?.children[frameIndex]?.querySelector('h4');if(heading)heading.textContent=name;}} else {editorArea.target.rotation=rotation;if(name){editorArea.target.name=name;editorArea.target.csvFieldLabel=name;var textIndex=Object.keys(card.text).indexOf(editorArea.key);var option=document.querySelector('#text-options')?.children[textIndex];if(option)option.textContent=name;}}
+		if(window.RulesRange){if(range)RulesRange.syncElements();else RulesRange.updateElementRelative(editorArea.kind==='frame'?'frame':'text',editorArea.kind==='frame'?ensureDesignLayerId(editorArea.target):editorArea.key);}
 		drawTextBuffer(); drawFrames(); drawCard();
 	}
 	function closeEditor() { if(editorUndo)commitDesignUndoSnapshot(editorUndo,'Edit canvas element'); editorUndo=null; editorArea=null; document.querySelector('#canvas-element-editor').classList.remove('opened'); }

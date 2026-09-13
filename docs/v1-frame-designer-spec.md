@@ -127,14 +127,13 @@ Design Frame also provides canvas creation tools. Select Text, Image, or Range a
 
 Editable text boxes, image/frame components, and Rules Ranges display a small red **X** at a corner of their canvas highlight. Clicking it removes that element as an undoable Design Frame change.
 
-Rules Ranges now support ordered repeatable modules. Each module can reserve a fixed pixel size or consume a weighted share of the remaining space, and the allocation follows the range's vertical or horizontal module flow. If fixed sizes exceed the range, they are proportionally compressed and highlighted as an overflow condition. Module-relative text fields and frame layers remain the next phase.
+Rules Ranges support ordered repeatable modules. Each module can reserve a fixed pixel size or consume a weighted share of the remaining space, and the allocation follows the range's vertical or horizontal module flow. If fixed sizes exceed the range, they are proportionally compressed and highlighted as an overflow condition. Duplicate Module copies its configuration and attached text/image elements as independent fields and focuses its name for editing. Existing text fields and frame layers can be attached to a module; their relative geometry follows that module when the range or allocation changes. Detaching leaves an element at its current location.
 
 ## Next V1 phases
 
-1. Attach text fields and frame layers using module-relative coordinates.
-2. Save reusable module templates such as Class Level and Planeswalker Ability.
-3. Expose Rules Range module fields to CSV mapping and collision-aware text fitting.
-4. Publish a project as a named Frame Type and Frame Variant in the normal frame browser.
+1. Save reusable module templates such as Class Level and Planeswalker Ability.
+2. Expose Rules Range module fields to CSV mapping and collision-aware text fitting.
+3. Publish a project as a named Frame Type and Frame Variant in the normal frame browser.
 
 ## Deferred to V2
 
