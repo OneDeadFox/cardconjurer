@@ -27,6 +27,7 @@ loadFramePacks([
 	{name:'Prototype (Extended Art) (Brothers\' War)', value:'PrototypeExtended'},
 	{name:'Attractions (Unfinity)', value:'Attraction'},
 	{name:'Class (D&D)', value:'Class'},
+	{name:'Class (Rules Range Prototype)', value:'ClassRange'},
 	{name:'Snow (Kaldheim)', value:'M15Snow'},
 	{name:'Mutate (Ikoria)', value:'M15Mutate'},
 	{name:'Adventures (Eldraine)', value:'Adventure'},
