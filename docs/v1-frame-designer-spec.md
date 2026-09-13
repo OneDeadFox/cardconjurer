@@ -129,6 +129,8 @@ Editable text boxes, image/frame components, and Rules Ranges display a small re
 
 Rules Ranges support ordered repeatable modules. Each module can reserve a fixed pixel size or consume a weighted share of the remaining space, and the allocation follows the range's vertical or horizontal module flow. If fixed sizes exceed the range, they are proportionally compressed and highlighted as an overflow condition. Duplicate Module copies its configuration and attached text/image elements as independent fields and focuses its name for editing. Attached elements store pixel offsets from the module's top-left corner plus pixel width and height, editable in the module panel. Their position follows the module when the range or allocation changes; their dimensions stay consistent. Previously saved proportional attachments remain readable and can be converted by editing their anchor. Detaching leaves an element at its current location. Newly created canvas elements appear in the attachment list immediately (and the list refreshes on focus). During creation and editing, element edges snap within 8 editor pixels of range and module edges.
 
+Adding a module immediately reflows attached elements and records one undo step. Removing a duplicated module also removes only the independently copied text and image layers it owns; undo restores the module and those layers together. The module panel has a direct Undo Module Change button, and Ctrl+Z works while the auto-selected module name is unchanged (normal text editing retains its native undo).
+
 ## Next V1 phases
 
 1. Save reusable module templates such as Class Level and Planeswalker Ability.

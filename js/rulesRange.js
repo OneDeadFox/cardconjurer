@@ -25,7 +25,7 @@
 	function renameSelected(value){var range=selected(),next=String(value||'').trim();if(!range||!next||next===range.name)return;var before=snapshot();range.name=next;refresh();commit(before,'Rename rules range');}
 	function numberInput(id,fallback){var value=Number(document.querySelector('#'+id)?.value);return Number.isFinite(value)?value:fallback;}
 	function updateBounds(){var range=selected();if(!range)return;var before=snapshot(),width=Math.max(Number(card.width)||1,1),height=Math.max(Number(card.height)||1,1);range.bounds.x=numberInput('rules-range-x',range.bounds.x*width)/width;range.bounds.y=numberInput('rules-range-y',range.bounds.y*height)/height;range.bounds.width=Math.max(10,numberInput('rules-range-width',range.bounds.width*width))/width;range.bounds.height=Math.max(10,numberInput('rules-range-height',range.bounds.height*height))/height;syncElements();refreshInputs();if(typeof drawCard==='function')drawCard();commit(before,'Resize rules range');}
-	function addModule(){var range=selected();if(!range)return;var before=snapshot(),module=normalizeModule({name:'Module '+(range.modules.length+1),sizing:'flex',size:1,elements:[]},range.modules.length);range.modules.push(module);selectedModuleId=module.id;refresh();commit(before,'Add rules module');}
+	function addModule(){var range=selected();if(!range)return;var before=snapshot(),module=normalizeModule({name:'Module '+(range.modules.length+1),sizing:'flex',size:1,elements:[]},range.modules.length);range.modules.push(module);selectedModuleId=module.id;syncElements();refresh();commit(before,'Add rules module');}
 	async function duplicateSelectedModule(){
 		var range=selected(),source=selectedModule();if(!range||!source)return;
 		var before=snapshot(),copy=clone(source);copy.id=nextModuleId();copy.name=source.name+' Copy';copy.elements=[];
@@ -44,12 +44,34 @@
 				delete frame.designLayerId;delete frame.editorDefaults;ensureDesignLayerId(frame);
 				card.frames.unshift(frame);await addFrame([],frame);entry.key=frame.designLayerId;
 			}
+			entry.owned=true;
 			copy.elements.push(entry);
 		}
 		syncElements();refresh();commit(before,'Duplicate rules module');
 		var nameInput=document.querySelector('#rules-range-module-name');nameInput?.focus();nameInput?.select();
 	}
-	function removeSelectedModule(){var range=selected(),module=selectedModule();if(!range||!module)return;var before=snapshot(),index=range.modules.indexOf(module);range.modules.splice(index,1);selectedModuleId=range.modules[Math.min(index,range.modules.length-1)]?.id||'';syncElements();refresh();commit(before,'Remove rules module');}
+	function removeSelectedModule(){
+		var range=selected(),module=selectedModule();if(!range||!module)return;
+		var before=snapshot(),index=range.modules.indexOf(module);
+		range.modules.splice(index,1);
+		var removedText=false,removedFrames=false;
+		module.elements.filter(function(entry){return entry.owned;}).forEach(function(entry){
+			if(allAttachments().some(function(other){return other.kind===entry.kind&&other.key===entry.key;}))return;
+			if(entry.kind==='text'){
+				if(card.text?.[entry.key]){delete card.text[entry.key];removedText=true;}
+			}else{
+				var frame=elementTarget(entry),frameIndex=card.frames.indexOf(frame);
+				if(frameIndex>=0){card.frames.splice(frameIndex,1);document.querySelector('#frame-list')?.children[frameIndex]?.remove();if(typeof selectedFrame!=='undefined'&&selectedFrame===frame)selectedFrame=null;removedFrames=true;}
+			}
+		});
+		if(removedText){
+			if(Object.keys(card.text).length)loadTextOptions(card.text,true);
+			else {var list=document.querySelector('#text-options');if(list)list.innerHTML='';if(typeof drawText==='function')drawText();}
+		}
+		if(removedFrames&&typeof drawFrames==='function')drawFrames();
+		selectedModuleId=range.modules[Math.min(index,range.modules.length-1)]?.id||'';
+		syncElements();refresh();commit(before,'Remove rules module');
+	}
 	function selectModule(id){var range=selected();if(range&&range.modules.some(function(module){return module.id===id;}))selectedModuleId=id;refreshModules();}
 	function updateModule(){var module=selectedModule();if(!module)return;var before=snapshot(),name=document.querySelector('#rules-range-module-name')?.value.trim(),sizing=document.querySelector('#rules-range-module-sizing')?.value,size=Number(document.querySelector('#rules-range-module-size')?.value),nextSizing=sizing==='fixed'?'fixed':'flex';if(name)module.name=name;if(nextSizing!==module.sizing)size=nextSizing==='fixed'?80:1;module.sizing=nextSizing;module.size=Math.max(1,Number.isFinite(size)?size:module.size);syncElements();refresh();commit(before,'Edit rules module');}
 	function moveSelectedModule(delta){var range=selected(),module=selectedModule();if(!range||!module)return;var index=range.modules.indexOf(module),next=Math.max(0,Math.min(range.modules.length-1,index+Number(delta)));if(next===index)return;var before=snapshot();range.modules.splice(index,1);range.modules.splice(next,0,module);syncElements();refresh();commit(before,'Reorder rules module');}

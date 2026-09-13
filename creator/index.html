@@ -297,6 +297,7 @@
 								<button class='input' onclick='RulesRange.removeSelectedModule();'>Remove Module</button>
 								<button class='input' onclick='RulesRange.moveSelectedModule(-1);'>Move Up</button>
 								<button class='input' onclick='RulesRange.moveSelectedModule(1);'>Move Down</button>
+								<button class='input' onclick='undoDesignChange();'>Undo Module Change</button>
 							</div>
 							<select id='rules-range-module-list' class='input margin-bottom' onchange='RulesRange.selectModule(this.value);' aria-label='Rules range modules'></select>
 							<input id='rules-range-module-name' type='text' class='input margin-bottom' placeholder='Module name' onchange='RulesRange.updateModule();' aria-label='Rules range module name'>

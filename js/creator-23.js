@@ -1434,7 +1434,9 @@ function initializeDesignUndoInteractions() {
 	document.addEventListener('change',finishDesignEditorUndo);
 	document.addEventListener('keydown',event => {
 		if (!(event.ctrlKey||event.metaKey) || event.key.toLowerCase()!='z' || event.shiftKey) return;
-		const editingText=event.target.matches?.('textarea, input[type="text"], input[type="url"], input[type="search"]');
+		const moduleName=event.target.matches?.('#rules-range-module-name') &&
+			event.target.value === window.RulesRange?.getSelectedModule()?.name;
+		const editingText=!moduleName && event.target.matches?.('textarea, input[type="text"], input[type="url"], input[type="search"]');
 		if (activeFrameWorkspace!='design' || editingText || !designUndoHistory.length) return;
 		event.preventDefault();
 		undoDesignChange();
