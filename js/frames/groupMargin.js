@@ -65,7 +65,7 @@ var loadMarginVersion = async () => {
 	if (card.version.includes('saga')) {
 		sagaEdited();
 	}
-	if (card.version.includes('class') && !card.version.includes('classic')) {
+	if (card.version.includes('class') && card.version !== 'classRange' && !card.version.includes('classic')) {
 		classEdited();
 	}
 	if (card.version.includes('station')) {

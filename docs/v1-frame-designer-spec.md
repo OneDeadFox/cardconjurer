@@ -131,6 +131,10 @@ Rules Ranges support ordered repeatable modules. Each module can reserve a fixed
 
 Adding a module immediately reflows attached elements and records one undo step. Removing a duplicated module also removes only the independently copied text and image layers it owns; undo restores the module and those layers together. The module panel has a direct Undo Module Change button, and Ctrl+Z works while the auto-selected module name is unchanged (normal text editing retains its native undo).
 
+### Class Rules Range prototype
+
+The frame browser offers **Class (Rules Range Prototype)** alongside the unchanged **Class (D&D)** and **Class (Universes Beyond)** options. The legacy Class implementation remains in `js/frames/versionClass.js` and `js/frames/packClass.js`; the pre-prototype repository is preserved on the `backup/legacy-class-before-rules-range` branch. Selecting the prototype creates four Class modules with anchored ability text, cost and title fields, and level-header image layers. Ability text heights follow the module's allocated space, so changing module count or size reflows text. Duplicate Module copies the cost, title, text, and header as independent elements. The prototype is for manual Frame Designer testing; the legacy Class height editor and automatic Scryfall ability mapping do not apply to this experimental variant yet.
+
 ## Next V1 phases
 
 1. Save reusable module templates such as Class Level and Planeswalker Ability.

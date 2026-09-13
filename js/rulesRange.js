@@ -121,7 +121,7 @@
 	function detachSelectedElement(){var module=selectedModule(),index=Number(document.querySelector('#rules-range-attached-list')?.value);if(!module||!Number.isInteger(index)||index<0||index>=module.elements.length)return;var before=snapshot();module.elements.splice(index,1);refreshElements();commit(before,'Detach module element');}
 	function syncElements(){
 		var changedText=false,changedFrames=false;
-		ranges().forEach(function(range){moduleLayouts(range).forEach(function(layout){layout.module.elements.forEach(function(entry){var bounds=elementBounds(entry);if(!bounds)return;if(entry.offset)applyOffset(bounds,layout.bounds,entry.offset);else if(entry.relative)applyRelative(bounds,layout.bounds,entry.relative);else return;if(entry.kind==='text')changedText=true;else changedFrames=true;});});});
+		ranges().forEach(function(range){moduleLayouts(range).forEach(function(layout){layout.module.elements.forEach(function(entry){var bounds=elementBounds(entry);if(!bounds)return;if(entry.offset){applyOffset(bounds,layout.bounds,entry.offset);if(Number.isFinite(entry.fitHeight))bounds.height=Math.max(1,layout.bounds.height*card.height-entry.offset.y-entry.fitHeight)/card.height;}else if(entry.relative)applyRelative(bounds,layout.bounds,entry.relative);else return;if(entry.kind==='text')changedText=true;else changedFrames=true;});});});
 		if(changedFrames&&typeof drawFrames==='function')drawFrames();
 		if(changedText&&typeof drawTextBuffer==='function')drawTextBuffer();
 	}

@@ -5337,7 +5337,7 @@ function drawCard() {
 	// custom elements for sagas, classes, and dungeons
 	if (card.version.toLowerCase().includes('saga') && typeof sagaCanvas !== "undefined") {
 		cardContext.drawImage(sagaCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
-	} else if (card.version.includes('class') && !card.version.includes('classic') && typeof classCanvas !== "undefined") {
+	} else if (card.version.includes('class') && card.version !== 'classRange' && !card.version.includes('classic') && typeof classCanvas !== "undefined") {
 		cardContext.drawImage(classCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
 	} else if (card.version.toLowerCase().includes('dungeon') && typeof dungeonCanvas !== "undefined") {
 		cardContext.drawImage(dungeonCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
@@ -6632,7 +6632,7 @@ else if (cardToImport.oracle_text && cardToImport.oracle_text.includes('Station'
 		card.text.reminder.text = `{i}${extractSagaReminderText(cardToImport.oracle_text)}{/i}`;
 		card.saga = {...card.saga, abilities: abilities.map(a => a.steps).concat(Array.from({ length: 4 - abilities.length}, () => 0)), count: abilities.length};
 		updateAbilityHeights()
-	} else if (card.version.toLowerCase().includes('class') && !card.version.includes('classicshifted') && typeof classCanvas !== "undefined") {
+	} else if (card.version.toLowerCase().includes('class') && card.version !== 'classRange' && !card.version.includes('classicshifted') && typeof classCanvas !== "undefined") {
 		if (card.text.flavor) {
 			// future support classes with flavor text
 			card.text.flavor.text = cardToImport.flavor_text || '';
