@@ -308,12 +308,19 @@
 								<input id='rules-range-module-size' type='number' min='1' step='1' class='input' placeholder='Flex weight' onchange='RulesRange.updateModule();' aria-label='Module size or flexible weight'>
 							</div>
 							<h5 class='padding margin-bottom input-description'>Attach an existing text box or image layer to the selected module. Its position and size will follow that module.</h5>
-							<select id='rules-range-element-list' class='input margin-bottom' aria-label='Available module elements'></select>
+							<select id='rules-range-element-list' class='input margin-bottom' onfocus='RulesRange.refreshElements();' aria-label='Available module elements'></select>
 							<div class='input-grid margin-bottom'>
 								<button class='input' onclick='RulesRange.attachSelectedElement();'>Attach Element</button>
 								<button class='input' onclick='RulesRange.detachSelectedElement();'>Detach Selected</button>
 							</div>
-							<select id='rules-range-attached-list' class='input margin-bottom' aria-label='Attached module elements'></select>
+							<select id='rules-range-attached-list' class='input margin-bottom' onchange='RulesRange.refreshAttachedInputs();' aria-label='Attached module elements'></select>
+							<h5 class='padding margin-bottom input-description'>Anchored geometry in pixels from the module’s top-left corner</h5>
+							<div class='input-grid margin-bottom'>
+								<input id='rules-range-attached-x' type='number' class='input' placeholder='X offset' onchange='RulesRange.updateAttachedOffsets();' aria-label='Attached element X offset'>
+								<input id='rules-range-attached-y' type='number' class='input' placeholder='Y offset' onchange='RulesRange.updateAttachedOffsets();' aria-label='Attached element Y offset'>
+								<input id='rules-range-attached-width' type='number' min='1' class='input' placeholder='Width' onchange='RulesRange.updateAttachedOffsets();' aria-label='Attached element width'>
+								<input id='rules-range-attached-height' type='number' min='1' class='input' placeholder='Height' onchange='RulesRange.updateAttachedOffsets();' aria-label='Attached element height'>
+							</div>
 							<h5 id='rules-range-status' class='padding input-description'>No rules range selected.</h5>
 						</div>
 						<div class='readable-background padding margin-bottom'>

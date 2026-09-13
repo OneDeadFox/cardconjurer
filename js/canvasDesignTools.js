@@ -15,12 +15,14 @@
 	function normalizedBounds(a, b) {
 		var x1=Math.min(a.x,b.x), y1=Math.min(a.y,b.y), x2=Math.max(a.x,b.x), y2=Math.max(a.y,b.y);
 		var rx=cardCanvas.width/previewCanvas.width/card.width, ry=cardCanvas.height/previewCanvas.height/card.height;
-		return {x:x1*rx,y:y1*ry,width:Math.max(10/card.width,(x2-x1)*rx),height:Math.max(10/card.height,(y2-y1)*ry)};
+		var bounds={x:x1*rx,y:y1*ry,width:Math.max(10/card.width,(x2-x1)*rx),height:Math.max(10/card.height,(y2-y1)*ry)};
+		return window.RulesRange?RulesRange.snapBounds(bounds):bounds;
 	}
 	function pointBounds(p, kind) {
 		var rx=cardCanvas.width/previewCanvas.width/card.width, ry=cardCanvas.height/previewCanvas.height/card.height;
 		var width=kind==='text'?.36:.25, height=kind==='text'?.09:.22;
-		return {x:Math.max(0,Math.min(1-width,p.x*rx)),y:Math.max(0,Math.min(1-height,p.y*ry)),width:width,height:height};
+		var bounds={x:Math.max(0,Math.min(1-width,p.x*rx)),y:Math.max(0,Math.min(1-height,p.y*ry)),width:width,height:height};
+		return window.RulesRange?RulesRange.snapBounds(bounds,'move'):bounds;
 	}
 	function uniqueLabel(kind) {
 		counters[kind]++;
@@ -48,6 +50,7 @@
 			openEditor({kind:'frame',key:imageKey,target:frame,rectangle:previewLayoutBounds(bounds)});
 		}
 		commitDesignUndoSnapshot(before,'Create '+kind);
+		if(window.RulesRange)RulesRange.refreshElements();
 		drawCard();
 	}
 	function rangeFor(area) { return (card.rulesRanges||[]).find(function(r){return r.id===area.key;}); }
@@ -71,6 +74,8 @@
 		if(!editorArea)return; var range=editorArea.kind==='rulesRange'?rangeFor(editorArea):null, target=boundsFor(editorArea);
 		var val=function(id){return Number(document.querySelector('#canvas-element-'+id).value)||0;};
 		target.x=val('x')/card.width; target.y=val('y')/card.height; target.width=Math.max(10,val('width'))/card.width; target.height=Math.max(10,val('height'))/card.height;
+		if(window.RulesRange)RulesRange.snapBounds(target,'resize',range?.id);
+		input('x',Math.round(target.x*card.width));input('y',Math.round(target.y*card.height));input('width',Math.round(target.width*card.width));input('height',Math.round(target.height*card.height));
 		var name=document.querySelector('#canvas-element-name').value.trim(); var rotation=val('rotation'); if(range){range.name=name||range.name;range.direction=document.querySelector('#canvas-element-flow').value;range.rotation=rotation;RulesRange.refresh();}
 		else if(editorArea.kind==='frame'){editorArea.target.rotation=rotation;if(name){editorArea.target.name=name;editorArea.target.csvFieldLabel=name;var frameIndex=card.frames.indexOf(editorArea.target);var heading=document.querySelector('#frame-list')?.children[frameIndex]?.querySelector('h4');if(heading)heading.textContent=name;}} else {editorArea.target.rotation=rotation;if(name){editorArea.target.name=name;editorArea.target.csvFieldLabel=name;var textIndex=Object.keys(card.text).indexOf(editorArea.key);var option=document.querySelector('#text-options')?.children[textIndex];if(option)option.textContent=name;}}
 		if(window.RulesRange){if(range)RulesRange.syncElements();else RulesRange.updateElementRelative(editorArea.kind==='frame'?'frame':'text',editorArea.kind==='frame'?ensureDesignLayerId(editorArea.target):editorArea.key);}

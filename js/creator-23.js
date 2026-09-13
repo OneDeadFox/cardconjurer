@@ -2243,13 +2243,13 @@ function frameElementDoubleClicked(event) {
 		}
 		// Basic manipulations
 		document.querySelector('#frame-editor-x').value = scaleWidth(selectedFrame.bounds.x || 0);
-		document.querySelector('#frame-editor-x').onchange = (event) => {selectedFrame.bounds.x = (event.target.value / card.width); drawFrames();}
+		document.querySelector('#frame-editor-x').onchange = (event) => {selectedFrame.bounds.x = (event.target.value / card.width); snapEditedElement(selectedFrame.bounds,'frame',ensureDesignLayerId(selectedFrame)); drawFrames();}
 		document.querySelector('#frame-editor-y').value = scaleHeight(selectedFrame.bounds.y || 0);
-		document.querySelector('#frame-editor-y').onchange = (event) => {selectedFrame.bounds.y = (event.target.value / card.height); drawFrames();}
+		document.querySelector('#frame-editor-y').onchange = (event) => {selectedFrame.bounds.y = (event.target.value / card.height); snapEditedElement(selectedFrame.bounds,'frame',ensureDesignLayerId(selectedFrame)); drawFrames();}
 		document.querySelector('#frame-editor-width').value = scaleWidth(selectedFrame.bounds.width || 1);
-		document.querySelector('#frame-editor-width').onchange = (event) => {selectedFrame.bounds.width = (event.target.value / card.width); drawFrames();}
+		document.querySelector('#frame-editor-width').onchange = (event) => {selectedFrame.bounds.width = (event.target.value / card.width); snapEditedElement(selectedFrame.bounds,'frame',ensureDesignLayerId(selectedFrame)); drawFrames();}
 		document.querySelector('#frame-editor-height').value = scaleHeight(selectedFrame.bounds.height || 1);
-		document.querySelector('#frame-editor-height').onchange = (event) => {selectedFrame.bounds.height = (event.target.value / card.height); drawFrames();}
+		document.querySelector('#frame-editor-height').onchange = (event) => {selectedFrame.bounds.height = (event.target.value / card.height); snapEditedElement(selectedFrame.bounds,'frame',ensureDesignLayerId(selectedFrame)); drawFrames();}
 		document.querySelector('#frame-editor-rotation').value = Number(selectedFrame.rotation) || 0;
 		document.querySelector('#frame-editor-rotation').onchange = (event) => {selectedFrame.rotation = Number(event.target.value) || 0; drawFrames();}
 		document.querySelector('#frame-editor-visible').checked = !selectedFrame.hidden;
@@ -2507,13 +2507,18 @@ function textboxEditor() {
 	document.querySelector('#textbox-editor').classList.add('opened');
 	if (window.CanvasDesignTools) CanvasDesignTools.suspend();
 	document.querySelector('#textbox-editor-x').value = scaleWidth(selectedTextbox.x || 0);
-	document.querySelector('#textbox-editor-x').onchange = (event) => {selectedTextbox.x = (event.target.value / card.width); textEdited();}
+	document.querySelector('#textbox-editor-x').onchange = (event) => {selectedTextbox.x = (event.target.value / card.width); snapEditedElement(selectedTextbox,'text',Object.keys(card.text)[selectedTextIndex]); textEdited();}
 	document.querySelector('#textbox-editor-y').value = scaleHeight(selectedTextbox.y || 0);
-	document.querySelector('#textbox-editor-y').onchange = (event) => {selectedTextbox.y = (event.target.value / card.height); textEdited();}
+	document.querySelector('#textbox-editor-y').onchange = (event) => {selectedTextbox.y = (event.target.value / card.height); snapEditedElement(selectedTextbox,'text',Object.keys(card.text)[selectedTextIndex]); textEdited();}
 	document.querySelector('#textbox-editor-width').value = scaleWidth(selectedTextbox.width || 1);
-	document.querySelector('#textbox-editor-width').onchange = (event) => {selectedTextbox.width = (event.target.value / card.width); textEdited();}
+	document.querySelector('#textbox-editor-width').onchange = (event) => {selectedTextbox.width = (event.target.value / card.width); snapEditedElement(selectedTextbox,'text',Object.keys(card.text)[selectedTextIndex]); textEdited();}
 	document.querySelector('#textbox-editor-height').value = scaleHeight(selectedTextbox.height || 1);
-	document.querySelector('#textbox-editor-height').onchange = (event) => {selectedTextbox.height = (event.target.value / card.height); textEdited();}
+	document.querySelector('#textbox-editor-height').onchange = (event) => {selectedTextbox.height = (event.target.value / card.height); snapEditedElement(selectedTextbox,'text',Object.keys(card.text)[selectedTextIndex]); textEdited();}
+}
+function snapEditedElement(bounds,kind,key) {
+	if (!window.RulesRange) return;
+	RulesRange.snapBounds(bounds,'resize');
+	RulesRange.updateElementRelative(kind,key);
 }
 function restoreCurrentTextboxDefault() {
 	restoreSelectedTextFieldDefaults();
@@ -4207,6 +4212,7 @@ async function addCustomTemplateField(kind) {
 		} else {
 			throw new Error('Unknown custom field type.');
 		}
+		if (window.RulesRange) RulesRange.refreshElements();
 		if (input) {
 			input.value = '';
 		}
@@ -5140,6 +5146,7 @@ function applyLayoutHighlightDrag(point) {
 			target.y = updateAnchoredCoordinate(original.y, deltaY, 'bottom', drag.area.vertical);
 		}
 	}
+	if (window.RulesRange) RulesRange.snapBounds(target,drag.action,drag.area.kind == 'rulesRange' ? drag.area.key : '');
 	if (drag.area.kind == 'frame') {
 		drawFrames();
 	} else {
