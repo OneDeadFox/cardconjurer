@@ -283,6 +283,8 @@
 							</div>
 							<select id='rules-range-list' class='input margin-bottom' onchange='RulesRange.select(this.value);' aria-label='Rules ranges'></select>
 							<input id='rules-range-name' type='text' class='input margin-bottom' placeholder='Rules range name' onchange='RulesRange.renameSelected(this.value);' aria-label='Rules range name'>
+							<label class='input'><input id='rules-range-auto-size' type='checkbox' onchange='RulesRange.updateOptions();'> Auto-size modules to text</label>
+							<label class='input margin-bottom'><input id='rules-range-uniform-text' type='checkbox' onchange='RulesRange.updateOptions();'> Uniform text size across modules</label>
 							<h5 class='padding margin-bottom input-description'>Range bounds in editor pixels</h5>
 							<div class='input-grid margin-bottom'>
 								<input id='rules-range-x' type='number' class='input' placeholder='X' onchange='RulesRange.updateBounds();' aria-label='Rules range X'>

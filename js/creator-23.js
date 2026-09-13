@@ -2527,11 +2527,13 @@ function restoreCurrentTextboxDefault() {
 }
 function textEdited() {
 	card.text[Object.keys(card.text)[selectedTextIndex]].text = curlyQuotes(document.querySelector('#text-editor').value);
+	if (window.RulesRange) RulesRange.reflowForText(Object.keys(card.text)[selectedTextIndex]);
 	drawTextBuffer();
 	autoFrameBuffer();
 }
 function fontSizedEdited() {
 	card.text[Object.keys(card.text)[selectedTextIndex]].fontSize = document.querySelector('#text-editor-font-size').value;
+	if (window.RulesRange) RulesRange.reflowForText(Object.keys(card.text)[selectedTextIndex]);
 	drawTextBuffer();
 }
 
@@ -2625,7 +2627,7 @@ function cardTextRectInLocalCoordinates(rect, targetRect) {
 }
 function estimateManaCostWidth(textObject) {
 	var textSize = Math.max(1,
-		(scaleHeight(Number(textObject.size) || 0.038)) + (parseInt(textObject.fontSize || '0') || 0));
+		(scaleHeight(Number(textObject.size) || 0.038)) + (parseInt(textObject.fontSize || '0') || 0) - (Number(textObject.rangeFontReduction)||0));
 	var manaSpacing = textSize * 0.04 + (scaleWidth(Number(textObject.manaSpacing)) || 0);
 	var rawText = String(textObject.text || '');
 	var tokenPattern = /{([^{}]+)}/g;
@@ -2656,7 +2658,7 @@ function estimateManaCostWidth(textObject) {
 }
 function estimateOneLineTextWidth(textObject) {
 	var textSize = Math.max(1,
-		(scaleHeight(Number(textObject.size) || 0.038)) + (parseInt(textObject.fontSize || '0') || 0));
+		(scaleHeight(Number(textObject.size) || 0.038)) + (parseInt(textObject.fontSize || '0') || 0) - (Number(textObject.rangeFontReduction)||0));
 	var measurementCanvas = estimateOneLineTextWidth.canvas ||
 		(estimateOneLineTextWidth.canvas = document.createElement('canvas'));
 	var measurementContext = measurementCanvas.getContext('2d');
@@ -3040,9 +3042,10 @@ function writeText(textObject, targetContext) {
 	var textHeight = scaleHeight(textObject.height) || scaleHeight(1);
 	var startingTextSize = scaleHeight(textObject.size) || scaleHeight(0.038);
 	var originalStartingTextSize = startingTextSize;
-	var fontSizeModifier = parseInt(textObject.fontSize || '0') || 0;
+	var fontSizeModifier = (parseInt(textObject.fontSize || '0') || 0) - (Number(textObject.rangeFontReduction)||0);
 	var collisionMinimumTextSize = Math.max(1, Math.min(startingTextSize,
 		originalStartingTextSize - CARD_TEXT_COLLISION_MINIMUM_REDUCTION - fontSizeModifier));
+	if (textObject.rangeUniformTextSize) collisionMinimumTextSize = startingTextSize;
 	var collisionFit = getCardTextCollisionFit(textObject, textWidth, textHeight);
 	var collisionFitFailed = false;
 	textWidth = collisionFit.width;
@@ -3280,7 +3283,7 @@ function writeText(textObject, targetContext) {
 		// if (textFont == 'goudymedieval') {
 		// 	lineCanvas.style.letterSpacing = '3.5px';
 		// }
-		textSize += parseInt(textObject.fontSize || '0');
+		textSize += fontSizeModifier;
 		lineContext.font = textFontStyle + textSize + 'px ' + textFont + textFontExtension;
 		lineContext.fillStyle = textColor;
 		lineContext.shadowColor = textShadowColor;
