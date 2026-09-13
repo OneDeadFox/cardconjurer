@@ -19,7 +19,7 @@
 	function refreshInputs(){var range=selected(),disabled=!range;['rules-range-name','rules-range-x','rules-range-y','rules-range-width','rules-range-height'].forEach(function(id){var input=document.querySelector('#'+id);if(input)input.disabled=disabled;});if(!range){setInput('rules-range-name','');['x','y','width','height'].forEach(function(key){setInput('rules-range-'+key,'');});refreshModules();status('No rules range selected.');return;}setInput('rules-range-name',range.name);setInput('rules-range-x',pixelValue(range.bounds.x,card.width));setInput('rules-range-y',pixelValue(range.bounds.y,card.height));setInput('rules-range-width',pixelValue(range.bounds.width,card.width));setInput('rules-range-height',pixelValue(range.bounds.height,card.height));refreshModules();status('Selected “'+range.name+'” with '+range.modules.length+' module'+(range.modules.length===1?'':'s')+'.');}
 	function refresh(){var list=document.querySelector('#rules-range-list');if(!list)return;var current=selected();list.innerHTML='';if(!ranges().length){var empty=document.createElement('option');empty.value='';empty.textContent='No rules ranges';list.appendChild(empty);list.disabled=true;selectedRangeId='';}else{list.disabled=false;ranges().forEach(function(range){var option=document.createElement('option');option.value=range.id;option.textContent=range.name;list.appendChild(option);});list.value=current.id;}refreshInputs();if(typeof drawCard==='function')drawCard();}
 	function add(bounds){if(!window.card)return;var before=snapshot(),index=ranges().length,range=normalizeRange({id:nextRangeId(),name:'Rules Range '+(index+1),direction:'vertical',bounds:bounds||{x:.12,y:.55,width:.76,height:.3},modules:[]},index);ranges().push(range);selectedRangeId=range.id;selectedModuleId='';refresh();commit(before,'Add rules range');}
-	function remove(id,ask){var range=id?ranges().find(function(item){return item.id===id;}):selected();if(!range||(ask!==false&&!confirm('Remove the rules range “'+range.name+'”? Its modules will also be removed.')))return false;var before=snapshot();card.rulesRanges=ranges().filter(function(item){return item.id!==range.id;});selectedRangeId=card.rulesRanges.length?card.rulesRanges[0].id:'';selectedModuleId='';refresh();commit(before,'Remove rules range');return true;}
+	function remove(id,ask){var range=id?ranges().find(function(item){return item.id===id;}):selected();if(!range||(ask!==false&&!confirm('Remove the rules range “'+range.name+'”? Its modules and duplicated elements will also be removed.')))return false;var before=snapshot(),removedModules=range.modules.slice();card.rulesRanges=ranges().filter(function(item){return item.id!==range.id;});removeOwnedElements(removedModules);selectedRangeId=card.rulesRanges.length?card.rulesRanges[0].id:'';selectedModuleId='';refresh();commit(before,'Remove rules range');return true;}
 	function removeSelected(){return remove('',true);}
 	function select(id){if(ranges().some(function(range){return range.id===id;})){selectedRangeId=id;selectedModuleId='';}refresh();}
 	function renameSelected(value){var range=selected(),next=String(value||'').trim();if(!range||!next||next===range.name)return;var before=snapshot();range.name=next;refresh();commit(before,'Rename rules range');}
@@ -54,8 +54,13 @@
 		var range=selected(),module=selectedModule();if(!range||!module)return;
 		var before=snapshot(),index=range.modules.indexOf(module);
 		range.modules.splice(index,1);
+		removeOwnedElements([module]);
+		selectedModuleId=range.modules[Math.min(index,range.modules.length-1)]?.id||'';
+		syncElements();refresh();commit(before,'Remove rules module');
+	}
+	function removeOwnedElements(modules){
 		var removedText=false,removedFrames=false;
-		module.elements.filter(function(entry){return entry.owned;}).forEach(function(entry){
+		modules.flatMap(function(module){return module.elements;}).filter(function(entry){return entry.owned;}).forEach(function(entry){
 			if(allAttachments().some(function(other){return other.kind===entry.kind&&other.key===entry.key;}))return;
 			if(entry.kind==='text'){
 				if(card.text?.[entry.key]){delete card.text[entry.key];removedText=true;}
@@ -69,8 +74,6 @@
 			else {var list=document.querySelector('#text-options');if(list)list.innerHTML='';if(typeof drawText==='function')drawText();}
 		}
 		if(removedFrames&&typeof drawFrames==='function')drawFrames();
-		selectedModuleId=range.modules[Math.min(index,range.modules.length-1)]?.id||'';
-		syncElements();refresh();commit(before,'Remove rules module');
 	}
 	function selectModule(id){var range=selected();if(range&&range.modules.some(function(module){return module.id===id;}))selectedModuleId=id;refreshModules();}
 	function updateModule(){var module=selectedModule();if(!module)return;var before=snapshot(),name=document.querySelector('#rules-range-module-name')?.value.trim(),sizing=document.querySelector('#rules-range-module-sizing')?.value,size=Number(document.querySelector('#rules-range-module-size')?.value),nextSizing=sizing==='fixed'?'fixed':'flex';if(name)module.name=name;if(nextSizing!==module.sizing)size=nextSizing==='fixed'?80:1;module.sizing=nextSizing;module.size=Math.max(1,Number.isFinite(size)?size:module.size);syncElements();refresh();commit(before,'Edit rules module');}
