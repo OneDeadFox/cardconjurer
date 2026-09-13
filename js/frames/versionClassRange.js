@@ -17,12 +17,13 @@ async function initializeClassRulesRange() {
 			id: range.id + '-level-' + i, name: 'Level ' + (i + 1),
 			sizing: 'flex', size: i === 0 ? 210 : 171, elements: []
 		};
-		const addText = (key, y, fitHeight) => {
+		const addText = (key, y, fitHeight, role) => {
 			const field = card.text[key];
 			if (!field) return;
 			const entry = {kind: 'text', key, owned: true,
 				offset: {x: (field.x - range.bounds.x) * card.width, y,
 					width: field.width * card.width, height: field.height * card.height}};
+			if (role) {entry.collisionGroup = 'class-header';entry.collisionRole = role;}
 			if (fitHeight) entry.fitHeight = 0;
 			module.elements.push(entry);
 		};
@@ -31,7 +32,7 @@ async function initializeClassRulesRange() {
 				name: 'Level ' + (i + 1) + ' Header',
 				src: '/img/frames/class/header.png', masks: [], noThumb: true,
 				bounds: {x: range.bounds.x, y: range.bounds.y, width: 0.4, height: 0.0481},
-				opacity: 100, designCreated: true, customField: true
+				opacity: 100, designCreated: true, customField: true, classRangeBanner: true
 			};
 			ensureDesignLayerId(header);
 			card.frames.unshift(header);
@@ -39,8 +40,8 @@ async function initializeClassRulesRange() {
 			module.elements.push({kind: 'frame', key: header.designLayerId, owned: true,
 				offset: {x: (0.5014 - range.bounds.x) * card.width, y: 0,
 					width: 0.422 * card.width, height: headerHeight}});
-			addText('level' + i + 'a', 0.012 * card.height, false);
-			addText('level' + i + 'b', 0.012 * card.height, false);
+			addText('level' + i + 'a', 0.012 * card.height, false, 'cost');
+			addText('level' + i + 'b', 0.012 * card.height, false, 'name');
 		}
 		addText('level' + i + 'c', i ? headerHeight : 0, true);
 		range.modules.push(module);

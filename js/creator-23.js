@@ -2532,8 +2532,9 @@ function textEdited() {
 	autoFrameBuffer();
 }
 function fontSizedEdited() {
-	card.text[Object.keys(card.text)[selectedTextIndex]].fontSize = document.querySelector('#text-editor-font-size').value;
-	if (window.RulesRange) RulesRange.reflowForText(Object.keys(card.text)[selectedTextIndex]);
+	var key=Object.keys(card.text)[selectedTextIndex],fontSize=Number(document.querySelector('#text-editor-font-size').value)||0;
+	if(window.RulesTextStyles)RulesTextStyles.update(key,{fontSize:fontSize},false);else card.text[key].fontSize=fontSize;
+	if (window.RulesRange) RulesRange.reflowForText(key);
 	drawTextBuffer();
 }
 
@@ -3949,6 +3950,12 @@ function writeText(textObject, targetContext) {
 				if (drawToPrePTCanvas) {
 					trueTargetContext = prePTContext;
 				}
+				if (textObject.clipToBounds) {
+					trueTargetContext.save();
+					trueTargetContext.beginPath();
+					trueTargetContext.rect(textX, textY, textWidth, textHeight);
+					trueTargetContext.clip();
+				}
 				if (textRotation) {
 					trueTargetContext.save();
 					trueTargetContext
@@ -3961,6 +3968,7 @@ function writeText(textObject, targetContext) {
 				} else {
 					trueTargetContext.drawImage(paragraphCanvas, textX - canvasMargin + ptShift[0] + permaShift[0] + finalHorizontalAdjust, textY - canvasMargin + verticalAdjust + ptShift[1] + permaShift[1]);
 				}
+				if (textObject.clipToBounds) trueTargetContext.restore();
 				drawingText = false;
 			}
 		}
@@ -5319,6 +5327,14 @@ function drawCard() {
 		cardContext.drawImage(planeswalkerPreFrameCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
 	}
 	cardContext.drawImage(frameCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
+	if (card.version === 'classRange') {
+		card.frames.slice().reverse().forEach(function(frame) {
+			if ((frame.classRangeBanner || (frame.name?.includes('Header') && frame.src === '/img/frames/class/header.png')) && !frame.hidden && frame.image?.complete && frame.image.naturalWidth) {
+				var bounds = frame.bounds || {};
+				cardContext.drawImage(frame.image, scaleX(bounds.x), scaleY(bounds.y), scaleWidth(bounds.width), scaleHeight(bounds.height));
+			}
+		});
+	}
 	if (card.version.toLowerCase().includes('planeswalker') && typeof planeswalkerPostFrameCanvas !== "undefined") {
 		cardContext.drawImage(planeswalkerPostFrameCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
 	} else if (card.version.toLowerCase().includes('planeswalker') && typeof planeswalkerCanvas !== "undefined") {

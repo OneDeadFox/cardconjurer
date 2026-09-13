@@ -299,6 +299,7 @@
 								<button class='input' onclick='RulesRange.removeSelectedModule();'>Remove Module</button>
 								<button class='input' onclick='RulesRange.moveSelectedModule(-1);'>Move Up</button>
 								<button class='input' onclick='RulesRange.moveSelectedModule(1);'>Move Down</button>
+								<button class='input' onclick='RulesTextStyles.openModule();'>Edit Module Elements</button>
 								<button class='input' onclick='undoDesignChange();'>Undo Module Change</button>
 							</div>
 							<select id='rules-range-module-list' class='input margin-bottom' onchange='RulesRange.selectModule(this.value);' aria-label='Rules range modules'></select>
@@ -1308,6 +1309,7 @@
 	<script defer src='/js/creator-23.js'></script>
 	<script defer src='/js/rulesRange.js'></script>
 	<script defer src='/js/canvasDesignTools.js'></script>
+	<script defer src='/js/rulesTextStyles.js'></script>
 	<script defer src='/js/frameProjectStore.js'></script>
 	<script defer src='/js/frameResourceLibrary.js'></script>
 	<script defer src='/js/csvImport.js'></script>
