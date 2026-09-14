@@ -143,6 +143,8 @@ Double-clicking a text element in Design Frame opens its font, base size, font-s
 
 The text popup treats geometry changes, text style changes, and style-family membership as separate actions. Font, top alignment, and family edits never round, snap, or rewrite a dragged box's anchor. A manual vertical resize clears the Class prototype's automatic text-height rule for that element. The popup can create an entire range-local family by selecting multiple text fields across the range, or update a family's selected membership later. The module preview labels family membership and returns after closing an element's floating editor.
 
+The family picker also shows the current source field as permanently included (checked and disabled). Manual box movement and edge resizing snap to other text/image edges as well as range/module guides; movement can center-align with another element. The module editor preview uses the same attached bounds as the card: drag to move, use corner handles to resize, double-click to edit, and click the small X to remove an owned element or detach a pre-existing one. These changes update module anchors and are undoable.
+
 ## Next V1 phases
 
 1. Save reusable module templates such as Class Level and Planeswalker Ability.

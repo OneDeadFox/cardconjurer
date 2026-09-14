@@ -2519,7 +2519,7 @@ function textboxEditor() {
 }
 function snapEditedElement(bounds,kind,key) {
 	if (!window.RulesRange) return;
-	RulesRange.snapBounds(bounds,'resize');
+	RulesRange.snapBounds(bounds,'resize','',{kind:kind,key:key});
 	RulesRange.updateElementRelative(kind,key);
 }
 function restoreCurrentTextboxDefault() {
@@ -5160,7 +5160,7 @@ function applyLayoutHighlightDrag(point) {
 			target.y = updateAnchoredCoordinate(original.y, deltaY, 'bottom', drag.area.vertical);
 		}
 	}
-	if (window.RulesRange) RulesRange.snapBounds(target,drag.action,drag.area.kind == 'rulesRange' ? drag.area.key : '');
+	if (window.RulesRange) RulesRange.snapBounds(target,drag.action,drag.area.kind == 'rulesRange' ? drag.area.key : '',drag.area.kind==='text'||drag.area.kind==='frame'?{kind:drag.area.kind,key:drag.area.key}:null);
 	if (drag.area.kind == 'frame') {
 		drawFrames();
 	} else {
