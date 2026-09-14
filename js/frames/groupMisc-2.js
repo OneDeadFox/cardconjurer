@@ -18,6 +18,7 @@ loadFramePacks([
 	{name:'Eighth Edition Playtest Cards', value:'8thPlaytest'},
 	{name:'Playtest Cards', value:'Playtest'},
 	{name:'Dungeon (AFR)', value:'Dungeon'},
+	{name:'Dungeon (Room Modules Prototype)', value:'DungeonModules'},
 	{name:'Planechase', value:'Planechase'},
 	{name:'Vanguard', value:'Vanguard'},
 	{name:'Cardback', value:'Cardback'}

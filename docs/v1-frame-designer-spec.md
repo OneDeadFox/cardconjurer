@@ -163,3 +163,15 @@ Raster painting and image-authoring tools are deferred:
 - Rasterized editing exports.
 
 V1 may include non-destructive rectangle and ellipse masks without introducing a complete raster editor.
+### Dungeon room modules (prototype)
+
+The existing Dungeon (AFR) frame and its coordinate-list editor remain available. The separate
+Dungeon (Room Modules Prototype) frame uses the same wall artwork, but stores each room as a
+card-relative module with a stable ID, name, bounds and owned text field. In the Dungeon tab,
+select, rename, position, add, duplicate or remove rooms; in Frame Design, enable the purple
+range highlights to move, resize, remove or double-click individual rooms. Canvas moves and
+resizes settle on the AFR dungeon grid when released. Room walls and text follow room bounds.
+For every nonzero shared wall segment between two rooms, draw one doorway at that segment's
+midpoint, whether the wall is horizontal or vertical. Corner contact creates no doorway.
+Room edits and duplication/deletion participate in design undo. Custom door positions and
+independently anchored frame components are not part of this first prototype.

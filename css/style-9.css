@@ -1371,3 +1371,8 @@ textarea.input {
 	max-height: 100%;
 	object-fit: contain;
 }
+/* Experimental dungeon room controls */
+#dungeon-modules-panel > p { margin: .5em 0 1em; }
+#dungeon-modules-panel #dungeon-module-list { width: 100%; margin-bottom: .7em; }
+#dungeon-modules-panel .dungeon-module-coordinates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5em; margin: .7em 0; }
+#dungeon-modules-panel .dungeon-module-coordinates input { width: 100%; box-sizing: border-box; }

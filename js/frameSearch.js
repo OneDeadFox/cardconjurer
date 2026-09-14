@@ -228,6 +228,7 @@ const frameNames = new Map ([
 	['8th Edition Playtest Cards', '8thPlaytest'],
 	['Playtest Cards', 'Playtest'],
 	['Dungeon (AFR)', 'Dungeon'],
+	['Dungeon (Room Modules Prototype)', 'DungeonModules'],
 	['Planechase', 'Planechase'],
 	['Vanguard', 'Vanguard'],
 	['Cardback', 'Cardback'],

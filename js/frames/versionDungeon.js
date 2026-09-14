@@ -27,6 +27,7 @@ if (!loadedVersions.includes('/js/frames/versionDungeon.js')) {
 		card.dungeon = {abilities:[1, 1, 1, 0], count:3, x:0.1, width:0.3947};
 	}
 	document.querySelector('#creator-menu-sections').appendChild(newHTML);
+	if (card.version === 'dungeonModules') window.DungeonModules?.mount();
 	var dungeonFXtop = new Image(); setImageUrl(dungeonFXtop, '/img/frames/dungeon/walls/fx/top.png');
 	var dungeonFXleft = new Image(); setImageUrl(dungeonFXleft, '/img/frames/dungeon/walls/fx/left.png');
 	var dungeonFXbottom = new Image(); setImageUrl(dungeonFXbottom, '/img/frames/dungeon/walls/fx/bottom.png');
@@ -65,10 +66,17 @@ function dungeonEditedBuffer() {
 }
 
 function dungeonEdited() {
+	window.DungeonModules?.mount();
 	//gather data
-	data = document.querySelector('#dungeon-input').value;
-	rooms = [];
-	data.replace(/ /g, '').split('\n').forEach(room => {
+	var prototype = card.version === 'dungeonModules' && window.DungeonModules;
+	var data = document.querySelector('#dungeon-input')?.value || '';
+	var rooms = [];
+	if (prototype) {
+		rooms = DungeonModules.modules().map(function(module) {
+			var p = DungeonModules.toGrid(module.bounds);
+			return [p.x,p.y,p.w,p.h];
+		});
+	} else data.replace(/ /g, '').split('\n').forEach(room => {
 		newRoom = room.split(',');
 		for (i = 0; i < newRoom.length; i++) {
 			if (i >= 4) {
@@ -89,7 +97,7 @@ function dungeonEdited() {
 		}
 		rooms.push(newRoom);
 	});
-	console.log(rooms);
+	if (prototype) DungeonModules.modules().forEach(DungeonModules.syncRoom);
 	// init variables
 	const cellSize = scaleHeight(0.0381);
 	const origX = scaleX(0.0734);
@@ -132,9 +140,10 @@ function dungeonEdited() {
 	dungeonContext.drawImage(dungeonOuterShape, 0, 0, dungeonCanvas.width, dungeonCanvas.height);
 	dungeonFXContext.drawImage(dungeonOuterFX, 0, 0, dungeonFXCanvas.width, dungeonFXCanvas.height);
 	// text
+	if (!prototype) {
 	var textObjects = {};
 	textObjects.title = {name:'Title', text:'', x:0.0854, y:0.0522, width:0.8292, height:0.0543, oneLine:true, font:'belerenbsc', size:0.0381, color:'white', align:'center'};
-	roomNumber = 1;
+	var roomNumber = 1;
 	rooms.forEach(room => {
 		var textbox = {name:`Dungeon Room ${roomNumber}`, text:`Room ${roomNumber}{lns}{fontmplantin}{fontsize-8}Effect.`, x:(origX + cellSize * (room[0] + 0.5)) / card.width, y:(origY + cellSize * (room[1] + 0.5)) / card.height, width:(cellSize * room[2]) / card.width, height:(cellSize * room[3]) / card.height, font:'belerenb', size:0.0324, align:'center'};
 		if (room[3] < 3) {
@@ -143,7 +152,23 @@ function dungeonEdited() {
 		textObjects[`dungeonRoom${roomNumber}`] = textbox;
 		roomNumber ++;
 	})
+	}
 	// doorways
+	if (prototype) {
+		DungeonModules.doorways(DungeonModules.modules()).forEach(function(door) {
+			var x = origX + cellSize * door.x, y = origY + cellSize * door.y;
+			[dungeonContext,dungeonFXContext].forEach(function(context,index) {
+				context.save();context.translate(x,y);
+				if(door.axis === 'vertical') context.rotate(-Math.PI/2);
+				context.globalCompositeOperation='destination-out';
+				context.drawImage(dungeonDoorwayCutout,-dungeonDoorwayCutout.width/2,0);
+				context.globalCompositeOperation='source-over';
+				var image=index?dungeonDoorwayFX:dungeonDoorwayShape;
+				context.drawImage(image,-image.width/2,0);
+				context.restore();
+			});
+		});
+	} else {
 	rooms.push([0,-2,16,1,7]);
 	rooms.forEach(room => {
 		doorways = room.slice(4);
@@ -161,6 +186,7 @@ function dungeonEdited() {
 			}
 		});
 	});
+	}
 	// apply textures and FX
 	dungeonContext.globalCompositeOperation = 'source-in';
 	texture = window[`dungeonTexture${document.querySelector('#dungeon-color').value}`];
@@ -168,6 +194,6 @@ function dungeonEdited() {
 	dungeonContext.globalCompositeOperation = 'source-over';
 	dungeonContext.drawImage(dungeonFXCanvas, 0, 0, dungeonCanvas.width, dungeonCanvas.height)
 	// finish
-	loadTextOptions(textObjects);
+	if (!prototype) loadTextOptions(textObjects);
 	drawTextBuffer();
 }

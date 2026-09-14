@@ -1214,6 +1214,7 @@ function createDesignStateSnapshot() {
 		frames:(card.frames || []).map(frame => ({id:ensureDesignLayerId(frame), state:getFrameEditorState(frame), definition:cloneDesignFrameDefinition(frame)})),
 		text:cloneDesignValue(card.text || {}),
 		rulesRanges:cloneDesignValue(card.rulesRanges || []),
+		dungeonModules:cloneDesignValue(card.dungeonModules || []),
 		bottomInfo:cloneDesignValue(card.bottomInfo),
 		designDefaults:cloneDesignValue(card.designDefaults),
 		artBounds:cloneDesignValue(card.artBounds),
@@ -1311,6 +1312,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	if (Object.keys(card.text).length) loadTextOptions(card.text,true);
 	else if (document.querySelector('#text-options')) document.querySelector('#text-options').innerHTML='';
 	card.rulesRanges=cloneDesignValue(snapshot.rulesRanges||[]);
+	card.dungeonModules=cloneDesignValue(snapshot.dungeonModules||[]);
 	card.bottomInfo=cloneDesignValue(snapshot.bottomInfo);
 	card.designDefaults=cloneDesignValue(snapshot.designDefaults);
 	card.artBounds=cloneDesignValue(snapshot.artBounds);
@@ -1337,6 +1339,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	}
 	if (selectedFrame && card.frames.includes(selectedFrame)) refreshSelectedFrameEditor();
 	if (window.RulesRange) RulesRange.refresh();
+	if (card.version==='dungeonModules' && window.DungeonModules) DungeonModules.render();
 	drawFrames();
 	await drawText();
 	watermarkEdited();
@@ -4982,6 +4985,13 @@ function drawLayoutHighlights() {
 			});
 		});
 	}
+	if (card.version==='dungeonModules' && window.DungeonModules && layoutHighlightEnabled('layout-highlight-rules-ranges')) {
+		DungeonModules.modules().forEach(function(room){
+			drawLayoutHighlightBox(room.bounds, '#b784ff', room.name, {
+				kind:'dungeonRoom',key:room.id,target:room.bounds,deletable:true
+			});
+		});
+	}
 	if (layoutHighlightEnabled('layout-highlight-text')) {
 		Object.entries(card.text || {}).forEach(item => {
 			drawLayoutHighlightBox(item[1], '#43d9ff', item[1].name || item[0], {
@@ -5107,6 +5117,9 @@ function deleteLayoutHighlightArea(area) {
 	} else if (area.kind == 'rulesRange' && window.RulesRange) {
 		RulesRange.remove(area.key,false);
 		return true;
+	} else if (area.kind == 'dungeonRoom' && window.DungeonModules) {
+		DungeonModules.remove(area.key);
+		return true;
 	} else return false;
 	drawCard();
 	commitDesignUndoSnapshot(before,'Delete canvas element');
@@ -5160,7 +5173,11 @@ function applyLayoutHighlightDrag(point) {
 			target.y = updateAnchoredCoordinate(original.y, deltaY, 'bottom', drag.area.vertical);
 		}
 	}
-	if (window.RulesRange) RulesRange.snapBounds(target,drag.action,drag.area.kind == 'rulesRange' ? drag.area.key : '',drag.area.kind==='text'||drag.area.kind==='frame'?{kind:drag.area.kind,key:drag.area.key}:null);
+	if (drag.area.kind !== 'dungeonRoom' && window.RulesRange) RulesRange.snapBounds(target,drag.action,drag.area.kind == 'rulesRange' ? drag.area.key : '',drag.area.kind==='text'||drag.area.kind==='frame'?{kind:drag.area.kind,key:drag.area.key}:null);
+	if (drag.area.kind === 'dungeonRoom' && window.DungeonModules) {
+		var room=DungeonModules.modules().find(function(item){return item.id===drag.area.key;});
+		if(room){DungeonModules.syncRoom(room);dungeonEdited();}
+	}
 	if (drag.area.kind == 'frame') {
 		drawFrames();
 	} else {
@@ -5208,6 +5225,11 @@ function openLayoutHighlightEditor(area) {
 		if (window.RulesRange) RulesRange.select(area.key);
 		return;
 	}
+	if (area.kind == 'dungeonRoom' && window.DungeonModules) {
+		DungeonModules.select(area.key);
+		activateCreatorEditorTab('dungeon');
+		return;
+	}
 	if (area.kind == 'art') activateCreatorEditorTab('art');
 	if (area.kind == 'setSymbol') activateCreatorEditorTab('setSymbol');
 	if (area.kind == 'watermark') activateCreatorEditorTab('watermark');
@@ -5236,6 +5258,10 @@ function finishLayoutHighlightDrag(event) {
 		drawCard();
 	}
 	if (area.kind == 'rulesRange' && window.RulesRange) RulesRange.refreshInputs();
+	if (area.kind == 'dungeonRoom' && window.DungeonModules) {
+		var room=DungeonModules.modules().find(function(item){return item.id===area.key;});
+		if(room){DungeonModules.snapRoom(room);DungeonModules.select(room.id);DungeonModules.render();}
+	}
 	if (window.RulesRange) {
 		if (area.kind == 'rulesRange') RulesRange.syncElements();
 		if (area.kind == 'text') RulesRange.updateElementRelative('text', area.key,{resizeVertical:completedDrag.action.includes('top')||completedDrag.action.includes('bottom')});
