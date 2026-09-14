@@ -105,7 +105,24 @@ function dungeonEdited() {
 	// walls
 	dungeonContext.clearRect(0, 0, dungeonCanvas.width, dungeonCanvas.height);
 	dungeonFXContext.clearRect(0, 0, dungeonFXCanvas.width, dungeonFXCanvas.height);
-	rooms.forEach(room => {
+	if (prototype) rooms.forEach(room => {
+		var x=origX+cellSize*room[0],y=origY+cellSize*room[1],w=cellSize*room[2],h=cellSize*room[3];
+		var cornerSize=Math.min(cellSize,w/2,h/2);
+		function edge(context,image,dx,dy,dw,dh,horizontal) {
+			if(!(dw>0&&dh>0)||!image.complete||!image.naturalWidth)return;
+			var sx=horizontal?Math.floor(image.naturalWidth/2):0,sy=horizontal?0:Math.floor(image.naturalHeight/2);
+			context.drawImage(image,sx,sy,horizontal?1:image.naturalWidth,horizontal?image.naturalHeight:1,dx,dy,dw,dh);
+		}
+		[[dungeonContext,'dungeonShape'],[dungeonFXContext,'dungeonFX']].forEach(function(pair){
+			var context=pair[0],prefix=pair[1];
+			[['topleft',x,y],['topright',x+w,y],['bottomleft',x,y+h],['bottomright',x+w,y+h]].forEach(function(corner){context.drawImage(window[prefix+corner[0]],corner[1],corner[2],cornerSize,cornerSize);});
+			edge(context,window[prefix+'top'],x+cornerSize,y,Math.max(0,w-cornerSize),cornerSize,true);
+			edge(context,window[prefix+'bottom'],x+cornerSize,y+h,Math.max(0,w-cornerSize),cornerSize,true);
+			edge(context,window[prefix+'left'],x,y+cornerSize,cornerSize,Math.max(0,h-cornerSize),false);
+			edge(context,window[prefix+'right'],x+w,y+cornerSize,cornerSize,Math.max(0,h-cornerSize),false);
+		});
+	});
+	else rooms.forEach(room => {
 		//top left corner
 		dungeonContext.drawImage(dungeonShapetopleft, origX + cellSize * room[0], origY + cellSize * room[1], cellSize, cellSize);
 		dungeonFXContext.drawImage(dungeonFXtopleft, origX + cellSize * room[0], origY + cellSize * room[1], cellSize, cellSize);
@@ -156,7 +173,7 @@ function dungeonEdited() {
 	// doorways
 	if (prototype) {
 		DungeonModules.doorways(DungeonModules.modules()).forEach(function(door) {
-			var x = origX + cellSize * door.x, y = origY + cellSize * door.y;
+			var x = card.width * door.x, y = card.height * door.y;
 			[dungeonContext,dungeonFXContext].forEach(function(context,index) {
 				context.save();context.translate(x,y);
 				if(door.axis === 'vertical') context.rotate(-Math.PI/2);
@@ -189,7 +206,16 @@ function dungeonEdited() {
 	}
 	// apply textures and FX
 	dungeonContext.globalCompositeOperation = 'source-in';
-	texture = window[`dungeonTexture${document.querySelector('#dungeon-color').value}`];
+	var color=document.querySelector('#dungeon-color')?.value||'B';
+	var texture=window[`dungeonTexture${color==='custom'?'B':color}`];
+	if(prototype && color==='custom' && card.dungeonWallTexture) {
+		if(window.dungeonTextureCustom?.src!==card.dungeonWallTexture) {
+			window.dungeonTextureCustom=new Image();
+			window.dungeonTextureCustom.onload=dungeonEditedBuffer;
+			window.dungeonTextureCustom.src=card.dungeonWallTexture;
+		}
+		if(window.dungeonTextureCustom.complete && window.dungeonTextureCustom.naturalWidth)texture=window.dungeonTextureCustom;
+	}
 	dungeonContext.drawImage(texture, 0, 0, dungeonCanvas.width, dungeonCanvas.height);
 	dungeonContext.globalCompositeOperation = 'source-over';
 	dungeonContext.drawImage(dungeonFXCanvas, 0, 0, dungeonCanvas.width, dungeonCanvas.height)

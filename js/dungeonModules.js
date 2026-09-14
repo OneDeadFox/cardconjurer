@@ -1,12 +1,12 @@
-// Spatial room modules for the experimental dungeon frame. Coordinates are card-relative;
-// the dungeon renderer converts them to the original AFR grid when drawing walls.
+// Spatial room modules for the experimental dungeon frame. Bounds are continuous card-relative
+// coordinates; the original AFR cell dimensions are only used to seed the sample arrangement.
 (function () {
 	'use strict';
 	var selectedId = '';
 	var sample = [[0,0,16,2],[0,2,8,4],[8,2,8,4],[0,6,5,5],[5,6,6,5],[11,6,5,5],[0,11,8,4],[8,11,8,4],[0,15,16,4]];
 	function grid() { return {cell: card.height * .0381, x:card.width * .0734, y:card.height * .1377}; }
 	function fromGrid(x,y,w,h) { var g=grid(); return {x:(g.x+x*g.cell)/card.width,y:(g.y+y*g.cell)/card.height,width:w*g.cell/card.width,height:h*g.cell/card.height}; }
-	function toGrid(bounds) { var g=grid(); return {x:Math.round((bounds.x*card.width-g.x)/g.cell),y:Math.round((bounds.y*card.height-g.y)/g.cell),w:Math.max(2,Math.round(bounds.width*card.width/g.cell)),h:Math.max(2,Math.round(bounds.height*card.height/g.cell))}; }
+	function toGrid(bounds) { var g=grid(); return {x:(bounds.x*card.width-g.x)/g.cell,y:(bounds.y*card.height-g.y)/g.cell,w:bounds.width*card.width/g.cell,h:bounds.height*card.height/g.cell}; }
 	function modules() { return card.dungeonModules = Array.isArray(card.dungeonModules)?card.dungeonModules:[]; }
 	function selected() { return modules().find(function(room){return room.id===selectedId;}) || modules()[0] || null; }
 	function id() { return 'dungeon-room-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7); }
@@ -24,34 +24,45 @@
 	}
 	function initialize() {
 		card.dungeonModules=[];
+		card.dungeonWallTexture='';
+		card.dungeonWallColor='B';
 		sample.forEach(function(values){addRoom(fromGrid.apply(null,values));});
 		selectedId=modules()[0]?.id||'';
 	}
 	function syncRoom(room) {
 		var box=room.bounds, text=field(room);
 		if (!text) return;
-		var g=grid(),insetX=g.cell*.5/card.width,insetY=g.cell*.5/card.height;
+		var g=grid(),insetX=Math.min(g.cell*.5/card.width,box.width*.12),insetY=Math.min(g.cell*.5/card.height,box.height*.12);
 		text.x=box.x+insetX;text.y=box.y+insetY;
-		text.width=Math.max(g.cell/card.width,box.width-2*insetX);
-		text.height=Math.max(g.cell/card.height,box.height-2*insetY);
+		text.width=Math.max(10/card.width,box.width-2*insetX);
+		text.height=Math.max(10/card.height,box.height-2*insetY);
 	}
 	function syncAll() { modules().forEach(syncRoom);if(typeof drawTextBuffer==='function')drawTextBuffer(); }
-	function snapRoom(room) {
-		var p=toGrid(room.bounds);
-		p.w=Math.min(p.w,16);p.h=Math.min(p.h,18);
-		p.x=Math.max(0,Math.min(16-p.w,p.x));p.y=Math.max(0,Math.min(18-p.h,p.y));
-		Object.assign(room.bounds,fromGrid(p.x,p.y,p.w,p.h));
+	function snapRoom(room,action) {
+		var box=room.bounds,threshold=8,move=action==='move',left=action?.includes('left')||move,right=action?.includes('right')||move,top=action?.includes('top')||move,bottom=action?.includes('bottom')||move;
+		var px={x:box.x*card.width,y:box.y*card.height,w:box.width*card.width,h:box.height*card.height};
+		modules().forEach(function(other){if(other===room)return;var peer={x:other.bounds.x*card.width,y:other.bounds.y*card.height,w:other.bounds.width*card.width,h:other.bounds.height*card.height};
+			if(Math.min(px.y+px.h,peer.y+peer.h)-Math.max(px.y,peer.y)>1){
+				if(right&&Math.abs(px.x+px.w-peer.x)<threshold){if(move)px.x=peer.x-px.w;else px.w=peer.x-px.x;}
+				else if(left&&Math.abs(px.x-(peer.x+peer.w))<threshold){var edge=peer.x+peer.w;if(!move)px.w+=px.x-edge;px.x=edge;}
+			}
+			if(Math.min(px.x+px.w,peer.x+peer.w)-Math.max(px.x,peer.x)>1){
+				if(bottom&&Math.abs(px.y+px.h-peer.y)<threshold){if(move)px.y=peer.y-px.h;else px.h=peer.y-px.y;}
+				else if(top&&Math.abs(px.y-(peer.y+peer.h))<threshold){var edge=peer.y+peer.h;if(!move)px.h+=px.y-edge;px.y=edge;}
+			}
+		});
+		px.w=Math.max(20,Math.min(card.width,px.w));px.h=Math.max(20,Math.min(card.height,px.h));
+		px.x=Math.max(0,Math.min(card.width-px.w,px.x));px.y=Math.max(0,Math.min(card.height-px.h,px.y));
+		Object.assign(box,{x:px.x/card.width,y:px.y/card.height,width:px.w/card.width,height:px.h/card.height});
 		syncRoom(room);
 	}
 	// Exactly one centered opening on each nonzero shared segment; corner contact is ignored.
 	function doorways(list) {
-		var output=[],epsilon=.00001;
+		var output=[],epsilon=1/Math.min(card.width,card.height);
 		for(var i=0;i<list.length;i++)for(var j=i+1;j<list.length;j++) {
-			var a=toGrid(list[i].bounds),b=toGrid(list[j].bounds);
-			var overlapX=Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x);
-			var overlapY=Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y);
-			if(overlapX>epsilon && (a.y+a.h===b.y || b.y+b.h===a.y)) output.push({axis:'horizontal',x:Math.max(a.x,b.x)+overlapX/2,y:a.y+a.h===b.y?b.y:a.y});
-			if(overlapY>epsilon && (a.x+a.w===b.x || b.x+b.w===a.x)) output.push({axis:'vertical',x:a.x+a.w===b.x?b.x:a.x,y:Math.max(a.y,b.y)+overlapY/2});
+			var a=list[i].bounds,b=list[j].bounds,overlapX=Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x),overlapY=Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y);
+			if(overlapX>epsilon && (Math.abs(a.y+a.height-b.y)<epsilon || Math.abs(b.y+b.height-a.y)<epsilon))output.push({axis:'horizontal',x:Math.max(a.x,b.x)+overlapX/2,y:Math.abs(a.y+a.height-b.y)<epsilon?b.y:a.y});
+			if(overlapY>epsilon && (Math.abs(a.x+a.width-b.x)<epsilon || Math.abs(b.x+b.width-a.x)<epsilon))output.push({axis:'vertical',x:Math.abs(a.x+a.width-b.x)<epsilon?b.x:a.x,y:Math.max(a.y,b.y)+overlapY/2});
 		}
 		return output;
 	}
@@ -62,9 +73,10 @@
 		list.replaceChildren();modules().forEach(function(room){var option=document.createElement('option');option.value=room.id;option.textContent=room.name;list.appendChild(option);});
 		var room=selected();if(room)selectedId=room.id;
 		list.value=selectedId;
-		var p=room?toGrid(room.bounds):null;
+		var p=room?{x:room.bounds.x*card.width,y:room.bounds.y*card.height,w:room.bounds.width*card.width,h:room.bounds.height*card.height}:null;
 		panel.querySelector('#dungeon-module-name').value=room?.name||'';
-		['x','y','w','h'].forEach(function(axis){panel.querySelector('#dungeon-module-'+axis).value=p?.[axis]??'';});
+		['x','y','w','h'].forEach(function(axis){panel.querySelector('#dungeon-module-'+axis).value=p?Math.round(p[axis]*10)/10:'';});
+		var color=document.querySelector('#dungeon-color');if(color){var custom=color.querySelector('[value="custom"]');if(!custom){custom=document.createElement('option');custom.value='custom';custom.textContent='Custom texture';color.appendChild(custom);}custom.disabled=!card.dungeonWallTexture;color.value=card.dungeonWallColor==='custom'&&card.dungeonWallTexture?'custom':(card.dungeonWallColor||'B');}
 	}
 	function mount() {
 		var tab=document.querySelector('#creator-menu-dungeon');if(!tab)return;
@@ -75,16 +87,20 @@
 			if(existing)existing.hidden=true;
 			return;
 		}
+		var color=document.querySelector('#dungeon-color');
+		if(color&&!color.dataset.moduleColorReady){color.dataset.moduleColorReady='true';color.addEventListener('change',function(){if(card.version==='dungeonModules')card.dungeonWallColor=color.value;});}
 		if(existing){existing.hidden=false;refresh();return;}
 		var panel=document.createElement('div');panel.id='dungeon-modules-panel';panel.className='readable-background padding margin-bottom';
-		panel.innerHTML='<h4>Room modules (prototype)</h4><p>Select a room here or drag its outline in Frame Design. Doorways appear at the midpoint of a shared wall.</p><select id="dungeon-module-list" class="input" size="7"></select><label>Name <input id="dungeon-module-name" class="input"></label><div class="dungeon-module-coordinates"><label>X <input type="number" id="dungeon-module-x" class="input"></label><label>Y <input type="number" id="dungeon-module-y" class="input"></label><label>Width <input type="number" min="2" id="dungeon-module-w" class="input"></label><label>Height <input type="number" min="2" id="dungeon-module-h" class="input"></label></div><button type="button" id="dungeon-module-add">Add room</button> <button type="button" id="dungeon-module-copy">Duplicate room</button> <button type="button" id="dungeon-module-remove">Delete room</button>';
+		panel.innerHTML='<h4>Room modules (prototype)</h4><p>Rooms have free-form dimensions in card pixels. Drag in Frame Design; nearby shared walls snap together and gain a centered doorway.</p><select id="dungeon-module-list" class="input" size="7"></select><label>Name <input id="dungeon-module-name" class="input"></label><div class="dungeon-module-coordinates"><label>X (px) <input type="number" step="0.1" id="dungeon-module-x" class="input"></label><label>Y (px) <input type="number" step="0.1" id="dungeon-module-y" class="input"></label><label>Width (px) <input type="number" step="0.1" min="20" id="dungeon-module-w" class="input"></label><label>Height (px) <input type="number" step="0.1" min="20" id="dungeon-module-h" class="input"></label></div><button type="button" id="dungeon-module-add">Add room</button> <button type="button" id="dungeon-module-copy">Duplicate room</button> <button type="button" id="dungeon-module-remove">Delete room</button><hr><label>Wall texture <input type="file" id="dungeon-module-texture" accept="image/*" class="input"></label><button type="button" id="dungeon-module-texture-clear">Remove uploaded texture</button><p>Upload a full-card image; its colors fill the walls while the existing highlights stay on top. Large images can exceed browser save storage.</p>';
 		tab.prepend(panel);
 		panel.querySelector('#dungeon-module-list').onchange=function(event){selectedId=event.target.value;refresh();drawCard();};
 		panel.querySelector('#dungeon-module-name').onchange=function(event){var room=selected();if(!room)return;var before=snapshot();room.name=event.target.value.trim()||room.name;if(field(room))field(room).name=room.name;refresh();drawCard();commit(before,'Rename dungeon room');};
-		['x','y','w','h'].forEach(function(axis){panel.querySelector('#dungeon-module-'+axis).onchange=function(){var room=selected();if(!room)return;var before=snapshot(),p=toGrid(room.bounds),value=Number(this.value);if(Number.isFinite(value))p[axis]=Math.round(value);Object.assign(room.bounds,fromGrid(p.x,p.y,p.w,p.h));snapRoom(room);render();commit(before,'Edit dungeon room');};});
-		panel.querySelector('#dungeon-module-add').onclick=function(){var before=snapshot(),source=selected(),p=source?toGrid(source.bounds):{x:0,y:0,w:5,h:4};addRoom(fromGrid(Math.min(16-p.w,p.x),Math.min(18-p.h,p.y+p.h),p.w,p.h));render();commit(before,'Add dungeon room');};
-		panel.querySelector('#dungeon-module-copy').onclick=function(){var source=selected();if(!source)return;var before=snapshot(),p=toGrid(source.bounds),copy=addRoom(fromGrid(Math.min(16-p.w,p.x+p.w),p.y,p.w,p.h),source.name+' Copy',field(source)?.text);var text=field(copy),original=field(source);if(text&&original){Object.assign(text,JSON.parse(JSON.stringify(original)));text.name=copy.name;syncRoom(copy);}render();commit(before,'Duplicate dungeon room');};
+		['x','y','w','h'].forEach(function(axis){panel.querySelector('#dungeon-module-'+axis).onchange=function(){var room=selected();if(!room)return;var before=snapshot(),value=Number(this.value);if(Number.isFinite(value)){var key={x:'x',y:'y',w:'width',h:'height'}[axis],dimension=axis==='x'||axis==='w'?card.width:card.height;room.bounds[key]=value/dimension;}snapRoom(room,axis==='w'?'right':axis==='h'?'bottom':'move');render();commit(before,'Edit dungeon room');};});
+		panel.querySelector('#dungeon-module-add').onclick=function(){var before=snapshot(),source=selected(),box=source?.bounds||{x:.1,y:.15,width:.3,height:.2};var newBox={x:box.x,y:Math.min(1-box.height,box.y+box.height),width:box.width,height:box.height};addRoom(newBox);render();commit(before,'Add dungeon room');};
+		panel.querySelector('#dungeon-module-copy').onclick=function(){var source=selected();if(!source)return;var before=snapshot(),box=source.bounds,copy=addRoom({x:Math.min(1-box.width,box.x+box.width),y:box.y,width:box.width,height:box.height},source.name+' Copy',field(source)?.text);var text=field(copy),original=field(source);if(text&&original){Object.assign(text,JSON.parse(JSON.stringify(original)));text.name=copy.name;syncRoom(copy);}render();commit(before,'Duplicate dungeon room');};
 		panel.querySelector('#dungeon-module-remove').onclick=function(){var room=selected();if(!room)return;remove(room.id);};
+		panel.querySelector('#dungeon-module-texture').onchange=function(){var file=this.files?.[0];if(!file)return;if(!file.type.startsWith('image/')){alert('Please upload an image file.');return;}var before=snapshot(),reader=new FileReader();reader.onload=function(){var image=new Image();image.onload=function(){card.dungeonWallTexture=reader.result;card.dungeonWallColor='custom';window.dungeonTextureCustom=image;document.querySelector('#dungeon-color').value='custom';render();commit(before,'Change dungeon wall texture');};image.onerror=function(){alert('This image could not be loaded as a wall texture.');};image.src=reader.result;};reader.readAsDataURL(file);};
+		panel.querySelector('#dungeon-module-texture-clear').onclick=function(){if(!card.dungeonWallTexture)return;var before=snapshot();card.dungeonWallTexture='';if(card.dungeonWallColor==='custom')card.dungeonWallColor='B';window.dungeonTextureCustom=null;panel.querySelector('#dungeon-module-texture').value='';render();commit(before,'Remove dungeon wall texture');};
 		refresh();
 	}
 	function remove(roomId) { var before=snapshot(),index=modules().findIndex(function(room){return room.id===roomId;});if(index<0)return;var room=modules().splice(index,1)[0];delete card.text[room.textKey];selectedId=modules()[Math.min(index,modules().length-1)]?.id||'';loadTextOptions(card.text,true);render();commit(before,'Delete dungeon room'); }

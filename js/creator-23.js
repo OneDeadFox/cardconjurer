@@ -1215,6 +1215,8 @@ function createDesignStateSnapshot() {
 		text:cloneDesignValue(card.text || {}),
 		rulesRanges:cloneDesignValue(card.rulesRanges || []),
 		dungeonModules:cloneDesignValue(card.dungeonModules || []),
+		dungeonWallTexture:card.dungeonWallTexture||'',
+		dungeonWallColor:card.dungeonWallColor||'B',
 		bottomInfo:cloneDesignValue(card.bottomInfo),
 		designDefaults:cloneDesignValue(card.designDefaults),
 		artBounds:cloneDesignValue(card.artBounds),
@@ -1313,6 +1315,8 @@ async function applyDesignStateSnapshot(snapshot) {
 	else if (document.querySelector('#text-options')) document.querySelector('#text-options').innerHTML='';
 	card.rulesRanges=cloneDesignValue(snapshot.rulesRanges||[]);
 	card.dungeonModules=cloneDesignValue(snapshot.dungeonModules||[]);
+	card.dungeonWallTexture=snapshot.dungeonWallTexture||'';
+	card.dungeonWallColor=snapshot.dungeonWallColor||'B';
 	card.bottomInfo=cloneDesignValue(snapshot.bottomInfo);
 	card.designDefaults=cloneDesignValue(snapshot.designDefaults);
 	card.artBounds=cloneDesignValue(snapshot.artBounds);
@@ -5260,7 +5264,7 @@ function finishLayoutHighlightDrag(event) {
 	if (area.kind == 'rulesRange' && window.RulesRange) RulesRange.refreshInputs();
 	if (area.kind == 'dungeonRoom' && window.DungeonModules) {
 		var room=DungeonModules.modules().find(function(item){return item.id===area.key;});
-		if(room){DungeonModules.snapRoom(room);DungeonModules.select(room.id);DungeonModules.render();}
+		if(room){DungeonModules.snapRoom(room,completedDrag.action);DungeonModules.select(room.id);DungeonModules.render();}
 	}
 	if (window.RulesRange) {
 		if (area.kind == 'rulesRange') RulesRange.syncElements();

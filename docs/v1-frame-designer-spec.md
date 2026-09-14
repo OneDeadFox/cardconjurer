@@ -173,5 +173,10 @@ range highlights to move, resize, remove or double-click individual rooms. Canva
 resizes settle on the AFR dungeon grid when released. Room walls and text follow room bounds.
 For every nonzero shared wall segment between two rooms, draw one doorway at that segment's
 midpoint, whether the wall is horizontal or vertical. Corner contact creates no doorway.
-Room edits and duplication/deletion participate in design undo. Custom door positions and
-independently anchored frame components are not part of this first prototype.
+Rooms are free-form: dragging preserves continuous bounds; the coordinate fields are card pixels,
+not old dungeon grid cells. A nearby shared edge snaps within eight pixels when the drag ends.
+The preset wall colors use an image texture masked by the wall shape, plus the original shadow/FX
+layer. The Dungeon tab can upload a custom full-card wall-color texture; the image is saved on the
+card and can be selected alongside the built-in colors. Large uploads can exhaust local save
+storage. Room edits, texture changes and duplication/deletion participate in design undo. Custom
+door positions and independently anchored frame components are not part of this prototype.
