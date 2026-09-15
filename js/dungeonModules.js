@@ -164,7 +164,8 @@
 		mask.lineCap=fx.lineCap='butt';mask.lineJoin=fx.lineJoin='miter';
 		path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();
 		path(fx);fx.strokeStyle='rgba(0,0,0,.55)';fx.lineWidth=thickness+3;fx.stroke();
-		fx.globalCompositeOperation='destination-out';fx.lineWidth=Math.max(1,thickness-2);fx.stroke();
+		// Clear the interior completely; reusing the translucent outline color leaves a dark tint.
+		fx.globalCompositeOperation='destination-out';fx.strokeStyle='#fff';fx.lineWidth=Math.max(1,thickness-2);fx.stroke();
 		fx.globalCompositeOperation='source-over';
 		// Door markers stay white above the wall texture and point down on either wall axis.
 		doorways(modules()).forEach(function(door){
