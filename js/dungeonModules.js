@@ -117,6 +117,14 @@
 		path(fx);fx.strokeStyle='rgba(0,0,0,.55)';fx.lineWidth=thickness+3;fx.stroke();
 		fx.globalCompositeOperation='destination-out';fx.lineWidth=Math.max(1,thickness-2);fx.stroke();
 		fx.globalCompositeOperation='source-over';
+		// Door markers stay white above the wall texture and point down on either wall axis.
+		doorways(modules()).forEach(function(door){
+			var x=door.x*card.width,y=door.y*card.height;
+			var opening=Math.min(card.height*.0381,door.span*(door.axis==='horizontal'?card.width:card.height)*.5);
+			var width=Math.min(thickness*1.5,opening*.65),height=width*.8;
+			fx.beginPath();fx.moveTo(x-width/2,y-height/2);fx.lineTo(x+width/2,y-height/2);fx.lineTo(x,y+height/2);fx.closePath();
+			fx.fillStyle='#fff';fx.fill();fx.strokeStyle='rgba(0,0,0,.65)';fx.lineWidth=Math.min(1.5,width*.08);fx.stroke();
+		});
 		fx.restore();mask.restore();
 	}
 	function render() { if(card.version!=='dungeonModules')return;syncAll();if(typeof dungeonEdited==='function')dungeonEdited(); refresh(); }
