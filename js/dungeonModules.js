@@ -163,10 +163,16 @@
 		mask.translate(marginX,marginY);fx.translate(marginX,marginY);
 		mask.lineCap=fx.lineCap='butt';mask.lineJoin=fx.lineJoin='miter';
 		path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();
+		// Keep outlines only where they face a room. The union includes both sides of
+		// shared walls, but excludes the outward side of each exterior boundary.
+		fx.save();fx.beginPath();
+		modules().forEach(function(room){var b=room.bounds;fx.rect(b.x*card.width,b.y*card.height,b.width*card.width,b.height*card.height);});
+		fx.clip();
 		path(fx);fx.strokeStyle='rgba(0,0,0,.55)';fx.lineWidth=thickness+3;fx.stroke();
 		// Clear the interior completely; reusing the translucent outline color leaves a dark tint.
 		fx.globalCompositeOperation='destination-out';fx.strokeStyle='#fff';fx.lineWidth=Math.max(1,thickness-2);fx.stroke();
 		fx.globalCompositeOperation='source-over';
+		fx.restore();
 		// Door markers stay white above the wall texture and point down on either wall axis.
 		doorways(modules()).forEach(function(door){
 			var x=door.x*card.width,y=door.y*card.height;
