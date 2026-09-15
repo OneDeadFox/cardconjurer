@@ -93,7 +93,21 @@
 	}
 	function drawWalls(mask,fx) {
 		var segments=wallSegments(modules()),thickness=Math.max(3,card.height*.006);
-		function path(context){context.beginPath();segments.forEach(function(segment){var horizontal=segment.axis==='horizontal';context.moveTo(horizontal?segment.start:segment.position,horizontal?segment.position:segment.start);context.lineTo(horizontal?segment.end:segment.position,horizontal?segment.position:segment.end);});}
+		var edges=segments.map(function(segment){return segment.axis==='horizontal'?[[segment.start,segment.position],[segment.end,segment.position]]:[[segment.position,segment.start],[segment.position,segment.end]];});
+		function same(a,b){return Math.abs(a[0]-b[0])<.001&&Math.abs(a[1]-b[1])<.001;}
+		// Join touching endpoints into polylines so miter joins fill the outer corner.
+		// Door ends have no touching neighbor and retain their original butt caps.
+		var used=new Set(),paths=[];
+		edges.forEach(function(edge,index){if(used.has(index))return;used.add(index);var points=edge.slice();
+			function extend(front){while(true){var tip=front?points[0]:points[points.length-1],neighbors=[];
+				edges.forEach(function(other,i){if(same(tip,other[0])||same(tip,other[1]))neighbors.push(i);});
+				if(neighbors.length!==2)break;
+				var next=neighbors.find(function(i){return !used.has(i);});if(next===undefined)break;
+				used.add(next);var other=edges[next],point=same(tip,other[0])?other[1]:other[0];if(front)points.unshift(point);else points.push(point);
+			}}
+			extend(false);extend(true);paths.push(points);
+		});
+		function path(context){context.beginPath();paths.forEach(function(points){context.moveTo(points[0][0],points[0][1]);for(var i=1;i<points.length;i++)context.lineTo(points[i][0],points[i][1]);if(same(points[0],points[points.length-1]))context.closePath();});}
 		// A single path prevents repeated shading at shared boundaries and junctions.
 		mask.save();fx.save();
 		var marginX=scaleX(0),marginY=scaleY(0);
