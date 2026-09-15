@@ -58,13 +58,52 @@
 	}
 	// Exactly one centered opening on each nonzero shared segment; corner contact is ignored.
 	function doorways(list) {
-		var output=[],epsilon=1/Math.min(card.width,card.height);
+		var output=[],epsilon=.0000001;
 		for(var i=0;i<list.length;i++)for(var j=i+1;j<list.length;j++) {
 			var a=list[i].bounds,b=list[j].bounds,overlapX=Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x),overlapY=Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y);
-			if(overlapX>epsilon && (Math.abs(a.y+a.height-b.y)<epsilon || Math.abs(b.y+b.height-a.y)<epsilon))output.push({axis:'horizontal',x:Math.max(a.x,b.x)+overlapX/2,y:Math.abs(a.y+a.height-b.y)<epsilon?b.y:a.y});
-			if(overlapY>epsilon && (Math.abs(a.x+a.width-b.x)<epsilon || Math.abs(b.x+b.width-a.x)<epsilon))output.push({axis:'vertical',x:Math.abs(a.x+a.width-b.x)<epsilon?b.x:a.x,y:Math.max(a.y,b.y)+overlapY/2});
+			if(overlapX>epsilon && (Math.abs(a.y+a.height-b.y)<epsilon || Math.abs(b.y+b.height-a.y)<epsilon))output.push({axis:'horizontal',x:Math.max(a.x,b.x)+overlapX/2,y:Math.abs(a.y+a.height-b.y)<epsilon?b.y:a.y,span:overlapX});
+			if(overlapY>epsilon && (Math.abs(a.x+a.width-b.x)<epsilon || Math.abs(b.x+b.width-a.x)<epsilon))output.push({axis:'vertical',x:Math.abs(a.x+a.width-b.x)<epsilon?b.x:a.x,y:Math.max(a.y,b.y)+overlapY/2,span:overlapY});
 		}
 		return output;
+	}
+	// Merge coincident room sides before cutting doors. Sprite tiles have different internal
+	// offsets for opposite walls, so positioning one sprite per room produces doubled dividers.
+	function wallSegments(list) {
+		var groups=[],epsilon=.001;
+		function add(axis,position,start,end) {
+			var group=groups.find(function(item){return item.axis===axis&&Math.abs(item.position-position)<epsilon;});
+			if(!group){group={axis:axis,position:position,intervals:[]};groups.push(group);}
+			group.intervals.push([start,end]);
+		}
+		list.forEach(function(room){var b=room.bounds,x=b.x*card.width,y=b.y*card.height,w=b.width*card.width,h=b.height*card.height;
+			add('horizontal',y,x,x+w);add('horizontal',y+h,x,x+w);
+			add('vertical',x,y,y+h);add('vertical',x+w,y,y+h);
+		});
+		var doors=doorways(list),segments=[];
+		groups.forEach(function(group){
+			var merged=[];group.intervals.sort(function(a,b){return a[0]-b[0];}).forEach(function(interval){var last=merged[merged.length-1];if(last&&interval[0]<=last[1]+epsilon)last[1]=Math.max(last[1],interval[1]);else merged.push(interval.slice());});
+			doors.forEach(function(door){if(door.axis!==group.axis)return;var horizontal=door.axis==='horizontal',position=horizontal?door.y*card.height:door.x*card.width;if(Math.abs(position-group.position)>epsilon)return;
+				var center=horizontal?door.x*card.width:door.y*card.height,span=door.span*(horizontal?card.width:card.height),half=Math.min(card.height*.0381,span*.5)/2;
+				var start=center-half,end=center+half,next=[];
+				merged.forEach(function(interval){if(end<=interval[0]||start>=interval[1])next.push(interval);else{if(start>interval[0])next.push([interval[0],start]);if(end<interval[1])next.push([end,interval[1]]);}});merged=next;
+			});
+			merged.forEach(function(interval){if(interval[1]-interval[0]>epsilon)segments.push({axis:group.axis,position:group.position,start:interval[0],end:interval[1]});});
+		});
+		return segments;
+	}
+	function drawWalls(mask,fx) {
+		var segments=wallSegments(modules()),thickness=Math.max(3,card.height*.006);
+		function path(context){context.beginPath();segments.forEach(function(segment){var horizontal=segment.axis==='horizontal';context.moveTo(horizontal?segment.start:segment.position,horizontal?segment.position:segment.start);context.lineTo(horizontal?segment.end:segment.position,horizontal?segment.position:segment.end);});}
+		// A single path prevents repeated shading at shared boundaries and junctions.
+		mask.save();fx.save();
+		var marginX=scaleX(0),marginY=scaleY(0);
+		mask.translate(marginX,marginY);fx.translate(marginX,marginY);
+		mask.lineCap=fx.lineCap='butt';mask.lineJoin=fx.lineJoin='miter';
+		path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();
+		path(fx);fx.strokeStyle='rgba(0,0,0,.55)';fx.lineWidth=thickness+3;fx.stroke();
+		fx.globalCompositeOperation='destination-out';fx.lineWidth=Math.max(1,thickness-2);fx.stroke();
+		fx.globalCompositeOperation='source-over';
+		fx.restore();mask.restore();
 	}
 	function render() { if(card.version!=='dungeonModules')return;syncAll();if(typeof dungeonEdited==='function')dungeonEdited(); refresh(); }
 	function refresh() {
@@ -91,7 +130,7 @@
 		if(color&&!color.dataset.moduleColorReady){color.dataset.moduleColorReady='true';color.addEventListener('change',function(){if(card.version==='dungeonModules')card.dungeonWallColor=color.value;});}
 		if(existing){existing.hidden=false;refresh();return;}
 		var panel=document.createElement('div');panel.id='dungeon-modules-panel';panel.className='readable-background padding margin-bottom';
-		panel.innerHTML='<h4>Room modules (prototype)</h4><p>Rooms have free-form dimensions in card pixels. Drag in Frame Design; nearby shared walls snap together and gain a centered doorway.</p><select id="dungeon-module-list" class="input" size="7"></select><label>Name <input id="dungeon-module-name" class="input"></label><div class="dungeon-module-coordinates"><label>X (px) <input type="number" step="0.1" id="dungeon-module-x" class="input"></label><label>Y (px) <input type="number" step="0.1" id="dungeon-module-y" class="input"></label><label>Width (px) <input type="number" step="0.1" min="20" id="dungeon-module-w" class="input"></label><label>Height (px) <input type="number" step="0.1" min="20" id="dungeon-module-h" class="input"></label></div><button type="button" id="dungeon-module-add">Add room</button> <button type="button" id="dungeon-module-copy">Duplicate room</button> <button type="button" id="dungeon-module-remove">Delete room</button><hr><label>Wall texture <input type="file" id="dungeon-module-texture" accept="image/*" class="input"></label><button type="button" id="dungeon-module-texture-clear">Remove uploaded texture</button><p>Upload a full-card image; its colors fill the walls while the existing highlights stay on top. Large images can exceed browser save storage.</p>';
+		panel.innerHTML='<h4>Room modules (prototype)</h4><p>Rooms have free-form dimensions in card pixels. Drag in Frame Design; nearby shared walls snap together and gain a centered doorway.</p><select id="dungeon-module-list" class="input" size="7"></select><label>Name <input id="dungeon-module-name" class="input"></label><div class="dungeon-module-coordinates"><label>X (px) <input type="number" step="0.1" id="dungeon-module-x" class="input"></label><label>Y (px) <input type="number" step="0.1" id="dungeon-module-y" class="input"></label><label>Width (px) <input type="number" step="0.1" min="20" id="dungeon-module-w" class="input"></label><label>Height (px) <input type="number" step="0.1" min="20" id="dungeon-module-h" class="input"></label></div><button type="button" id="dungeon-module-add">Add room</button> <button type="button" id="dungeon-module-copy">Duplicate room</button> <button type="button" id="dungeon-module-remove">Delete room</button><hr><label>Wall texture <input type="file" id="dungeon-module-texture" accept="image/*" class="input"></label><button type="button" id="dungeon-module-texture-clear">Remove uploaded texture</button><p>Upload a full-card image; its colors fill the walls while the wall outlines stay on top. Large images can exceed browser save storage.</p>';
 		tab.prepend(panel);
 		panel.querySelector('#dungeon-module-list').onchange=function(event){selectedId=event.target.value;refresh();drawCard();};
 		panel.querySelector('#dungeon-module-name').onchange=function(event){var room=selected();if(!room)return;var before=snapshot();room.name=event.target.value.trim()||room.name;if(field(room))field(room).name=room.name;refresh();drawCard();commit(before,'Rename dungeon room');};
@@ -104,5 +143,5 @@
 		refresh();
 	}
 	function remove(roomId) { var before=snapshot(),index=modules().findIndex(function(room){return room.id===roomId;});if(index<0)return;var room=modules().splice(index,1)[0];delete card.text[room.textKey];selectedId=modules()[Math.min(index,modules().length-1)]?.id||'';loadTextOptions(card.text,true);render();commit(before,'Delete dungeon room'); }
-	window.DungeonModules={initialize:initialize,mount:mount,render:render,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,toGrid:toGrid,grid:grid};
+	window.DungeonModules={initialize:initialize,mount:mount,render:render,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
 })();

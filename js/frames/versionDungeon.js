@@ -105,23 +105,7 @@ function dungeonEdited() {
 	// walls
 	dungeonContext.clearRect(0, 0, dungeonCanvas.width, dungeonCanvas.height);
 	dungeonFXContext.clearRect(0, 0, dungeonFXCanvas.width, dungeonFXCanvas.height);
-	if (prototype) rooms.forEach(room => {
-		var x=origX+cellSize*room[0],y=origY+cellSize*room[1],w=cellSize*room[2],h=cellSize*room[3];
-		var cornerSize=Math.min(cellSize,w/2,h/2);
-		function edge(context,image,dx,dy,dw,dh,horizontal) {
-			if(!(dw>0&&dh>0)||!image.complete||!image.naturalWidth)return;
-			var sx=horizontal?Math.floor(image.naturalWidth/2):0,sy=horizontal?0:Math.floor(image.naturalHeight/2);
-			context.drawImage(image,sx,sy,horizontal?1:image.naturalWidth,horizontal?image.naturalHeight:1,dx,dy,dw,dh);
-		}
-		[[dungeonContext,'dungeonShape'],[dungeonFXContext,'dungeonFX']].forEach(function(pair){
-			var context=pair[0],prefix=pair[1];
-			[['topleft',x,y],['topright',x+w,y],['bottomleft',x,y+h],['bottomright',x+w,y+h]].forEach(function(corner){context.drawImage(window[prefix+corner[0]],corner[1],corner[2],cornerSize,cornerSize);});
-			edge(context,window[prefix+'top'],x+cornerSize,y,Math.max(0,w-cornerSize),cornerSize,true);
-			edge(context,window[prefix+'bottom'],x+cornerSize,y+h,Math.max(0,w-cornerSize),cornerSize,true);
-			edge(context,window[prefix+'left'],x,y+cornerSize,cornerSize,Math.max(0,h-cornerSize),false);
-			edge(context,window[prefix+'right'],x+w,y+cornerSize,cornerSize,Math.max(0,h-cornerSize),false);
-		});
-	});
+	if (prototype) DungeonModules.drawWalls(dungeonContext, dungeonFXContext);
 	else rooms.forEach(room => {
 		//top left corner
 		dungeonContext.drawImage(dungeonShapetopleft, origX + cellSize * room[0], origY + cellSize * room[1], cellSize, cellSize);
@@ -154,8 +138,10 @@ function dungeonEdited() {
 			dungeonFXContext.drawImage(dungeonFXright, origX + cellSize * (room[0] + room[2]), origY + cellSize * (room[1] + i), cellSize, cellSize);
 		} 
 	});
-	dungeonContext.drawImage(dungeonOuterShape, 0, 0, dungeonCanvas.width, dungeonCanvas.height);
-	dungeonFXContext.drawImage(dungeonOuterFX, 0, 0, dungeonFXCanvas.width, dungeonFXCanvas.height);
+	if (!prototype) {
+		dungeonContext.drawImage(dungeonOuterShape, 0, 0, dungeonCanvas.width, dungeonCanvas.height);
+		dungeonFXContext.drawImage(dungeonOuterFX, 0, 0, dungeonFXCanvas.width, dungeonFXCanvas.height);
+	}
 	// text
 	if (!prototype) {
 	var textObjects = {};
@@ -171,21 +157,7 @@ function dungeonEdited() {
 	})
 	}
 	// doorways
-	if (prototype) {
-		DungeonModules.doorways(DungeonModules.modules()).forEach(function(door) {
-			var x = card.width * door.x, y = card.height * door.y;
-			[dungeonContext,dungeonFXContext].forEach(function(context,index) {
-				context.save();context.translate(x,y);
-				if(door.axis === 'vertical') context.rotate(-Math.PI/2);
-				context.globalCompositeOperation='destination-out';
-				context.drawImage(dungeonDoorwayCutout,-dungeonDoorwayCutout.width/2,0);
-				context.globalCompositeOperation='source-over';
-				var image=index?dungeonDoorwayFX:dungeonDoorwayShape;
-				context.drawImage(image,-image.width/2,0);
-				context.restore();
-			});
-		});
-	} else {
+	if (!prototype) {
 	rooms.push([0,-2,16,1,7]);
 	rooms.forEach(room => {
 		doorways = room.slice(4);

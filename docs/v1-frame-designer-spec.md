@@ -170,13 +170,14 @@ Dungeon (Room Modules Prototype) frame uses the same wall artwork, but stores ea
 card-relative module with a stable ID, name, bounds and owned text field. In the Dungeon tab,
 select, rename, position, add, duplicate or remove rooms; in Frame Design, enable the purple
 range highlights to move, resize, remove or double-click individual rooms. Canvas moves and
-resizes settle on the AFR dungeon grid when released. Room walls and text follow room bounds.
+resizes preserve continuous card coordinates. Room walls and text follow room bounds.
 For every nonzero shared wall segment between two rooms, draw one doorway at that segment's
 midpoint, whether the wall is horizontal or vertical. Corner contact creates no doorway.
 Rooms are free-form: dragging preserves continuous bounds; the coordinate fields are card pixels,
 not old dungeon grid cells. A nearby shared edge snaps within eight pixels when the drag ends.
-The preset wall colors use an image texture masked by the wall shape, plus the original shadow/FX
-layer. The Dungeon tab can upload a custom full-card wall-color texture; the image is saved on the
+The preset wall colors use an image texture masked by the wall shape, plus an outline layer drawn from the same geometry. The Dungeon tab can upload a custom full-card wall-color texture; the image is saved on the
 card and can be selected alongside the built-in colors. Large uploads can exhaust local save
 storage. Room edits, texture changes and duplication/deletion participate in design undo. Custom
 door positions and independently anchored frame components are not part of this prototype.
+
+Dungeon prototype wall repair: coincident sides are merged into single wall segments before centered doorway intervals are removed. The prototype no longer positions opposite legacy wall sprites or overlays the fixed legacy perimeter, which caused double walls and offset doors. The original Dungeon (AFR) renderer still uses its original artwork.
