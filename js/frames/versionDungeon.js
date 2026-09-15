@@ -65,7 +65,7 @@ function dungeonEditedBuffer() {
 	drawingDungeon = setTimeout(dungeonEdited, 500);
 }
 
-function dungeonEdited() {
+function dungeonEdited(skipTextRedraw) {
 	window.DungeonModules?.mount();
 	//gather data
 	var prototype = card.version === 'dungeonModules' && window.DungeonModules;
@@ -193,5 +193,5 @@ function dungeonEdited() {
 	dungeonContext.drawImage(dungeonFXCanvas, 0, 0, dungeonCanvas.width, dungeonCanvas.height)
 	// finish
 	if (!prototype) loadTextOptions(textObjects);
-	drawTextBuffer();
+	if (skipTextRedraw !== true) drawTextBuffer();
 }

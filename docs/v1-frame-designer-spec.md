@@ -166,13 +166,12 @@ V1 may include non-destructive rectangle and ellipse masks without introducing a
 ### Dungeon room modules (prototype)
 
 The existing Dungeon (AFR) frame and its coordinate-list editor remain available. The separate
-Dungeon (Room Modules Prototype) frame uses the same wall artwork, but stores each room as a
+Dungeon (Room Modules Prototype) frame uses textured wall geometry and stores each room as a
 card-relative module with a stable ID, name, bounds and owned text field. In the Dungeon tab,
 select, rename, position, add, duplicate or remove rooms; in Frame Design, enable the purple
 range highlights to move, resize, remove or double-click individual rooms. Canvas moves and
 resizes preserve continuous card coordinates. Room walls and text follow room bounds.
-For every nonzero shared wall segment between two rooms, draw one doorway at that segment's
-midpoint, whether the wall is horizontal or vertical. Corner contact creates no doorway.
+Only shared upper/lower walls receive centered doorways and downward markers. Side walls remain solid; corner contact creates no doorway.
 Rooms are free-form: dragging preserves continuous bounds; the coordinate fields are card pixels,
 not old dungeon grid cells. A nearby shared edge snaps within eight pixels when the drag ends.
 The preset wall colors use an image texture masked by the wall shape, plus an outline layer drawn from the same geometry. The Dungeon tab can upload a custom full-card wall-color texture; the image is saved on the
@@ -181,3 +180,5 @@ storage. Room edits, texture changes and duplication/deletion participate in des
 door positions and independently anchored frame components are not part of this prototype.
 
 Dungeon prototype wall repair: coincident sides are merged into single wall segments before centered doorway intervals are removed. The prototype no longer positions opposite legacy wall sprites or overlays the fixed legacy perimeter, which caused double walls and offset doors. The original Dungeon (AFR) renderer still uses its original artwork.
+
+The Dungeon tab has an opt-in checkbox, “Auto-fit room heights and use a uniform text size.” It defaults off. When on, it uses Rules Range text measurements, resizes connected row boundaries around text, and applies a common base font size with up to 25 pixels of shared reduction to fit within the original layout height. Inline relative font modifiers are retained. Widths and horizontal positions are preserved. If text still exceeds available height, the panel reports overflow. Disabling freezes the fitted room bounds for manual editing and restores each field’s prior automatic font flags. The setting and fit envelope are saved with the card and included in design undo.

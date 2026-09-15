@@ -1217,6 +1217,8 @@ function createDesignStateSnapshot() {
 		dungeonModules:cloneDesignValue(card.dungeonModules || []),
 		dungeonWallTexture:card.dungeonWallTexture||'',
 		dungeonWallColor:card.dungeonWallColor||'B',
+		dungeonAutoFit:!!card.dungeonAutoFit,
+		dungeonAutoFitBounds:cloneDesignValue(card.dungeonAutoFitBounds||null),
 		bottomInfo:cloneDesignValue(card.bottomInfo),
 		designDefaults:cloneDesignValue(card.designDefaults),
 		artBounds:cloneDesignValue(card.artBounds),
@@ -1317,6 +1319,8 @@ async function applyDesignStateSnapshot(snapshot) {
 	card.dungeonModules=cloneDesignValue(snapshot.dungeonModules||[]);
 	card.dungeonWallTexture=snapshot.dungeonWallTexture||'';
 	card.dungeonWallColor=snapshot.dungeonWallColor||'B';
+	card.dungeonAutoFit=!!snapshot.dungeonAutoFit;
+	card.dungeonAutoFitBounds=cloneDesignValue(snapshot.dungeonAutoFitBounds||null);
 	card.bottomInfo=cloneDesignValue(snapshot.bottomInfo);
 	card.designDefaults=cloneDesignValue(snapshot.designDefaults);
 	card.artBounds=cloneDesignValue(snapshot.artBounds);
@@ -2864,6 +2868,10 @@ function autoFrameBuffer() {
 	autoFrameTimer = setTimeout(autoFrame, 500);
 }
 async function drawText() {
+	if (card.version==='dungeonModules' && window.DungeonModules?.reflow()) {
+		if (typeof dungeonEdited==='function') dungeonEdited(true);
+		DungeonModules.refresh();
+	}
 	textContext.clearRect(0, 0, textCanvas.width, textCanvas.height);
 	prePTContext.clearRect(0, 0, prePTCanvas.width, prePTCanvas.height);
 	drawTextBetweenFrames = false;

@@ -26,6 +26,7 @@
 		card.dungeonModules=[];
 		card.dungeonWallTexture='';
 		card.dungeonWallColor='B';
+		card.dungeonAutoFit=false;card.dungeonAutoFitBounds=null;
 		sample.forEach(function(values){addRoom(fromGrid.apply(null,values));});
 		selectedId=modules()[0]?.id||'';
 	}
@@ -38,6 +39,55 @@
 		text.height=Math.max(10/card.height,box.height-2*insetY);
 	}
 	function syncAll() { modules().forEach(syncRoom);if(typeof drawTextBuffer==='function')drawTextBuffer(); }
+	function setAutoFit(enabled) {
+		var before=snapshot();card.dungeonAutoFit=!!enabled;
+		if(enabled&&modules().length){
+			card.dungeonAutoFitBounds={top:Math.min.apply(null,modules().map(function(room){return room.bounds.y;})),bottom:Math.max.apply(null,modules().map(function(room){return room.bounds.y+room.bounds.height;}))};
+		}else if(!enabled){
+			modules().forEach(function(room){var text=field(room);if(text&&room.autoFitFont){text.rangeFontReduction=room.autoFitFont.reduction;text.rangeUniformTextSize=room.autoFitFont.uniform;}delete room.autoFitFont;});
+			card.dungeonAutoFitBounds=null;card.dungeonAutoFitOverflow=false;
+		}
+		render();commit(before,'Toggle dungeon text fitting');
+	}
+	function reflow() {
+		if(card.version!=='dungeonModules'||!card.dungeonAutoFit||!modules().length||!window.RulesRange?.measureModuleText)return false;
+		var list=modules(),height=card.height,levels=[];
+		list.forEach(function(room){levels.push(room.bounds.y*height,(room.bounds.y+room.bounds.height)*height);});
+		levels.sort(function(a,b){return a-b;});levels=levels.filter(function(value,i){return !i||value-levels[i-1]>.001;});
+		var envelope=card.dungeonAutoFitBounds||(card.dungeonAutoFitBounds={top:levels[0]/height,bottom:levels[levels.length-1]/height});
+		var available=Math.max(20,(envelope.bottom-envelope.top)*height),common=Infinity;
+		function index(value){return levels.findIndex(function(level){return Math.abs(level-value)<.001;});}
+		var records=list.map(function(room){var text=field(room),box=room.bounds,base=text?((Number(text.size)||.038)*height+(parseInt(text.fontSize||'0',10)||0)):0;
+			if(text){common=Math.min(common,Math.max(1,base));if(!room.autoFitFont)room.autoFitFont={reduction:Number(text.rangeFontReduction)||0,uniform:!!text.rangeUniformTextSize};}
+			return {room:room,text:text,base:base,start:index(box.y*height),end:index((box.y+box.height)*height)};
+		});
+		if(!Number.isFinite(common))common=.0324*height;
+		function solve(reduction){
+			var padding=grid().cell*.5;
+			records.forEach(function(record){var box=record.room.bounds,inset=Math.min(padding,box.width*card.width*.12),width=Math.max(10,box.width*card.width-2*inset);
+				var measured=record.text?RulesRange.measureModuleText(record.text,width,record.base-common+reduction):0;
+				record.minimum=Math.max(20,Math.min(measured/.76,measured+2*padding));
+			});
+			var positions=[0];
+			for(var i=1;i<levels.length;i++){
+				var occupied=records.some(function(record){return record.start<i&&record.end>=i;});
+				positions[i]=positions[i-1]+(occupied?1:levels[i]-levels[i-1]);
+				records.forEach(function(record){if(record.end===i)positions[i]=Math.max(positions[i],positions[record.start]+record.minimum);});
+			}
+			return positions;
+		}
+		var reduction=0,positions=solve(0),limit=Math.min(25,Math.max(0,Math.floor(common-1)));
+		while(positions[positions.length-1]>available&&reduction<limit)positions=solve(++reduction);
+		card.dungeonAutoFitOverflow=positions[positions.length-1]>available+.01;
+		var changed=false;
+		records.forEach(function(record){var box=record.room.bounds,y=envelope.top+positions[record.start]/height,h=(positions[record.end]-positions[record.start])/height;
+			if(Math.abs(box.y-y)>1e-8||Math.abs(box.height-h)>1e-8)changed=true;
+			box.y=y;box.height=h;
+			if(record.text){var adjustment=record.base-common+reduction;if(record.text.rangeFontReduction!==adjustment||!record.text.rangeUniformTextSize)changed=true;record.text.rangeFontReduction=adjustment;record.text.rangeUniformTextSize=true;}
+			syncRoom(record.room);
+		});
+		return changed;
+	}
 	function snapRoom(room,action) {
 		var box=room.bounds,threshold=8,move=action==='move',left=action?.includes('left')||move,right=action?.includes('right')||move,top=action?.includes('top')||move,bottom=action?.includes('bottom')||move;
 		var px={x:box.x*card.width,y:box.y*card.height,w:box.width*card.width,h:box.height*card.height};
@@ -56,13 +106,12 @@
 		Object.assign(box,{x:px.x/card.width,y:px.y/card.height,width:px.w/card.width,height:px.h/card.height});
 		syncRoom(room);
 	}
-	// Exactly one centered opening on each nonzero shared segment; corner contact is ignored.
+	// Only rooms above/below each other connect; side walls remain solid.
 	function doorways(list) {
 		var output=[],epsilon=.0000001;
 		for(var i=0;i<list.length;i++)for(var j=i+1;j<list.length;j++) {
-			var a=list[i].bounds,b=list[j].bounds,overlapX=Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x),overlapY=Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y);
+			var a=list[i].bounds,b=list[j].bounds,overlapX=Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x);
 			if(overlapX>epsilon && (Math.abs(a.y+a.height-b.y)<epsilon || Math.abs(b.y+b.height-a.y)<epsilon))output.push({axis:'horizontal',x:Math.max(a.x,b.x)+overlapX/2,y:Math.abs(a.y+a.height-b.y)<epsilon?b.y:a.y,span:overlapX});
-			if(overlapY>epsilon && (Math.abs(a.x+a.width-b.x)<epsilon || Math.abs(b.x+b.width-a.x)<epsilon))output.push({axis:'vertical',x:Math.abs(a.x+a.width-b.x)<epsilon?b.x:a.x,y:Math.max(a.y,b.y)+overlapY/2,span:overlapY});
 		}
 		return output;
 	}
@@ -127,9 +176,11 @@
 		});
 		fx.restore();mask.restore();
 	}
-	function render() { if(card.version!=='dungeonModules')return;syncAll();if(typeof dungeonEdited==='function')dungeonEdited(); refresh(); }
+	function render() { if(card.version!=='dungeonModules')return;reflow();syncAll();if(typeof dungeonEdited==='function')dungeonEdited(); refresh(); }
 	function refresh() {
 		var panel=document.querySelector('#dungeon-modules-panel');if(!panel || card.version!=='dungeonModules')return;
+		var fit=panel.querySelector('#dungeon-module-auto-fit');if(fit)fit.checked=!!card.dungeonAutoFit;
+		var fitStatus=panel.querySelector('#dungeon-module-fit-status');if(fitStatus)fitStatus.textContent=card.dungeonAutoFit?(card.dungeonAutoFitOverflow?'Text exceeds the available height at the minimum shared font size. Shorten text or turn fitting off and enlarge the layout.':'Room heights follow text; rows keep their shared boundaries.'):'';
 		var list=panel.querySelector('#dungeon-module-list');if(!list)return;
 		list.replaceChildren();modules().forEach(function(room){var option=document.createElement('option');option.value=room.id;option.textContent=room.name;list.appendChild(option);});
 		var room=selected();if(room)selectedId=room.id;
@@ -152,18 +203,19 @@
 		if(color&&!color.dataset.moduleColorReady){color.dataset.moduleColorReady='true';color.addEventListener('change',function(){if(card.version==='dungeonModules')card.dungeonWallColor=color.value;});}
 		if(existing){existing.hidden=false;refresh();return;}
 		var panel=document.createElement('div');panel.id='dungeon-modules-panel';panel.className='readable-background padding margin-bottom';
-		panel.innerHTML='<h4>Room modules (prototype)</h4><p>Rooms have free-form dimensions in card pixels. Drag in Frame Design; nearby shared walls snap together and gain a centered doorway.</p><select id="dungeon-module-list" class="input" size="7"></select><label>Name <input id="dungeon-module-name" class="input"></label><div class="dungeon-module-coordinates"><label>X (px) <input type="number" step="0.1" id="dungeon-module-x" class="input"></label><label>Y (px) <input type="number" step="0.1" id="dungeon-module-y" class="input"></label><label>Width (px) <input type="number" step="0.1" min="20" id="dungeon-module-w" class="input"></label><label>Height (px) <input type="number" step="0.1" min="20" id="dungeon-module-h" class="input"></label></div><button type="button" id="dungeon-module-add">Add room</button> <button type="button" id="dungeon-module-copy">Duplicate room</button> <button type="button" id="dungeon-module-remove">Delete room</button><hr><label>Wall texture <input type="file" id="dungeon-module-texture" accept="image/*" class="input"></label><button type="button" id="dungeon-module-texture-clear">Remove uploaded texture</button><p>Upload a full-card image; its colors fill the walls while the wall outlines stay on top. Large images can exceed browser save storage.</p>';
+		panel.innerHTML='<h4>Room modules (prototype)</h4><p>Rooms have free-form dimensions in card pixels. Drag in Frame Design; nearby walls snap together. Only upper and lower shared walls gain a doorway.</p><label><input type="checkbox" id="dungeon-module-auto-fit"> Auto-fit room heights and use a uniform text size</label><p id="dungeon-module-fit-status"></p><select id="dungeon-module-list" class="input" size="7"></select><label>Name <input id="dungeon-module-name" class="input"></label><div class="dungeon-module-coordinates"><label>X (px) <input type="number" step="0.1" id="dungeon-module-x" class="input"></label><label>Y (px) <input type="number" step="0.1" id="dungeon-module-y" class="input"></label><label>Width (px) <input type="number" step="0.1" min="20" id="dungeon-module-w" class="input"></label><label>Height (px) <input type="number" step="0.1" min="20" id="dungeon-module-h" class="input"></label></div><button type="button" id="dungeon-module-add">Add room</button> <button type="button" id="dungeon-module-copy">Duplicate room</button> <button type="button" id="dungeon-module-remove">Delete room</button><hr><label>Wall texture <input type="file" id="dungeon-module-texture" accept="image/*" class="input"></label><button type="button" id="dungeon-module-texture-clear">Remove uploaded texture</button><p>Upload a full-card image; its colors fill the walls while the wall outlines stay on top. Large images can exceed browser save storage.</p>';
 		tab.prepend(panel);
+		panel.querySelector('#dungeon-module-auto-fit').onchange=function(){setAutoFit(this.checked);};
 		panel.querySelector('#dungeon-module-list').onchange=function(event){selectedId=event.target.value;refresh();drawCard();};
 		panel.querySelector('#dungeon-module-name').onchange=function(event){var room=selected();if(!room)return;var before=snapshot();room.name=event.target.value.trim()||room.name;if(field(room))field(room).name=room.name;refresh();drawCard();commit(before,'Rename dungeon room');};
 		['x','y','w','h'].forEach(function(axis){panel.querySelector('#dungeon-module-'+axis).onchange=function(){var room=selected();if(!room)return;var before=snapshot(),value=Number(this.value);if(Number.isFinite(value)){var key={x:'x',y:'y',w:'width',h:'height'}[axis],dimension=axis==='x'||axis==='w'?card.width:card.height;room.bounds[key]=value/dimension;}snapRoom(room,axis==='w'?'right':axis==='h'?'bottom':'move');render();commit(before,'Edit dungeon room');};});
 		panel.querySelector('#dungeon-module-add').onclick=function(){var before=snapshot(),source=selected(),box=source?.bounds||{x:.1,y:.15,width:.3,height:.2};var newBox={x:box.x,y:Math.min(1-box.height,box.y+box.height),width:box.width,height:box.height};addRoom(newBox);render();commit(before,'Add dungeon room');};
-		panel.querySelector('#dungeon-module-copy').onclick=function(){var source=selected();if(!source)return;var before=snapshot(),box=source.bounds,copy=addRoom({x:Math.min(1-box.width,box.x+box.width),y:box.y,width:box.width,height:box.height},source.name+' Copy',field(source)?.text);var text=field(copy),original=field(source);if(text&&original){Object.assign(text,JSON.parse(JSON.stringify(original)));text.name=copy.name;syncRoom(copy);}render();commit(before,'Duplicate dungeon room');};
+		panel.querySelector('#dungeon-module-copy').onclick=function(){var source=selected();if(!source)return;var before=snapshot(),box=source.bounds,copy=addRoom({x:Math.min(1-box.width,box.x+box.width),y:box.y,width:box.width,height:box.height},source.name+' Copy',field(source)?.text);var text=field(copy),original=field(source);if(text&&original){Object.assign(text,JSON.parse(JSON.stringify(original)));text.name=copy.name;if(source.autoFitFont)copy.autoFitFont=JSON.parse(JSON.stringify(source.autoFitFont));syncRoom(copy);}render();commit(before,'Duplicate dungeon room');};
 		panel.querySelector('#dungeon-module-remove').onclick=function(){var room=selected();if(!room)return;remove(room.id);};
 		panel.querySelector('#dungeon-module-texture').onchange=function(){var file=this.files?.[0];if(!file)return;if(!file.type.startsWith('image/')){alert('Please upload an image file.');return;}var before=snapshot(),reader=new FileReader();reader.onload=function(){var image=new Image();image.onload=function(){card.dungeonWallTexture=reader.result;card.dungeonWallColor='custom';window.dungeonTextureCustom=image;document.querySelector('#dungeon-color').value='custom';render();commit(before,'Change dungeon wall texture');};image.onerror=function(){alert('This image could not be loaded as a wall texture.');};image.src=reader.result;};reader.readAsDataURL(file);};
 		panel.querySelector('#dungeon-module-texture-clear').onclick=function(){if(!card.dungeonWallTexture)return;var before=snapshot();card.dungeonWallTexture='';if(card.dungeonWallColor==='custom')card.dungeonWallColor='B';window.dungeonTextureCustom=null;panel.querySelector('#dungeon-module-texture').value='';render();commit(before,'Remove dungeon wall texture');};
 		refresh();
 	}
 	function remove(roomId) { var before=snapshot(),index=modules().findIndex(function(room){return room.id===roomId;});if(index<0)return;var room=modules().splice(index,1)[0];delete card.text[room.textKey];selectedId=modules()[Math.min(index,modules().length-1)]?.id||'';loadTextOptions(card.text,true);render();commit(before,'Delete dungeon room'); }
-	window.DungeonModules={initialize:initialize,mount:mount,render:render,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
+	window.DungeonModules={initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
 })();
