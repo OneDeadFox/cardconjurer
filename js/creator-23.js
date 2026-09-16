@@ -712,12 +712,17 @@ function registerCurrentFrameLayoutTemplate() {
 		const layoutKey = selection.key;
 		const layoutLabel = selection.groupLabel + ' / ' + selection.packLabel;
 		const wrappedLoader = async function(event) {
+			if(card.version==='dungeonModules' && card.dungeonLayoutLocked){
+				setFrameLayoutTemplateStatus('Dungeon layout is locked. Unlock it in the Dungeon tab to load another layout.',true);
+				return false;
+			}
+			const before=createDesignStateSnapshot();
 			const result = await loadLayout.call(this, event);
 			if (card) {
 				card.frameLayoutSource = layoutKey;
 				card.frameLayoutLabel = layoutLabel;
 				captureCurrentDesignDefaults(false);
-				clearDesignUndoHistory();
+				commitDesignUndoSnapshot(before,'Load frame layout');
 			}
 			syncFrameLayoutTemplateControls();
 			setFrameLayoutTemplateStatus('Applied ' + layoutLabel + '.');
@@ -732,6 +737,8 @@ function registerCurrentFrameLayoutTemplate() {
 	return true;
 }
 async function applyCurrentFrameLayout({force = false, source = 'design'} = {}) {
+	// Browsing packs or adding decoration must never replace a working dungeon.
+	if(card?.version==='dungeonModules' && ['auto','element','browse'].includes(source))return false;
 	const selection = getCurrentFrameLayoutSelection();
 	const versionButton = document.querySelector('#loadFrameVersion');
 	if (!registerCurrentFrameLayoutTemplate() || !versionButton || !selection.key) {
@@ -742,7 +749,8 @@ async function applyCurrentFrameLayout({force = false, source = 'design'} = {}) 
 	}
 	setFrameLayoutTemplateStatus('Applying ' + selection.groupLabel + ' / ' + selection.packLabel + '...');
 	try {
-		await versionButton.onclick.call(versionButton);
+		const applied=await versionButton.onclick.call(versionButton);
+		if(applied===false)return false;
 		if (source == 'browse') {
 			setFrameLayoutTemplateStatus('Applied ' + selection.groupLabel + ' / ' + selection.packLabel + ' while adding the frame.');
 		}
@@ -1206,6 +1214,8 @@ function saveCurrentDesignAsDefaults() {
 }
 function createDesignStateSnapshot() {
 	return {
+		layoutIdentity:{version:card.version||'',onload:card.onload||null,frameLayoutSource:card.frameLayoutSource||null,frameLayoutLabel:card.frameLayoutLabel||null},
+		dungeonLayoutLocked:!!card.dungeonLayoutLocked,
 		cardGeometry:{
 			width:card.width, height:card.height, marginX:Number(card.marginX)||0, marginY:Number(card.marginY)||0,
 			orientation:currentCardOrientation(), landscape:!!card.landscape,
@@ -1318,6 +1328,8 @@ async function applyDesignStateSnapshot(snapshot) {
 	if (Object.keys(card.text).length) loadTextOptions(card.text,true);
 	else if (document.querySelector('#text-options')) document.querySelector('#text-options').innerHTML='';
 	card.rulesRanges=cloneDesignValue(snapshot.rulesRanges||[]);
+	if(snapshot.layoutIdentity)Object.assign(card,cloneDesignValue(snapshot.layoutIdentity));
+	card.dungeonLayoutLocked=!!snapshot.dungeonLayoutLocked;
 	card.dungeonModules=cloneDesignValue(snapshot.dungeonModules||[]);
 	card.dungeonWallTexture=snapshot.dungeonWallTexture||'';
 	card.dungeonWallColor=snapshot.dungeonWallColor||'B';
@@ -1351,7 +1363,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	}
 	if (selectedFrame && card.frames.includes(selectedFrame)) refreshSelectedFrameEditor();
 	if (window.RulesRange) RulesRange.refresh();
-	if (card.version==='dungeonModules' && window.DungeonModules) DungeonModules.render();
+	if (card.version==='dungeonModules' && window.DungeonModules) {DungeonModules.mount();DungeonModules.render();}
 	drawFrames();
 	await drawText();
 	watermarkEdited();
@@ -2088,7 +2100,7 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	const completeDesignFrame = activeFrameWorkspace === 'design' && sourceFrame &&
 		!sourceFrame.noDefaultMask && selectedMaskIndex === 0 && !additionalMasks.length;
 	if (!loadingFrame && (activeFrameWorkspace === 'browse' || completeDesignFrame)) {
-		await applyCurrentFrameLayout({source:activeFrameWorkspace});
+		await applyCurrentFrameLayout({source:'element'});
 	}
 	// Restored frames must keep the same object reference stored in card.frames.
 	// addFrame attaches runtime Image objects to this object; cloning it here would
