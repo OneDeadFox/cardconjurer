@@ -1376,3 +1376,15 @@ textarea.input {
 #dungeon-modules-panel #dungeon-module-list { width: 100%; margin-bottom: .7em; }
 #dungeon-modules-panel .dungeon-module-coordinates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5em; margin: .7em 0; }
 #dungeon-modules-panel .dungeon-module-coordinates input { width: 100%; box-sizing: border-box; }
+
+/* Dungeon corner palette */
+.dungeon-corner-editor { position:fixed; inset:70px 20px auto auto; margin:0; width:360px; max-width:calc(100vw - 40px); max-height:calc(100vh - 110px); overflow:auto; box-sizing:border-box; padding:20px; background:#243c2c; color:#fff; border:2px solid #80ffcc; border-radius:10px; z-index:10000; }
+.dungeon-corner-editor::backdrop { background:rgba(0,0,0,.12); }
+.dungeon-corner-editor label { display:block; margin:12px 0; }
+.dungeon-corner-editor input[type=number],.dungeon-corner-editor select { display:block; width:100%; box-sizing:border-box; }
+.dungeon-corner-editor p { font-size:13px; line-height:1.4; }
+.dungeon-corner-editor .corner-presets { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+.dungeon-corner-editor .corner-presets button { padding:5px; font-size:12px; border:2px solid transparent; }
+.dungeon-corner-editor .corner-presets button[aria-pressed=true] { border-color:#80ffcc; }
+.dungeon-corner-editor svg { display:block; width:100%; height:45px; }
+#corner-close { float:right; }

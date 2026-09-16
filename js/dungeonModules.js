@@ -156,7 +156,8 @@
 			}}
 			extend(false);extend(true);paths.push(points);
 		});
-		function path(context){context.beginPath();paths.forEach(function(points){context.moveTo(points[0][0],points[0][1]);for(var i=1;i<points.length;i++)context.lineTo(points[i][0],points[i][1]);if(same(points[0],points[points.length-1]))context.closePath();});}
+		var cornerModel=window.DungeonCorners?.geometry(segments);
+		function path(context){if(cornerModel){DungeonCorners.trace(context,cornerModel);return;}context.beginPath();paths.forEach(function(points){context.moveTo(points[0][0],points[0][1]);for(var i=1;i<points.length;i++)context.lineTo(points[i][0],points[i][1]);if(same(points[0],points[points.length-1]))context.closePath();});}
 		// A single path prevents repeated shading at shared boundaries and junctions.
 		mask.save();fx.save();
 		var marginX=scaleX(0),marginY=scaleY(0);
@@ -165,9 +166,9 @@
 		path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();
 		// Keep outlines only where they face a room. The union includes both sides of
 		// shared walls, but excludes the outward side of each exterior boundary.
-		fx.save();fx.beginPath();
+		fx.save();if(cornerModel){DungeonCorners.clipRooms(fx,cornerModel);}else{fx.beginPath();
 		modules().forEach(function(room){var b=room.bounds;fx.rect(b.x*card.width,b.y*card.height,b.width*card.width,b.height*card.height);});
-		fx.clip();
+		fx.clip();}
 		path(fx);fx.strokeStyle='rgba(0,0,0,.55)';fx.lineWidth=thickness+3;fx.stroke();
 		// Clear the interior completely; reusing the translucent outline color leaves a dark tint.
 		fx.globalCompositeOperation='destination-out';fx.strokeStyle='#fff';fx.lineWidth=Math.max(1,thickness-2);fx.stroke();
@@ -185,6 +186,7 @@
 	}
 	function render() { if(card.version!=='dungeonModules')return;reflow();syncAll();if(typeof dungeonEdited==='function')dungeonEdited(); refresh(); }
 	function refresh() {
+		window.DungeonCorners?.refreshEditor();
 		var panel=document.querySelector('#dungeon-modules-panel');if(!panel || card.version!=='dungeonModules')return;
 		var fit=panel.querySelector('#dungeon-module-auto-fit');if(fit)fit.checked=!!card.dungeonAutoFit;
 		var fitStatus=panel.querySelector('#dungeon-module-fit-status');if(fitStatus)fitStatus.textContent=card.dungeonAutoFit?(card.dungeonAutoFitOverflow?'Text exceeds the available height at the minimum shared font size. Shorten text or turn fitting off and enlarge the layout.':'Room heights follow text; rows keep their shared boundaries.'):'';
@@ -217,7 +219,7 @@
 		panel.querySelector('#dungeon-module-name').onchange=function(event){var room=selected();if(!room)return;var before=snapshot();room.name=event.target.value.trim()||room.name;if(field(room))field(room).name=room.name;refresh();drawCard();commit(before,'Rename dungeon room');};
 		['x','y','w','h'].forEach(function(axis){panel.querySelector('#dungeon-module-'+axis).onchange=function(){var room=selected();if(!room)return;var before=snapshot(),value=Number(this.value);if(Number.isFinite(value)){var key={x:'x',y:'y',w:'width',h:'height'}[axis],dimension=axis==='x'||axis==='w'?card.width:card.height;room.bounds[key]=value/dimension;}snapRoom(room,axis==='w'?'right':axis==='h'?'bottom':'move');render();commit(before,'Edit dungeon room');};});
 		panel.querySelector('#dungeon-module-add').onclick=function(){var before=snapshot(),source=selected(),box=source?.bounds||{x:.1,y:.15,width:.3,height:.2};var newBox={x:box.x,y:Math.min(1-box.height,box.y+box.height),width:box.width,height:box.height};addRoom(newBox);render();commit(before,'Add dungeon room');};
-		panel.querySelector('#dungeon-module-copy').onclick=function(){var source=selected();if(!source)return;var before=snapshot(),box=source.bounds,copy=addRoom({x:Math.min(1-box.width,box.x+box.width),y:box.y,width:box.width,height:box.height},source.name+' Copy',field(source)?.text);var text=field(copy),original=field(source);if(text&&original){Object.assign(text,JSON.parse(JSON.stringify(original)));text.name=copy.name;if(source.autoFitFont)copy.autoFitFont=JSON.parse(JSON.stringify(source.autoFitFont));syncRoom(copy);}render();commit(before,'Duplicate dungeon room');};
+		panel.querySelector('#dungeon-module-copy').onclick=function(){var source=selected();if(!source)return;var before=snapshot(),box=source.bounds,copy=addRoom({x:Math.min(1-box.width,box.x+box.width),y:box.y,width:box.width,height:box.height},source.name+' Copy',field(source)?.text);copy.cornerStyles=JSON.parse(JSON.stringify(source.cornerStyles||{}));var text=field(copy),original=field(source);if(text&&original){Object.assign(text,JSON.parse(JSON.stringify(original)));text.name=copy.name;if(source.autoFitFont)copy.autoFitFont=JSON.parse(JSON.stringify(source.autoFitFont));syncRoom(copy);}render();commit(before,'Duplicate dungeon room');};
 		panel.querySelector('#dungeon-module-remove').onclick=function(){var room=selected();if(!room)return;remove(room.id);};
 		panel.querySelector('#dungeon-module-texture').onchange=function(){var file=this.files?.[0];if(!file)return;if(!file.type.startsWith('image/')){alert('Please upload an image file.');return;}var before=snapshot(),reader=new FileReader();reader.onload=function(){var image=new Image();image.onload=function(){card.dungeonWallTexture=reader.result;card.dungeonWallColor='custom';window.dungeonTextureCustom=image;document.querySelector('#dungeon-color').value='custom';render();commit(before,'Change dungeon wall texture');};image.onerror=function(){alert('This image could not be loaded as a wall texture.');};image.src=reader.result;};reader.readAsDataURL(file);};
 		panel.querySelector('#dungeon-module-texture-clear').onclick=function(){if(!card.dungeonWallTexture)return;var before=snapshot();card.dungeonWallTexture='';if(card.dungeonWallColor==='custom')card.dungeonWallColor='B';window.dungeonTextureCustom=null;panel.querySelector('#dungeon-module-texture').value='';render();commit(before,'Remove dungeon wall texture');};

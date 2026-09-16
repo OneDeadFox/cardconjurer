@@ -190,7 +190,8 @@ function dungeonEdited(skipTextRedraw) {
 	}
 	dungeonContext.drawImage(texture, 0, 0, dungeonCanvas.width, dungeonCanvas.height);
 	dungeonContext.globalCompositeOperation = 'source-over';
-	dungeonContext.drawImage(dungeonFXCanvas, 0, 0, dungeonCanvas.width, dungeonCanvas.height)
+	dungeonContext.drawImage(dungeonFXCanvas, 0, 0, dungeonCanvas.width, dungeonCanvas.height);
+	if(prototype) window.DungeonCorners?.applyFades(dungeonContext);
 	// finish
 	if (!prototype) loadTextOptions(textObjects);
 	if (skipTextRedraw !== true) drawTextBuffer();

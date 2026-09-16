@@ -4886,7 +4886,7 @@ function drawLayoutHighlightBox(bounds, color, label, options = {}) {
 	var closeRectangle = null;
 	if (options.deletable) {
 		var closeSize = Math.max(15, Math.round(previewCanvas.width / 60));
-		var closeX = rectangle.x + rectangle.width;
+		var closeX = rectangle.x + rectangle.width + (options.kind === 'dungeonRoom' ? -24 : 0);
 		var closeY = rectangle.y;
 		if (rotation) {
 			var centerX = rectangle.x + rectangle.width / 2;
@@ -5037,6 +5037,7 @@ function drawLayoutHighlights() {
 			});
 		}
 	}
+	window.DungeonCorners?.drawHandles();
 }
 function layoutHighlightPoint(event) {
 	const rectangle = previewCanvas.getBoundingClientRect();
@@ -5292,6 +5293,7 @@ function initializeLayoutHighlightInteractions() {
 			return;
 		}
 		const point = layoutHighlightPoint(event);
+		if(window.DungeonCorners?.hit(point)){event.preventDefault();return;}
 		const hit = layoutHighlightHit(point, false);
 		if (!hit) {
 			return;
@@ -5323,6 +5325,7 @@ function initializeLayoutHighlightInteractions() {
 			applyLayoutHighlightDrag(point);
 			return;
 		}
+		if(window.DungeonCorners?.hit(point)){previewCanvas.style.cursor='pointer';return;}
 		const hit = shouldDrawLayoutHighlights() ? layoutHighlightHit(point, activeFrameDesignMode == 'frames') : null;
 		previewCanvas.style.cursor = layoutHighlightCursor(hit?.action || '', hit?.area);
 	});
@@ -5332,6 +5335,8 @@ function initializeLayoutHighlightInteractions() {
 		if (!shouldDrawLayoutHighlights()) {
 			return;
 		}
+		const corner=window.DungeonCorners?.hit(layoutHighlightPoint(event));
+		if(corner){DungeonCorners.open(corner);event.preventDefault();return;}
 		const hit = layoutHighlightHit(layoutHighlightPoint(event), activeFrameDesignMode == 'frames');
 		if (hit && (hit.action == 'move' || (activeFrameDesignMode == 'frames' && hit.action == 'open'))) {
 			openLayoutHighlightEditor(hit.area);
