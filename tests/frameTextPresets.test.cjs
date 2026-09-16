@@ -8,3 +8,8 @@ const copy=JSON.parse(JSON.stringify(f));delete copy.designLayerId;ctx.card.fram
 const small={bounds:{x:.2,y:.3,width:.4,height:.06}};ctx.card.frames.push(small);P.insert(small,'type',true);assert.ok(ctx.card.text.type.x>small.bounds.x);assert.ok(ctx.card.setSymbolBounds.x<small.bounds.x+small.bounds.width);const sx=ctx.card.setSymbolBounds.x;small.bounds.x+=.05;P.sync();approx(ctx.card.setSymbolBounds.x,sx+.05);
 ctx.card=JSON.parse(JSON.stringify(ctx.card));assert.equal(P.sync(),false);
 console.log('PASS: standard geometry, moved/scaled fields, preserved content/manual edits, duplication, cropped type placement, symbol tracking and serialization.');
+const classFrame={designSourcePack:'ClassRange',bounds:{x:.1,y:.05,width:.8,height:.9}};ctx.card.frames.push(classFrame);P.insert(classFrame,'type',false);
+const classType=Object.values(ctx.card.text).find(t=>t.frameAnchor?.id===classFrame.designLayerId&&t.standardRole==='type');approx(classType.y,.05+.8481*.9);approx(ctx.card.setSymbolBounds.y,.05+.8739*.9);approx(ctx.card.setSymbolBounds.x,.1+.9227*.8);
+classFrame.bounds.y+=.07;P.sync();approx(ctx.card.setSymbolBounds.y,.12+.8739*.9);approx(classType.y,.12+.8481*.9);
+const nativeFrame={designSourcePack:'CustomVariant',designTextLayout:{text:{type:{x:.2,y:.7,width:.6,height:.05}},setSymbolBounds:{x:.82,y:.725,width:.1,height:.03,horizontal:'right',vertical:'center'}},bounds:{x:0,y:.1,width:1,height:.5}};ctx.card.frames.push(nativeFrame);P.insert(nativeFrame,'type',false);approx(ctx.card.setSymbolBounds.y,.1+.725*.5);
+console.log('PASS: class native type/symbol positions, vertical movement, and saved source-layout geometry.');

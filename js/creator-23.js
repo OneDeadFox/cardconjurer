@@ -2121,6 +2121,9 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 		var noDefaultMask = frameToAdd.noDefaultMask ? 1 : 0;
 		var hasSelectedComponentMask = !!(frameToAdd.masks && selectedMaskIndex + noDefaultMask > 0);
 		frameToAdd.designSourcePack = document.querySelector('#selectFramePack')?.value || '';
+		if(card.frameLayoutSource?.split(':').pop()===frameToAdd.designSourcePack && card.designDefaults){
+			frameToAdd.designTextLayout=cloneDesignValue({text:card.designDefaults.text,setSymbolBounds:card.designDefaults.setSymbolBounds});
+		}
 		frameToAdd.designSourceFrameName = frameToAdd.name || 'Frame';
 		frameToAdd.designComponentMasks = packComponentMasks;
 		frameToAdd.designComponentPending = packComponentMasks.length > 1 &&
