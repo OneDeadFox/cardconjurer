@@ -2082,8 +2082,13 @@ function setAutoframeNyx(value) {
 var autoFramePack;
 
 async function addFrame(additionalMasks = [], loadingFrame = false) {
-	if (!loadingFrame && activeFrameWorkspace == 'browse') {
-		await applyCurrentFrameLayout({source:'browse'});
+	// A complete frame needs its layout in either workspace, including its art window.
+	// Individual masks are additions to the current design and must not reset it.
+	const sourceFrame = !loadingFrame ? availableFrames[selectedFrameIndex] : null;
+	const completeDesignFrame = activeFrameWorkspace === 'design' && sourceFrame &&
+		!sourceFrame.noDefaultMask && selectedMaskIndex === 0 && !additionalMasks.length;
+	if (!loadingFrame && (activeFrameWorkspace === 'browse' || completeDesignFrame)) {
+		await applyCurrentFrameLayout({source:activeFrameWorkspace});
 	}
 	// Restored frames must keep the same object reference stored in card.frames.
 	// addFrame attaches runtime Image objects to this object; cloning it here would
@@ -4266,13 +4271,12 @@ async function addCustomTemplateField(kind) {
 //ART TAB
 function uploadArt(imageSource, otherParams) {
 	ImageLoadTracker.track(imageSource);
+	// Install the handler first so cached images use the requested fit behavior too.
+	art.onload = otherParams === 'autoFit' ? function() {
+		art.onload = artEdited;
+		autoFitArt();
+	} : artEdited;
 	art.src = imageSource;
-	if (otherParams && otherParams == 'autoFit') {
-		art.onload = function() {
-			autoFitArt();
-			art.onload = artEdited;
-		};
-	}
 }
 async function pasteArt() {
   try {

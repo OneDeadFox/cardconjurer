@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('js/creator-23.js','utf8');
+const start=source.indexOf('async function addFrame('),end=source.indexOf('// Restored frames',start);
+const prelude=source.slice(start,end)+'}';
+const ctx={availableFrames:[{name:'Class'}],selectedFrameIndex:0,selectedMaskIndex:0,activeFrameWorkspace:'design',applyCurrentFrameLayout:async()=>{ctx.applied++;},applied:0};
+vm.runInNewContext(prelude,ctx);
+(async()=>{await ctx.addFrame();assert.equal(ctx.applied,1,'full Design frame applies art/layout');ctx.selectedMaskIndex=2;await ctx.addFrame();assert.equal(ctx.applied,1,'mask keeps design');ctx.selectedMaskIndex=0;await ctx.addFrame(['extra']);assert.equal(ctx.applied,1);await ctx.addFrame([],{});assert.equal(ctx.applied,1,'restoring project skips layout reset');
+let fitted=0,edited=0;ctx.ImageLoadTracker={track(){}};ctx.autoFitArt=()=>fitted++;ctx.artEdited=()=>edited++;ctx.art={set src(value){this.onload();}};
+vm.runInNewContext(source.slice(source.indexOf('function uploadArt('),source.indexOf('async function pasteArt()')),ctx);ctx.uploadArt('cached','autoFit');assert.equal(fitted,1);ctx.uploadArt('keep-placement','');assert.equal(fitted,1);assert.equal(edited,1);
+console.log('PASS: Design full-frame layout application, mask/project preservation, cached-art fitting, and explicit no-fit upload.');})().catch(e=>{console.error(e);process.exitCode=1;});
