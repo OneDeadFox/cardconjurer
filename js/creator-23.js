@@ -6943,6 +6943,11 @@ async function loadCardData(cardData, failureLabel) {
 		bottomInfoEdited();
 		watermarkEdited();
 	}
+	// Rebuild derived dungeon pixels after resizing, even when its script was already loaded.
+	if (card.version === 'dungeonModules' && window.DungeonModules) {
+		DungeonModules.mount();
+		DungeonModules.render();
+	}
 	return true;
 }
 async function loadCard(selectedCardKey) {

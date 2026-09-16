@@ -15,3 +15,10 @@ C.setSettings(shared,{style:'rounded',size:.03});assert.ok(committed);assert.equ
 for(const ref of shared.refs)assert.equal(ref.room.cornerStyles[ref.key].style,'rounded');
 const saved=JSON.parse(JSON.stringify(ctx.card));ctx.card=saved;ctx.card.dungeonModules[0].bounds.x=.05;assert.ok(C.collect().some(n=>n.settings.style==='rounded'&&n.x===450));
 console.log('PASS: closed shapes, bounded corner sizes, shared edits, undo snapshots, save/load, moved rooms.');
+for(const [style,key,extra] of [['t-up','bl','left'],['t-down','tl','left'],['t-left','tr','up'],['t-right','tl','up']]){
+const r=room('tee');ctx.card.dungeonModules=[r];r.cornerStyles[key]={style,size:.04,fades:{}};
+const model=C.geometry(D.wallSegments([r])),n=model.nodes.find(n=>n.refs.some(ref=>ref.key===key));
+assert.equal(Object.keys(n.arms).length,3);assert.equal(n.arms[extra],n.radius);
+assert.ok(model.paths.some(p=>p.some(q=>q[0]===n.x&&q[1]===n.y)),'T reaches junction center');
+}
+console.log('PASS: four T orientations retain connected walls and add their missing arm.');
