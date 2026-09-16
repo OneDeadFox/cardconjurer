@@ -71,6 +71,7 @@
 		if(area.kind==='text')refreshTextStyle(area.key);
 		if(range) input('flow',range.direction||'vertical');
 		['auto','uniform'].forEach(function(kind){var row=document.querySelector('#canvas-element-'+kind+'-row'),box=document.querySelector('#canvas-element-'+kind+(kind==='auto'?'-size':'-text'));if(row)row.hidden=!range;if(box&&range)box.checked=kind==='auto'?!!range.autoSizeModules:!!range.uniformTextSize;});
+		window.FrameTextPresets?.mount(document.querySelector('#canvas-element-editor'),area.kind==='frame'?area.target:null);
 		document.querySelector('#canvas-element-editor').classList.add('opened'); return true;
 	}
 	function applyEditor(event) {

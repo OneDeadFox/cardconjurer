@@ -1,0 +1,10 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');let seq=0;
+const ctx={card:{width:2010,height:2814,text:{title:{text:'Existing name'}},frames:[]},ensureDesignLayerId:f=>f.designLayerId||(f.designLayerId='f'+(++seq)),createDesignStateSnapshot:()=>JSON.parse(JSON.stringify(ctx.card)),commitDesignUndoSnapshot(){},loadTextOptions:f=>Object.assign(ctx.card.text,f),drawTextBuffer(){},drawCard(){},resetSetSymbol(){}};ctx.window=ctx;
+vm.runInNewContext(fs.readFileSync('js/frameTextPresets.js','utf8'),ctx);const P=ctx.FrameTextPresets;const approx=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
+const f={bounds:{x:0,y:0,width:1,height:1}};ctx.card.frames=[f];P.insert(f,'title',false);assert.equal(ctx.card.text.title.text,'Existing name');approx(ctx.card.text.title.x,.0854);approx(ctx.card.text.title.y,.0522);approx(ctx.card.text.mana.x+ctx.card.text.mana.width,.9292);
+f.bounds={x:.1,y:.2,width:.5,height:.5};P.sync();approx(ctx.card.text.title.x,.1+.0854*.5);approx(ctx.card.text.title.size,.0381*.5);
+ctx.card.text.title.x+=.01;const manual=ctx.card.text.title.x;f.bounds.x+=.1;P.sync();approx(ctx.card.text.title.x,manual+.1);
+const copy=JSON.parse(JSON.stringify(f));delete copy.designLayerId;ctx.card.frames.push(copy);P.duplicate(f,copy);assert.equal(Object.values(ctx.card.text).filter(t=>t.frameAnchor?.id===copy.designLayerId).length,2);
+const small={bounds:{x:.2,y:.3,width:.4,height:.06}};ctx.card.frames.push(small);P.insert(small,'type',true);assert.ok(ctx.card.text.type.x>small.bounds.x);assert.ok(ctx.card.setSymbolBounds.x<small.bounds.x+small.bounds.width);const sx=ctx.card.setSymbolBounds.x;small.bounds.x+=.05;P.sync();approx(ctx.card.setSymbolBounds.x,sx+.05);
+ctx.card=JSON.parse(JSON.stringify(ctx.card));assert.equal(P.sync(),false);
+console.log('PASS: standard geometry, moved/scaled fields, preserved content/manual edits, duplication, cropped type placement, symbol tracking and serialization.');

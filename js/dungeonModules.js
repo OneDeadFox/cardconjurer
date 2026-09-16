@@ -25,18 +25,27 @@
 	function initialize() {
 		card.dungeonModules=[];
 		card.dungeonWallTexture='';
-		card.dungeonWallColor='B';
+		card.dungeonWallColor='B';card.dungeonPadding=null;
 		card.dungeonAutoFit=false;card.dungeonAutoFitBounds=null;card.dungeonHeightLock=null;
 		sample.forEach(function(values){addRoom(fromGrid.apply(null,values));});
 		selectedId=modules()[0]?.id||'';
 	}
+	function roomPadding(room) {
+		var box=room.bounds,explicit=Number.isFinite(room.padding)?room.padding:card.dungeonPadding;
+		var value=Number.isFinite(explicit)?Math.max(0,explicit):grid().cell*.5;
+		return {x:Math.min(value,Number.isFinite(explicit)?Math.max(0,(box.width*card.width-10)/2):box.width*card.width*.12),
+			y:Math.min(value,Number.isFinite(explicit)?Math.max(0,(box.height*card.height-10)/2):box.height*card.height*.12),value:value,explicit:Number.isFinite(explicit)};
+	}
+	function setPadding(value,all) {
+		value=Math.max(0,Number(value)||0);var room=selected();if(!all&&!room)return;
+		var before=snapshot();if(all){card.dungeonPadding=value;modules().forEach(function(r){delete r.padding;});}else room.padding=value;
+		render();commit(before,all?'Set padding for all dungeon rooms':'Set room padding');
+	}
 	function syncRoom(room) {
-		var box=room.bounds, text=field(room);
-		if (!text) return;
-		var g=grid(),insetX=Math.min(g.cell*.5/card.width,box.width*.12),insetY=Math.min(g.cell*.5/card.height,box.height*.12);
-		text.x=box.x+insetX;text.y=box.y+insetY;
-		text.width=Math.max(10/card.width,box.width-2*insetX);
-		text.height=Math.max(10/card.height,box.height-2*insetY);
+		var box=room.bounds,text=field(room);if(!text)return;var pad=roomPadding(room);
+		text.x=box.x+pad.x/card.width;text.y=box.y+pad.y/card.height;
+		text.width=Math.max(10/card.width,box.width-2*pad.x/card.width);
+		text.height=Math.max(10/card.height,box.height-2*pad.y/card.height);
 	}
 	function syncAll() { modules().forEach(syncRoom);if(typeof drawTextBuffer==='function')drawTextBuffer(); }
 	function currentEnvelope() {
@@ -80,9 +89,9 @@
 		if(!Number.isFinite(common))common=.0324*height;
 		function solve(reduction){
 			var padding=grid().cell*.5;
-			records.forEach(function(record){var box=record.room.bounds,inset=Math.min(padding,box.width*card.width*.12),width=Math.max(10,box.width*card.width-2*inset);
+			records.forEach(function(record){var box=record.room.bounds,pad=roomPadding(record.room),inset=pad.x,width=Math.max(10,box.width*card.width-2*inset);
 				var measured=record.text?RulesRange.measureModuleText(record.text,width,record.base-common+reduction):0;
-				record.minimum=Math.max(20,Math.min(measured/.76,measured+2*padding));
+				record.minimum=Math.max(20,(pad.explicit?measured+2*pad.value:Math.min(measured/.76,measured+2*padding)));
 			});
 			var positions=[0];
 			for(var i=1;i<levels.length;i++){
@@ -217,6 +226,8 @@
 		list.value=selectedId;
 		var p=room?{x:room.bounds.x*card.width,y:room.bounds.y*card.height,w:room.bounds.width*card.width,h:room.bounds.height*card.height}:null;
 		panel.querySelector('#dungeon-module-name').value=room?.name||'';
+		panel.querySelector('#dungeon-room-padding').value=room?Math.round(roomPadding(room).value*10)/10:0;
+		panel.querySelector('#dungeon-all-padding').value=Number.isFinite(card.dungeonPadding)?card.dungeonPadding:Math.round(grid().cell*5)/10;
 		['x','y','w','h'].forEach(function(axis){panel.querySelector('#dungeon-module-'+axis).value=p?Math.round(p[axis]*10)/10:'';});
 		var color=document.querySelector('#dungeon-color');if(color){var custom=color.querySelector('[value="custom"]');if(!custom){custom=document.createElement('option');custom.value='custom';custom.textContent='Custom texture';color.appendChild(custom);}custom.disabled=!card.dungeonWallTexture;color.value=card.dungeonWallColor==='custom'&&card.dungeonWallTexture?'custom':(card.dungeonWallColor||'B');}
 	}
@@ -233,20 +244,22 @@
 		if(color&&!color.dataset.moduleColorReady){color.dataset.moduleColorReady='true';color.addEventListener('change',function(){if(card.version==='dungeonModules')card.dungeonWallColor=color.value;});}
 		if(existing){existing.hidden=false;refresh();return;}
 		var panel=document.createElement('div');panel.id='dungeon-modules-panel';panel.className='readable-background padding margin-bottom';
-		panel.innerHTML='<h4>Room modules (prototype)</h4><p>Rooms have free-form dimensions in card pixels. Drag in Frame Design; nearby walls snap together. Only upper and lower shared walls gain a doorway.</p><label><input type="checkbox" id="dungeon-module-height-lock"> Lock overall dungeon height</label><p id="dungeon-module-height-info"></p><label><input type="checkbox" id="dungeon-module-auto-fit"> Auto-fit room heights and use a uniform text size</label><p id="dungeon-module-fit-status"></p><select id="dungeon-module-list" class="input" size="7"></select><label>Name <input id="dungeon-module-name" class="input"></label><div class="dungeon-module-coordinates"><label>X (px) <input type="number" step="0.1" id="dungeon-module-x" class="input"></label><label>Y (px) <input type="number" step="0.1" id="dungeon-module-y" class="input"></label><label>Width (px) <input type="number" step="0.1" min="20" id="dungeon-module-w" class="input"></label><label>Height (px) <input type="number" step="0.1" min="20" id="dungeon-module-h" class="input"></label></div><button type="button" id="dungeon-module-add">Add room</button> <button type="button" id="dungeon-module-copy">Duplicate room</button> <button type="button" id="dungeon-module-remove">Delete room</button><hr><label>Wall texture <input type="file" id="dungeon-module-texture" accept="image/*" class="input"></label><button type="button" id="dungeon-module-texture-clear">Remove uploaded texture</button><p>Upload a full-card image; its colors fill the walls while the wall outlines stay on top. Large images can exceed browser save storage.</p>';
+		panel.innerHTML='<h4>Room modules (prototype)</h4><p>Rooms have free-form dimensions in card pixels. Drag in Frame Design; nearby walls snap together. Only upper and lower shared walls gain a doorway.</p><label><input type="checkbox" id="dungeon-module-height-lock"> Lock overall dungeon height</label><p id="dungeon-module-height-info"></p><label><input type="checkbox" id="dungeon-module-auto-fit"> Auto-fit room heights and use a uniform text size</label><p id="dungeon-module-fit-status"></p><select id="dungeon-module-list" class="input" size="7"></select><label>Name <input id="dungeon-module-name" class="input"></label><label>Selected room padding (px)<input id="dungeon-room-padding" type="number" min="0" step="1" class="input"></label><label>All-room padding (px)<input id="dungeon-all-padding" type="number" min="0" step="1" class="input"></label><button id="dungeon-apply-padding" type="button">Apply padding to all rooms</button><div class="dungeon-module-coordinates"><label>X (px) <input type="number" step="0.1" id="dungeon-module-x" class="input"></label><label>Y (px) <input type="number" step="0.1" id="dungeon-module-y" class="input"></label><label>Width (px) <input type="number" step="0.1" min="20" id="dungeon-module-w" class="input"></label><label>Height (px) <input type="number" step="0.1" min="20" id="dungeon-module-h" class="input"></label></div><button type="button" id="dungeon-module-add">Add room</button> <button type="button" id="dungeon-module-copy">Duplicate room</button> <button type="button" id="dungeon-module-remove">Delete room</button><hr><label>Wall texture <input type="file" id="dungeon-module-texture" accept="image/*" class="input"></label><button type="button" id="dungeon-module-texture-clear">Remove uploaded texture</button><p>Upload a full-card image; its colors fill the walls while the wall outlines stay on top. Large images can exceed browser save storage.</p>';
 		tab.prepend(panel);
+		panel.querySelector('#dungeon-room-padding').onchange=function(){setPadding(this.value,false);};
+		panel.querySelector('#dungeon-apply-padding').onclick=function(){setPadding(panel.querySelector('#dungeon-all-padding').value,true);};
 		panel.querySelector('#dungeon-module-height-lock').onchange=function(){setHeightLock(this.checked);};
 		panel.querySelector('#dungeon-module-auto-fit').onchange=function(){setAutoFit(this.checked);};
 		panel.querySelector('#dungeon-module-list').onchange=function(event){selectedId=event.target.value;refresh();drawCard();};
 		panel.querySelector('#dungeon-module-name').onchange=function(event){var room=selected();if(!room)return;var before=snapshot();room.name=event.target.value.trim()||room.name;if(field(room))field(room).name=room.name;refresh();drawCard();commit(before,'Rename dungeon room');};
 		['x','y','w','h'].forEach(function(axis){panel.querySelector('#dungeon-module-'+axis).onchange=function(){var room=selected();if(!room)return;var before=snapshot(),value=Number(this.value);if(Number.isFinite(value)){var key={x:'x',y:'y',w:'width',h:'height'}[axis],dimension=axis==='x'||axis==='w'?card.width:card.height;room.bounds[key]=value/dimension;}snapRoom(room,axis==='w'?'right':axis==='h'?'bottom':'move');render();commit(before,'Edit dungeon room');};});
 		panel.querySelector('#dungeon-module-add').onclick=function(){var before=snapshot(),source=selected(),box=source?.bounds||{x:.1,y:.15,width:.3,height:.2};var newBox={x:box.x,y:Math.min(1-box.height,box.y+box.height),width:box.width,height:box.height};addRoom(newBox);render();commit(before,'Add dungeon room');};
-		panel.querySelector('#dungeon-module-copy').onclick=function(){var source=selected();if(!source)return;var before=snapshot(),box=source.bounds,copy=addRoom({x:Math.min(1-box.width,box.x+box.width),y:box.y,width:box.width,height:box.height},source.name+' Copy',field(source)?.text);copy.cornerStyles=JSON.parse(JSON.stringify(source.cornerStyles||{}));var text=field(copy),original=field(source);if(text&&original){Object.assign(text,JSON.parse(JSON.stringify(original)));text.name=copy.name;if(source.autoFitFont)copy.autoFitFont=JSON.parse(JSON.stringify(source.autoFitFont));syncRoom(copy);}render();commit(before,'Duplicate dungeon room');};
+		panel.querySelector('#dungeon-module-copy').onclick=function(){var source=selected();if(!source)return;var before=snapshot(),box=source.bounds,copy=addRoom({x:Math.min(1-box.width,box.x+box.width),y:box.y,width:box.width,height:box.height},source.name+' Copy',field(source)?.text);if(Number.isFinite(source.padding))copy.padding=source.padding;copy.cornerStyles=JSON.parse(JSON.stringify(source.cornerStyles||{}));var text=field(copy),original=field(source);if(text&&original){Object.assign(text,JSON.parse(JSON.stringify(original)));text.name=copy.name;if(source.autoFitFont)copy.autoFitFont=JSON.parse(JSON.stringify(source.autoFitFont));syncRoom(copy);}render();commit(before,'Duplicate dungeon room');};
 		panel.querySelector('#dungeon-module-remove').onclick=function(){var room=selected();if(!room)return;remove(room.id);};
 		panel.querySelector('#dungeon-module-texture').onchange=function(){var file=this.files?.[0];if(!file)return;if(!file.type.startsWith('image/')){alert('Please upload an image file.');return;}var before=snapshot(),reader=new FileReader();reader.onload=function(){var image=new Image();image.onload=function(){card.dungeonWallTexture=reader.result;card.dungeonWallColor='custom';window.dungeonTextureCustom=image;document.querySelector('#dungeon-color').value='custom';render();commit(before,'Change dungeon wall texture');};image.onerror=function(){alert('This image could not be loaded as a wall texture.');};image.src=reader.result;};reader.readAsDataURL(file);};
 		panel.querySelector('#dungeon-module-texture-clear').onclick=function(){if(!card.dungeonWallTexture)return;var before=snapshot();card.dungeonWallTexture='';if(card.dungeonWallColor==='custom')card.dungeonWallColor='B';window.dungeonTextureCustom=null;panel.querySelector('#dungeon-module-texture').value='';render();commit(before,'Remove dungeon wall texture');};
 		refresh();
 	}
 	function remove(roomId) { var before=snapshot(),index=modules().findIndex(function(room){return room.id===roomId;});if(index<0)return;var room=modules().splice(index,1)[0];delete card.text[room.textKey];selectedId=modules()[Math.min(index,modules().length-1)]?.id||'';loadTextOptions(card.text,true);render();commit(before,'Delete dungeon room'); }
-	window.DungeonModules={initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setHeightLock:setHeightLock,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
+	window.DungeonModules={initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setHeightLock:setHeightLock,setPadding:setPadding,roomPadding:roomPadding,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
 })();

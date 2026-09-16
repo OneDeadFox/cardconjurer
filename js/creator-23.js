@@ -1217,6 +1217,7 @@ function createDesignStateSnapshot() {
 		dungeonModules:cloneDesignValue(card.dungeonModules || []),
 		dungeonWallTexture:card.dungeonWallTexture||'',
 		dungeonWallColor:card.dungeonWallColor||'B',
+		dungeonPadding:card.dungeonPadding,
 		dungeonHeightLock:cloneDesignValue(card.dungeonHeightLock||null),
 		dungeonAutoFit:!!card.dungeonAutoFit,
 		dungeonAutoFitBounds:cloneDesignValue(card.dungeonAutoFitBounds||null),
@@ -1320,6 +1321,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	card.dungeonModules=cloneDesignValue(snapshot.dungeonModules||[]);
 	card.dungeonWallTexture=snapshot.dungeonWallTexture||'';
 	card.dungeonWallColor=snapshot.dungeonWallColor||'B';
+	card.dungeonPadding=snapshot.dungeonPadding;
 	card.dungeonHeightLock=cloneDesignValue(snapshot.dungeonHeightLock||null);
 	card.dungeonAutoFit=!!snapshot.dungeonAutoFit;
 	card.dungeonAutoFitBounds=cloneDesignValue(snapshot.dungeonAutoFitBounds||null);
@@ -1505,6 +1507,8 @@ async function duplicateSelectedFrame() {
 	if (!selectedFrame) {
 		return;
 	}
+	const sourceFrame=selectedFrame;
+	window.FrameTextPresets?.sync();
 	const copy = JSON.parse(JSON.stringify(selectedFrame, (key, value) => key == 'image' ? undefined : value));
 	copy.name = (copy.name || 'Frame Layer') + ' Copy';
 	copy.masks = copy.masks || [];
@@ -1513,6 +1517,7 @@ async function duplicateSelectedFrame() {
 	ensureFrameEditorDefaults(copy);
 	card.frames.unshift(copy);
 	await addFrame([], copy);
+	window.FrameTextPresets?.duplicate(sourceFrame,copy);
 	selectedFrame = copy;
 	syncFrameElementVisibility(copy);
 	refreshSelectedFrameEditor();
@@ -1676,6 +1681,7 @@ async function decomposePendingBuiltInFrames() {
 }
 
 function drawFrames() {
+	if(window.FrameTextPresets?.sync())drawTextBuffer();
 	frameContext.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
 	var frameToDraw = card.frames.slice().reverse();
 	var haveDrawnPrePTCanvas = false;
@@ -2251,6 +2257,7 @@ function frameElementDoubleClicked(event) {
 	if (selectedFrame) {
 		setFrameDesignMode('frames');
 		document.querySelector('#frame-element-editor').classList.add('opened');
+		window.FrameTextPresets?.mount(document.querySelector('#frame-element-editor'),selectedFrame);
 		if (window.CanvasDesignTools) CanvasDesignTools.suspend();
 		selectedFrame.bounds = selectedFrame.bounds || {};
 		if (selectedFrame.ogBounds == undefined) {
@@ -2870,6 +2877,7 @@ function autoFrameBuffer() {
 	autoFrameTimer = setTimeout(autoFrame, 500);
 }
 async function drawText() {
+	window.FrameTextPresets?.sync();
 	if (card.version==='dungeonModules' && window.DungeonModules?.reflow()) {
 		if (typeof dungeonEdited==='function') dungeonEdited(true);
 		DungeonModules.refresh();

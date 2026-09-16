@@ -1388,3 +1388,7 @@ textarea.input {
 .dungeon-corner-editor .corner-presets button[aria-pressed=true] { border-color:#80ffcc; }
 .dungeon-corner-editor svg { display:block; width:100%; height:45px; }
 #corner-close { float:right; }
+
+.frame-standard-fields { grid-column:1 / -1; width:100%; box-sizing:border-box; padding:12px 0; border-top:1px solid #66816b; }
+.frame-standard-fields label { display:block; margin:8px 0; }
+.frame-standard-fields p { font-size:13px; line-height:1.4; }
