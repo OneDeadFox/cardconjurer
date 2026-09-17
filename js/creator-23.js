@@ -5184,6 +5184,7 @@ function applyLayoutHighlightDrag(point) {
 		return;
 	}
 	const drag = layoutHighlightDrag;
+	if(drag.area.kind==='dungeonRoom' && window.DungeonModules?.modules().find(room=>room.id===drag.area.key)?.geometryLocked)return;
 	var deltaPoint = point;
 	var deltaStart = drag.startPoint;
 	if (drag.action != 'move' && drag.area.rotation) {
