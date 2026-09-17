@@ -1228,6 +1228,7 @@ function createDesignStateSnapshot() {
 		dungeonWallTexture:card.dungeonWallTexture||'',
 		dungeonWallColor:card.dungeonWallColor||'B',
 		dungeonPadding:card.dungeonPadding,
+		dungeonVerticalPadding:cloneDesignValue(card.dungeonVerticalPadding||null),
 		dungeonHeightLock:cloneDesignValue(card.dungeonHeightLock||null),
 		dungeonAutoFit:!!card.dungeonAutoFit,
 		dungeonAutoFitBounds:cloneDesignValue(card.dungeonAutoFitBounds||null),
@@ -1334,6 +1335,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	card.dungeonWallTexture=snapshot.dungeonWallTexture||'';
 	card.dungeonWallColor=snapshot.dungeonWallColor||'B';
 	card.dungeonPadding=snapshot.dungeonPadding;
+	card.dungeonVerticalPadding=cloneDesignValue(snapshot.dungeonVerticalPadding||null);
 	card.dungeonHeightLock=cloneDesignValue(snapshot.dungeonHeightLock||null);
 	card.dungeonAutoFit=!!snapshot.dungeonAutoFit;
 	card.dungeonAutoFitBounds=cloneDesignValue(snapshot.dungeonAutoFitBounds||null);

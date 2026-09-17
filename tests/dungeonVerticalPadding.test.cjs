@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const ctx={document:{querySelector:()=>null},card:{version:'dungeonModules',width:1000,height:1000,text:{a:{size:.03,measured:100}},dungeonModules:[{id:'a',textKey:'a',bounds:{x:.1,y:.2,width:.7,height:.4}}]},RulesRange:{measureModuleText:t=>t.measured},createDesignStateSnapshot:()=>JSON.parse(JSON.stringify(ctx.card)),commitDesignUndoSnapshot(){}};ctx.window=ctx;vm.runInNewContext(fs.readFileSync('js/dungeonModules.js','utf8'),ctx);const D=ctx.DungeonModules,eq=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
+D.setVerticalPadding(10,30,false,false);eq(ctx.card.text.a.y,.21);eq(ctx.card.text.a.height,.36);
+D.setVerticalPadding(10,30,true,false);eq(ctx.card.text.a.y,.34);eq(ctx.card.text.a.height,.1);
+ctx.card.dungeonModules[0].bounds.height=.6;D.syncRoom(ctx.card.dungeonModules[0]);eq(ctx.card.text.a.y,.44);eq(ctx.card.text.a.height,.1);
+D.setRoomLock(true);const box=JSON.stringify(ctx.card.dungeonModules[0].bounds);D.setVerticalPadding(20,20,true,true);assert.equal(ctx.card.dungeonModules[0].verticalPadding,undefined);assert.equal(JSON.stringify(ctx.card.dungeonModules[0].bounds),box);
+ctx.card=JSON.parse(JSON.stringify(ctx.card));D.syncRoom(ctx.card.dungeonModules[0]);eq(ctx.card.text.a.y,.45);
+D.setRoomLock(false);D.setVerticalPadding(15,35,false,true);D.setAutoFit(true);eq(ctx.card.dungeonModules[0].bounds.height,.15);eq(ctx.card.text.a.height,.1);
+D.setAutoFit(false);D.setVerticalPadding(10000,10000,false,false);assert.ok(ctx.card.text.a.height>=.01-1e-9);assert.ok(ctx.card.text.a.y>=ctx.card.dungeonModules[0].bounds.y);
+console.log('PASS: asymmetric top/bottom padding, even extra-space distribution, resizing, locked rooms, global settings, serialization and fit minimums.');
