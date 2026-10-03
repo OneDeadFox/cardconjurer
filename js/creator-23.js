@@ -2995,6 +2995,9 @@ function autoFrameBuffer() {
 	autoFrameTimer = setTimeout(autoFrame, 500);
 }
 async function drawText() {
+	// Image loads can request a redraw before the initial frame defines text.
+	// Leave it unset so the frame pack can still initialize its defaults.
+	if (!card || !card.text) return;
 	window.FrameTextPresets?.sync();
 	if (card.version==='dungeonModules' && window.DungeonModules?.reflow()) {
 		if (typeof dungeonEdited==='function') dungeonEdited(true);
