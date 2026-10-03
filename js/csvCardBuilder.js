@@ -1443,12 +1443,16 @@
 	async function applyPreviewToCurrentCard(result) {
 		await applyNamedProjectTemplate(result);
 		await applyBuiltInFrameTemplate(result);
-		if (result.appliedTemplateName && typeof loadCardData === 'function') {
-			var restored = await loadCardData(result.card, result.appliedTemplateName);
+		if ((result.appliedTemplateName || result.appliedBuiltInLayout) && typeof loadCardData === 'function') {
+			// A cached built-in layout includes canvas dimensions, version, art,
+			// symbols and layout defaults too. Restoring only its text leaves the
+			// previous preview's frame settings active.
+			var layoutName = result.appliedTemplateName || result.appliedBuiltInLayout;
+			var restored = await loadCardData(result.card, layoutName);
 			if (restored === false) {
-				throw new Error('The saved frame project "' + result.appliedTemplateName + '" could not be restored.');
+				throw new Error('The frame layout "' + layoutName + '" could not be restored.');
 			}
-			result.loadedNamedTemplate = true;
+			result.loadedNamedTemplate = !!result.appliedTemplateName;
 			activeTransformLayout = false;
 		} else {
 			restoreTemplateTextLayout(result);

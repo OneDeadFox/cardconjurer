@@ -2765,7 +2765,6 @@ function cardPowerToughnessCollisionRects() {
 	var activePTFields = Object.entries(card.text || {}).filter(function (entry) {
 		return cardTextSemanticRole(entry[1], entry[0]) === 'pt' && cardTextHasVisibleContent(entry[1]);
 	});
-	if (!activePTFields.length) return [];
 	var frameRects = (card.frames || []).filter(function (frame) {
 		if (!frame || frame.hidden || Number(frame.opacity) === 0) return false;
 		var label = normalizeCardTextSemantic((frame.componentLabel || '') + ' ' + (frame.name || ''));
@@ -2817,6 +2816,7 @@ function getCardTextCollisionFit(textObject, originalWidth, originalHeight) {
 		label:textObject.name || key || 'Text field',
 		width:originalWidth,
 		height:originalHeight,
+		regions:[],
 		obstacles:[],
 		restricted:false
 	};
@@ -2833,14 +2833,22 @@ function getCardTextCollisionFit(textObject, originalWidth, originalHeight) {
 			result.obstacles.push(obstacle.label);
 		} else if (role === 'rules' &&
 			local.right > 0 && local.left < originalWidth &&
-			local.top > 0 && local.top < result.height) {
-			result.height = Math.max(1, local.top - verticalPadding);
+			local.bottom > 0 && local.top < originalHeight) {
+			// Keep the frame's original text area and vertical centering. Only
+			// lines actually reaching the P/T box need to trigger a smaller font.
+			result.regions.push({left:local.left-horizontalPadding, right:local.right+horizontalPadding,
+				top:local.top-verticalPadding, bottom:local.bottom+verticalPadding});
 			result.obstacles.push(obstacle.label);
 		}
 	});
 	result.obstacles = Array.from(new Set(result.obstacles));
 	result.restricted = result.width < originalWidth || result.height < originalHeight;
 	return result;
+}
+function cardTextLinesOverlapRegions(lines, regions, offsetX, offsetY) {
+	return regions.some(region => lines.some(line =>
+		line.right + offsetX > region.left && line.left + offsetX < region.right &&
+		line.bottom + offsetY > region.top && line.top + offsetY < region.bottom));
 }
 function resetCardTextFitState() {
 	cardTextFitResults = [];
@@ -3318,6 +3326,7 @@ function writeText(textObject, targetContext) {
 		var savedRollColor = 'black';
 		var drawToPrePTCanvas = false;
 		var widestLineWidth = 0;
+		var renderedLines = [];
 		//variables that track various... things?
 		var textSize = startingTextSize;
 		var newLineSpacing = (textObject.lineSpacing || 0) * textSize;
@@ -3898,6 +3907,10 @@ function writeText(textObject, targetContext) {
 					renderManaSymbols();
 				}
 				paragraphContext.drawImage(lineCanvas, horizontalAdjust, currentY);
+				if (currentX > startingCurrentX) {
+					renderedLines.push({left:horizontalAdjust + startingCurrentX, right:horizontalAdjust + currentX,
+						top:currentY, bottom:currentY + textSize});
+				}
 				lineY = 0;
 				lineContext.clearRect(0, 0, lineCanvas.width, lineCanvas.height);
 				// boxes for 'roll a d20' cards
@@ -3976,7 +3989,7 @@ function writeText(textObject, targetContext) {
 				//should manage vertical centering here
 				var verticalAdjust = 0;
 				if (!textObject.noVerticalCenter) {
-					verticalAdjust = (textHeight - currentY + textSize * 0.15) / 2;
+					verticalAdjust = Math.max(0, (textHeight - currentY + textSize * 0.15) / 2);
 				}
 				var finalHorizontalAdjust = 0;
 				const horizontalAdjustUnit = (textWidth - widestLineWidth) / 2;
@@ -3990,6 +4003,15 @@ function writeText(textObject, targetContext) {
 					if (textAlign == 'right') {
 						finalHorizontalAdjust = - horizontalAdjustUnit;
 					}
+				}
+				if (cardTextLinesOverlapRegions(renderedLines, collisionFit.regions,
+					ptShift[0] + permaShift[0] + finalHorizontalAdjust, verticalAdjust + ptShift[1] + permaShift[1])) {
+					collisionFit.restricted = true;
+					if (startingTextSize > collisionMinimumTextSize) {
+						startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
+						continue outerloop;
+					}
+					collisionFitFailed = true;
 				}
 				recordCardTextFit(textObject, collisionFit, originalStartingTextSize,
 					startingTextSize, collisionFitFailed);
