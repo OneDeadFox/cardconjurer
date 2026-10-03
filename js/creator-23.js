@@ -2580,7 +2580,7 @@ function fontSizedEdited() {
 	drawTextBuffer();
 }
 
-var CARD_TEXT_COLLISION_MINIMUM_REDUCTION = 25;
+var CARD_TEXT_IMPORT_MAX_REDUCTION = 27;
 var cardTextFitResults = [];
 var cardTextCollisionWarnings = [];
 window.CardTextFitResults = [];
@@ -2850,6 +2850,38 @@ function cardTextLinesOverlapRegions(lines, regions, offsetX, offsetY) {
 		line.right + offsetX > region.left && line.left + offsetX < region.right &&
 		line.bottom + offsetY > region.top && line.top + offsetY < region.bottom));
 }
+function cardTextLineAvailableWidth(regions, y, height, width, offsetX) {
+	regions.forEach(region => {
+		if (y + height > region.top && y < region.bottom && region.right > offsetX) {
+			width = Math.min(width, Math.max(1, region.left - offsetX));
+		}
+	});
+	return width;
+}
+function drawCardTextFitIndicators() {
+	// Preview overlay only: cardCanvas remains clean for PNG/JPEG and CSV export.
+	const results = cardTextFitResults.filter(fit => {
+		const field = card.text[fit.key];
+		return field && !field.hidden && !['mana', 'pt', 'rarity'].includes(cardTextSemanticRole(field, fit.key));
+	});
+	previewContext.save();
+	const fontSize = Math.max(11, Math.round(previewCanvas.width / 65));
+	previewContext.font = 'bold ' + fontSize + 'px sans-serif';
+	previewContext.textBaseline = 'top';
+	let x = 5, y = 5;
+	results.forEach(fit => {
+		const label = ({title:'Name', type:'Type line', rules:'Ability'})[fit.key] || fit.label;
+		const text = label + ': −' + fit.reduction;
+		const width = previewContext.measureText(text).width + 12;
+		if (x + width > previewCanvas.width && x > 5) { x = 5; y += fontSize + 10; }
+		previewContext.fillStyle = fit.overLimit || fit.failed ? '#a62030' : '#16352e';
+		previewContext.fillRect(x, y, width, fontSize + 6);
+		previewContext.fillStyle = '#ffffff';
+		previewContext.fillText(text, x + 6, y + 3);
+		x += width + 5;
+	});
+	previewContext.restore();
+}
 function resetCardTextFitState() {
 	cardTextFitResults = [];
 	cardTextCollisionWarnings = [];
@@ -2857,14 +2889,15 @@ function resetCardTextFitState() {
 	window.CardTextCollisionWarnings = [];
 }
 function recordCardTextFit(textObject, collisionFit, originalSize, finalSize, failed) {
-	if (!collisionFit || (!collisionFit.restricted && !failed)) return;
-	var reduction = Math.max(0, Math.round(originalSize - finalSize));
+	if (!collisionFit || !collisionFit.key || textObject.hidden) return;
+	var reduction = Math.max(0, Math.round(originalSize - finalSize - (Number(textObject.fontSize)||0) + (Number(textObject.rangeFontReduction)||0)));
 	var obstacleLabel = collisionFit.obstacles.join(' and ') || 'a neighboring field';
 	var record = {
 		key:collisionFit.key,
 		label:collisionFit.label,
 		obstacles:collisionFit.obstacles.slice(),
 		reduction:reduction,
+		overLimit:reduction > CARD_TEXT_IMPORT_MAX_REDUCTION,
 		failed:!!failed
 	};
 	var existingIndex = cardTextFitResults.findIndex(function (item) { return item.key === record.key; });
@@ -2873,9 +2906,11 @@ function recordCardTextFit(textObject, collisionFit, originalSize, finalSize, fa
 	if (failed) {
 		var warning = collisionFit.restricted
 			? collisionFit.label + ' still overlaps ' + obstacleLabel +
-				' at the minimum {fontsize-25} size.'
-			: collisionFit.label + ' still exceeds its own text box at the minimum {fontsize-25} size.';
+				' at the smallest available size.'
+			: collisionFit.label + ' still exceeds its own text box at the smallest available size.';
 		if (!cardTextCollisionWarnings.includes(warning)) cardTextCollisionWarnings.push(warning);
+	} else if (record.overLimit) {
+		cardTextCollisionWarnings.push(collisionFit.label + ' needs −' + reduction + ' px; CSV production limit is −27 px.');
 	}
 }
 function publishCardTextFitState() {
@@ -3099,8 +3134,8 @@ function writeText(textObject, targetContext) {
 	var startingTextSize = scaleHeight(textObject.size) || scaleHeight(0.038);
 	var originalStartingTextSize = startingTextSize;
 	var fontSizeModifier = (parseInt(textObject.fontSize || '0') || 0) - (Number(textObject.rangeFontReduction)||0);
-	var collisionMinimumTextSize = Math.max(1, Math.min(startingTextSize,
-		originalStartingTextSize - CARD_TEXT_COLLISION_MINIMUM_REDUCTION - fontSizeModifier));
+	// Measure the size actually needed. CSV export enforces its separate production limit.
+	var collisionMinimumTextSize = Math.min(startingTextSize, Math.max(1, 1 - fontSizeModifier));
 	if (textObject.rangeUniformTextSize) collisionMinimumTextSize = startingTextSize;
 	var collisionFit = getCardTextCollisionFit(textObject, textWidth, textHeight);
 	var collisionFitFailed = false;
@@ -3219,8 +3254,10 @@ function writeText(textObject, targetContext) {
 	splitText.push('');
 	//Manages the redraw loop
 	var drawingText = true;
+	var wrapOffset = null;
 	//Repeatedly tries to draw the text at smaller and smaller sizes until it fits
 	outerloop: while (drawingText) {
+		collisionFitFailed = false;
 		//Rest of the text info loaded that may have been changed by a previous attempt at drawing the text
 		var textColor = textObject.color || 'black';
 		if (textObject.conditionalColor != undefined) {
@@ -3327,6 +3364,9 @@ function writeText(textObject, targetContext) {
 		var drawToPrePTCanvas = false;
 		var widestLineWidth = 0;
 		var renderedLines = [];
+		var wrapEnabled = wrapOffset !== null && collisionFit.regions.length &&
+			!textObject.oneLine && !textObject.vertical && !textObject.arcRadius &&
+			(!textObject.align || textObject.align === 'left') && (!textObject.justify || textObject.justify === 'left');
 		//variables that track various... things?
 		var textSize = startingTextSize;
 		var newLineSpacing = (textObject.lineSpacing || 0) * textSize;
@@ -3879,12 +3919,19 @@ function writeText(textObject, targetContext) {
 				wordToWrite = wordToWrite.replace(/f(?:\s|$)/g, '\ue006').replace(/h(?:\s|$)/g, '\ue007').replace(/m(?:\s|$)/g, '\ue008').replace(/n(?:\s|$)/g, '\ue009').replace(/k(?:\s|$)/g, '\ue00a');
 			}
 
+			// Narrow only lines beside the P/T frame. Keep explicit line breaks intact.
+			var lineWidth = textWidth;
+			if (wrapEnabled) {
+				lineWidth = cardTextLineAvailableWidth(collisionFit.regions, currentY + wrapOffset + ptShift[1] + permaShift[1],
+					textSize, textWidth, ptShift[0] + permaShift[0]);
+			}
 			//if the word goes past the max line width, go to the next line
-			if (wordToWrite && lineContext.measureText(wordToWrite).width + currentX >= textWidth && textArcRadius == 0) {
+			if (wordToWrite && lineContext.measureText(wordToWrite).width + currentX >= lineWidth && textArcRadius == 0) {
 				if (textOneLine && startingTextSize > collisionMinimumTextSize) {
 					// Does not fit beside the active neighboring field. Retry at
-					// a smaller size, but never beyond the {fontsize-25} floor.
+					// a smaller size until it fits; CSV checks the final reduction.
 					startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
+					wrapOffset = null;
 					continue outerloop;
 				}
 				if (textOneLine) {
@@ -3979,8 +4026,9 @@ function writeText(textObject, targetContext) {
 			if (currentY > textHeight && textBounded && !textOneLine && textArcRadius == 0) {
 				if (startingTextSize > collisionMinimumTextSize) {
 					// Does not fit above the active neighboring field. Retry at
-					// a smaller size, but never beyond the {fontsize-25} floor.
+					// a smaller size until it fits; CSV checks the final reduction.
 					startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
+					wrapOffset = null;
 					continue outerloop;
 				}
 				collisionFitFailed = true;
@@ -4007,8 +4055,14 @@ function writeText(textObject, targetContext) {
 				if (cardTextLinesOverlapRegions(renderedLines, collisionFit.regions,
 					ptShift[0] + permaShift[0] + finalHorizontalAdjust, verticalAdjust + ptShift[1] + permaShift[1])) {
 					collisionFit.restricted = true;
+					if (wrapOffset === null && !textOneLine && !textObject.vertical && !textArcRadius &&
+						textAlign === 'left' && textJustify === 'left') {
+						wrapOffset = verticalAdjust;
+						continue outerloop;
+					}
 					if (startingTextSize > collisionMinimumTextSize) {
 						startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
+						wrapOffset = null;
 						continue outerloop;
 					}
 					collisionFitFailed = true;
@@ -5534,6 +5588,7 @@ function drawCard() {
 	previewContext.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 	previewContext.drawImage(cardCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
 	drawLayoutHighlights();
+	drawCardTextFitIndicators();
 
 	if (window.cardDrawingPromiseResolver) {
         window.cardDrawingPromiseResolver();

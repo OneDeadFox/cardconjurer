@@ -29,7 +29,7 @@ const ctx = {
 ctx.window=ctx;
 vm.createContext(ctx);
 vm.runInContext(section(creator, 'function scaleX(', 'function normalizeCardOrientation('), ctx);
-vm.runInContext(section(creator, 'var CARD_TEXT_COLLISION_MINIMUM_REDUCTION', 'function drawTextBuffer('), ctx);
+vm.runInContext(section(creator, 'var CARD_TEXT_IMPORT_MAX_REDUCTION', 'function drawTextBuffer('), ctx);
 vm.runInContext(section(creator, 'var justifyWidth =', 'CanvasRenderingContext2D.prototype'), ctx);
 vm.runInContext(fs.readFileSync('js/frames/packM15Regular-1.js','utf8'), ctx);
 const loadRegular=inputs.get('#loadFrameVersion').onclick;
@@ -58,12 +58,54 @@ function drawRules() {
   // A full-height paragraph with a short final line retains the baseline font;
   // extending that line into the box must cause a fit retry.
   ctx.card.text.rules={name:'Rules Text',x:0,y:0,width:1,height:.30,size:.0362,
-    noVerticalCenter:true,text:Array(7).fill('word '.repeat(7).trim()).join('\n')};
+    noVerticalCenter:true,text:Array(6).fill('word '.repeat(6).trim()).join('\n')};
   ctx.card.frames[0].bounds={x:.75,y:.26,width:.20,height:.08};
-  assert.equal(drawRules().fit.length,0,'short lines stay full size beside the box');
+  assert.ok(drawRules().fit.every(f=>f.reduction===0),'short lines stay full size beside the box');
   ctx.card.text.rules.text += ' word'.repeat(10);
   const crowded=drawRules();
   assert.ok(crowded.fit.some(f=>f.reduction>0),'actual overlap triggers font reduction');
+
+  // Wrapping beside P/T should preserve the font if there is room below.
+  ctx.card.text.rules={name:'Rules Text',x:0,y:0,width:1,height:.30,size:.02,
+    noVerticalCenter:true,text:Array(3).fill('word '.repeat(12).trim()).join('{lns}')};
+  ctx.card.frames[0].bounds={x:.6,y:.04,width:.3,height:.25};
+  const wrapped=drawRules();
+  assert.equal(wrapped.fit[0].reduction,0,'wrap around P/T before shrinking the whole paragraph');
+  assert.equal(wrapped.fit[0].failed,false);
+  assert.equal(ctx.card.text.rules.text.includes('{lns}'),true,'explicit breaks remain unchanged');
+  assert.equal(ctx.cardTextLineAvailableWidth([{left:900,right:1400,top:100,bottom:200}],0,50,1500,0),1500);
+  assert.equal(ctx.cardTextLineAvailableWidth([{left:900,right:1400,top:100,bottom:200}],120,50,1500,0),900);
+
+  // Manual fitting continues beyond the production limit instead of overlapping.
+  ctx.card.text.rules={name:'Rules Text',x:0,y:0,width:.10,height:.10,size:.04,
+    text:'A long ability that must shrink well beyond the production limit to fit safely.'};
+  ctx.card.frames=[];
+  const small=drawRules().fit[0];
+  assert.ok(small.reduction>27);
+  assert.equal(small.overLimit,true);
+  assert.equal(small.failed,false);
+  for (const reduction of [27,28]) {
+    ctx.resetCardTextFitState();
+    ctx.recordCardTextFit(ctx.card.text.rules,{key:'rules',label:'Ability',obstacles:[]},100,100-reduction,false);
+    assert.equal(ctx.cardTextFitResults[0].overLimit,reduction>27,'−27 is allowed; −28 is flagged');
+  }
+
+  // Only the preview canvas receives size labels, and the overlay flags excess reduction.
+  const labels=[];
+  ctx.previewCanvas={width:750,height:1050};
+  ctx.previewContext={save(){},restore(){},measureText:t=>({width:t.length*7}),fillRect(){},fillText:t=>labels.push(t)};
+  ctx.drawCardTextFitIndicators();
+  assert.deepEqual(labels,['Ability: −28']);
+  assert.ok(creator.includes('drawLayoutHighlights();\n\tdrawCardTextFitIndicators();'),
+    'indicators are drawn after copying the export canvas to the preview');
+
+  ctx.batchReportIdentity=()=>({cardName:'Test',imageName:'Test.png',artFile:''});
+  ctx.batchFaceLabel=()=> 'Single face';
+  ctx.CardTextFitResults=[{key:'rules',label:'Ability',reduction:28,overLimit:true,failed:false}];
+  vm.runInContext(section(builder,'function currentMinimumTextFailures(', 'function batchFaceKey('),ctx);
+  const failures=ctx.currentMinimumTextFailures({rowIndex:0},'single');
+  assert.equal(failures.length,1,'CSV preflight flags over-limit text even when manual fitting succeeded');
+  assert.ok(ctx.minimumTextFailureMessage(failures).includes('limit −27'));
 
   // Reloading a regular layout replaces previous edits while keeping card text.
   ctx.card.text.rules.fontSize=-12;

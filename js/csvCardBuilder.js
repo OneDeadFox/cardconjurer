@@ -1628,7 +1628,7 @@
 	function currentMinimumTextFailures(job, face) {
 		var identity = batchReportIdentity(job, face);
 		return (Array.isArray(window.CardTextFitResults) ? window.CardTextFitResults : [])
-			.filter(function (fit) { return fit && fit.failed; })
+			.filter(function (fit) { return fit && (fit.failed || fit.overLimit); })
 			.map(function (fit) {
 				return {
 					row:job.rowIndex + 2,
@@ -1639,6 +1639,8 @@
 					face:batchFaceLabel(face),
 					faceKey:face,
 					field:fit.label || fit.key || 'Text field',
+					reduction:fit.reduction || 0,
+					overLimit:!!fit.overLimit,
 					obstacles:Array.isArray(fit.obstacles) ? fit.obstacles.slice() : []
 				};
 			});
@@ -1646,7 +1648,7 @@
 
 	function minimumTextFailureMessage(failures) {
 		return failures.map(function (failure) {
-			var obstacle = failure.obstacles.length
+			var obstacle = failure.overLimit ? ' (needs −' + failure.reduction + ' px; limit −27 px)' : failure.obstacles.length
 				? ' (overlaps ' + failure.obstacles.join(' and ') + ')'
 				: ' (exceeds its text box)';
 			return 'Row ' + failure.row + ' — ' + failure.name + ' — ' + failure.face +
@@ -1672,9 +1674,9 @@
 		];
 
 		if (preflight.failures.length) {
-			lines.push('Unreadable text (image skipped)', '--------------------------------');
+			lines.push('Text fit / production limit (image skipped)', '--------------------------------');
 			preflight.failures.forEach(function (failure) {
-				var obstacle = failure.obstacles.length
+				var obstacle = failure.overLimit ? 'needs −' + failure.reduction + ' px; limit −27 px' : failure.obstacles.length
 					? 'overlaps ' + failure.obstacles.join(' and ')
 					: 'exceeds its text box';
 				lines.push('- Row ' + failure.row + ' | Card: ' + failure.name +
