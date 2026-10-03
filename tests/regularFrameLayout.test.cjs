@@ -50,6 +50,19 @@ function drawRules() {
   const area=ctx.getCardTextCollisionFit(ctx.card.text.rules,1242,604);
   assert.equal(area.height,604,'P/T must not shorten the full rules area or change its centering');
   assert.ok(area.regions.length,'visible P/T frame remains a collision obstacle');
+  const pixels=new Uint8ClampedArray(10*10*4);
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++)pixels[(y*10+x)*4+3]=x>=2&&x<=8&&y>=1&&y<=7?255:80;
+  let reads=0;
+  ctx.document.createElement=()=>({getContext:()=>({drawImage(){},getImageData(){reads++;return {data:pixels};}})});
+  const image={complete:true,naturalWidth:10,naturalHeight:10};
+  assert.deepEqual(clone(ctx.cardPowerToughnessImageBounds(image)),{x:.2,y:.1,width:.7,height:.7},
+    'solid P/T border excludes faint shadow and transparent margins');
+  ctx.cardPowerToughnessImageBounds(image);
+  assert.equal(reads,1,'image bounds are cached');
+  ctx.document.createElement=()=>({getContext:()=>({drawImage(){},getImageData(){throw Error('tainted');}})});
+  assert.deepEqual(clone(ctx.cardPowerToughnessImageBounds({...image})),{x:0,y:0,width:1,height:1},
+    'unreadable external textures retain conservative bounds');
+  delete ctx.document.createElement;
   assert.equal(ctx.cardTextLinesOverlapRegions([{left:0,right:800,top:550,bottom:600}],area.regions,0,0),false,
     'short last line can use the space to the left of P/T');
   assert.equal(ctx.cardTextLinesOverlapRegions([{left:0,right:1242,top:550,bottom:600}],area.regions,0,0),true,

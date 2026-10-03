@@ -2192,7 +2192,12 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	frameToAdd.image = new Image();
 	frameToAdd.image.crossOrigin = 'anonymous'
 	frameToAdd.image.src = blank.src;
-	frameToAdd.image.onload = drawFrames;
+	frameToAdd.image.onload = function() {
+		drawFrames();
+		if (normalizeCardTextSemantic((frameToAdd.componentLabel || '') + ' ' + (frameToAdd.name || '')).includes('powertoughness')) {
+			drawTextBuffer();
+		}
+	};
 	if ('stretch' in frameToAdd) {
 		stretchSVG(frameToAdd);
 	} else {
@@ -2761,6 +2766,39 @@ function cardSetSymbolCollisionRect() {
 	else if (bounds.vertical === 'center') fallbackY -= fallbackHeight / 2;
 	return {x:fallbackX, y:fallbackY, width:fallbackWidth, height:fallbackHeight, rotation:Number(card.setSymbolRotate) || 0};
 }
+const cardPTImageBoundsCache = new WeakMap();
+function cardPowerToughnessImageBounds(image) {
+	const full = {x:0,y:0,width:1,height:1};
+	if (!image || !image.complete || !image.naturalWidth || !image.naturalHeight) return full;
+	if (cardPTImageBoundsCache.has(image)) return cardPTImageBoundsCache.get(image);
+	let result = full;
+	try {
+		const canvas = document.createElement('canvas');
+		const scale = Math.min(1, 256 / Math.max(image.naturalWidth, image.naturalHeight));
+		canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+		canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+		const context = canvas.getContext('2d', {willReadFrequently:true});
+		context.drawImage(image, 0, 0, canvas.width, canvas.height);
+		const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+		let left = canvas.width, top = canvas.height, right = -1, bottom = -1;
+		for (let y = 0; y < canvas.height; y++) {
+			for (let x = 0; x < canvas.width; x++) {
+				// The solid frame includes its outline; faint shadow is not the border.
+				if (pixels[(y * canvas.width + x) * 4 + 3] < 192) continue;
+				left = Math.min(left, x); top = Math.min(top, y);
+				right = Math.max(right, x); bottom = Math.max(bottom, y);
+			}
+		}
+		if (right >= left && bottom >= top) {
+			result = {x:left/canvas.width,y:top/canvas.height,
+				width:(right-left+1)/canvas.width,height:(bottom-top+1)/canvas.height};
+		}
+	} catch (error) {
+		// Cross-origin textures may disallow pixel reads. Keep safe full bounds.
+	}
+	cardPTImageBoundsCache.set(image, result);
+	return result;
+}
 function cardPowerToughnessCollisionRects() {
 	var activePTFields = Object.entries(card.text || {}).filter(function (entry) {
 		return cardTextSemanticRole(entry[1], entry[0]) === 'pt' && cardTextHasVisibleContent(entry[1]);
@@ -2771,11 +2809,18 @@ function cardPowerToughnessCollisionRects() {
 		return label.includes('powertoughness') || /^pt(inner|box|frame|background)/.test(label);
 	}).map(function (frame) {
 		var bounds = frame.bounds || {};
+		var ink = Object.assign({}, cardPowerToughnessImageBounds(frame.image));
+		if (frame.flipX) ink.x = 1 - ink.x - ink.width;
+		if (frame.flipY) ink.y = 1 - ink.y - ink.height;
+		var width = scaleWidth(Number(bounds.width) || 1);
+		var height = scaleHeight(Number(bounds.height) || 1);
+		var x = scaleX(Number(bounds.x) || 0), y = scaleY(Number(bounds.y) || 0);
 		return {
-			x:scaleX(Number(bounds.x) || 0),
-			y:scaleY(Number(bounds.y) || 0),
-			width:scaleWidth(Number(bounds.width) || 1),
-			height:scaleHeight(Number(bounds.height) || 1),
+			x:x + ink.x * width,
+			y:y + ink.y * height,
+			width:ink.width * width,
+			height:ink.height * height,
+			pivotX:x + width/2, pivotY:y + height/2,
 			rotation:Number(frame.rotation) || 0
 		};
 	});
