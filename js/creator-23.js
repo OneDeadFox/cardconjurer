@@ -2858,6 +2858,14 @@ function cardTextLineAvailableWidth(regions, y, height, width, offsetX) {
 	});
 	return width;
 }
+function cardTextInkBounds(context, size) {
+	// Font ink excludes the empty leading below a line. Reserve descenders,
+	// but do not treat the entire line advance as visible lettering.
+	const metrics = context.measureText('Mg');
+	const ascent = Number.isFinite(metrics.actualBoundingBoxAscent) ? metrics.actualBoundingBoxAscent : size * .7;
+	const descent = Number.isFinite(metrics.actualBoundingBoxDescent) ? metrics.actualBoundingBoxDescent : size * .15;
+	return {top:size * .7 - ascent, bottom:size * .7 + descent};
+}
 function drawCardTextFitIndicators() {
 	// Preview overlay only: cardCanvas remains clean for PNG/JPEG and CSV export.
 	const results = cardTextFitResults.filter(fit => {
@@ -3255,6 +3263,7 @@ function writeText(textObject, targetContext) {
 	//Manages the redraw loop
 	var drawingText = true;
 	var wrapOffset = null;
+	var triedWrapOffsets = [];
 	//Repeatedly tries to draw the text at smaller and smaller sizes until it fits
 	outerloop: while (drawingText) {
 		collisionFitFailed = false;
@@ -3922,8 +3931,9 @@ function writeText(textObject, targetContext) {
 			// Narrow only lines beside the P/T frame. Keep explicit line breaks intact.
 			var lineWidth = textWidth;
 			if (wrapEnabled) {
-				lineWidth = cardTextLineAvailableWidth(collisionFit.regions, currentY + wrapOffset + ptShift[1] + permaShift[1],
-					textSize, textWidth, ptShift[0] + permaShift[0]);
+				var inkBounds = cardTextInkBounds(lineContext, textSize);
+				lineWidth = cardTextLineAvailableWidth(collisionFit.regions, currentY + wrapOffset + ptShift[1] + permaShift[1] + inkBounds.top,
+					inkBounds.bottom - inkBounds.top, textWidth, ptShift[0] + permaShift[0]);
 			}
 			//if the word goes past the max line width, go to the next line
 			if (wordToWrite && lineContext.measureText(wordToWrite).width + currentX >= lineWidth && textArcRadius == 0) {
@@ -3932,6 +3942,7 @@ function writeText(textObject, targetContext) {
 					// a smaller size until it fits; CSV checks the final reduction.
 					startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
 					wrapOffset = null;
+					triedWrapOffsets = [];
 					continue outerloop;
 				}
 				if (textOneLine) {
@@ -3955,8 +3966,9 @@ function writeText(textObject, targetContext) {
 				}
 				paragraphContext.drawImage(lineCanvas, horizontalAdjust, currentY);
 				if (currentX > startingCurrentX) {
+					var inkBounds = cardTextInkBounds(lineContext, textSize);
 					renderedLines.push({left:horizontalAdjust + startingCurrentX, right:horizontalAdjust + currentX,
-						top:currentY, bottom:currentY + textSize});
+						top:currentY + inkBounds.top, bottom:currentY + inkBounds.bottom});
 				}
 				lineY = 0;
 				lineContext.clearRect(0, 0, lineCanvas.width, lineCanvas.height);
@@ -4029,6 +4041,7 @@ function writeText(textObject, targetContext) {
 					// a smaller size until it fits; CSV checks the final reduction.
 					startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
 					wrapOffset = null;
+					triedWrapOffsets = [];
 					continue outerloop;
 				}
 				collisionFitFailed = true;
@@ -4063,9 +4076,19 @@ function writeText(textObject, targetContext) {
 					if (startingTextSize > collisionMinimumTextSize) {
 						startingTextSize = Math.max(collisionMinimumTextSize, startingTextSize - 1);
 						wrapOffset = null;
+						triedWrapOffsets = [];
 						continue outerloop;
 					}
 					collisionFitFailed = true;
+				}
+				// Wrapping changes paragraph height and therefore its centered Y.
+				// Retry at that position to reclaim lines which now sit above P/T.
+				// Stop on a repeated offset and keep this verified safe layout.
+				if (wrapEnabled && !collisionFitFailed && Math.abs(wrapOffset - verticalAdjust) > .5 &&
+					triedWrapOffsets.length < 6 && !triedWrapOffsets.some(y => Math.abs(y - verticalAdjust) <= .5)) {
+					triedWrapOffsets.push(wrapOffset);
+					wrapOffset = verticalAdjust;
+					continue outerloop;
 				}
 				recordCardTextFit(textObject, collisionFit, originalStartingTextSize,
 					startingTextSize, collisionFitFailed);

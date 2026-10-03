@@ -75,6 +75,12 @@ function drawRules() {
   assert.equal(ctx.card.text.rules.text.includes('{lns}'),true,'explicit breaks remain unchanged');
   assert.equal(ctx.cardTextLineAvailableWidth([{left:900,right:1400,top:100,bottom:200}],0,50,1500,0),1500);
   assert.equal(ctx.cardTextLineAvailableWidth([{left:900,right:1400,top:100,bottom:200}],120,50,1500,0),900);
+  const ink=ctx.cardTextInkBounds({measureText:()=>({actualBoundingBoxAscent:65,actualBoundingBoxDescent:10})},100);
+  assert.deepEqual(clone(ink),{top:5,bottom:80},'collision uses letter ink rather than empty line leading');
+  assert.equal(ctx.cardTextLineAvailableWidth([{left:900,right:1400,top:90,bottom:200}],ink.top,ink.bottom-ink.top,1500,0),1500,
+    'a line whose lettering is safely above P/T keeps its full width');
+  assert.equal(ctx.cardTextLineAvailableWidth([{left:900,right:1400,top:90,bottom:200}],ink.top+20,ink.bottom-ink.top,1500,0),900,
+    'descenders entering the padded P/T boundary still restrict the line');
 
   // Manual fitting continues beyond the production limit instead of overlapping.
   ctx.card.text.rules={name:'Rules Text',x:0,y:0,width:.10,height:.10,size:.04,
