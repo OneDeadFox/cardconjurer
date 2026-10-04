@@ -2,6 +2,7 @@
 (function(){
  'use strict';
  let session=null,drag=null,opening=false;
+ const cursor=edge=>!edge?'default':/lefttop|rightbottom/.test(edge)?'nwse-resize':/righttop|leftbottom/.test(edge)?'nesw-resize':/left|right/.test(edge)?'ew-resize':'ns-resize';
  const copy=value=>JSON.parse(JSON.stringify(value));
  const rect=frame=>({...frame.bounds});
  const union=(a,b)=>{const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y);return{x,y,width:Math.max(a.x+a.width,b.x+b.width)-x,height:Math.max(a.y+a.height,b.y+b.height)-y};};
@@ -19,7 +20,7 @@
   const panel=document.createElement('section');panel.id='container-resize-editor';panel.className='container-resize-editor readable-background';panel.hidden=true;
   panel.innerHTML='<div class="container-resize-heading"><strong>Resize Rules Container</strong><button type="button" data-close aria-label="Cancel container resize">×</button></div><p>Drag a container edge or corner. Changes apply only when confirmed.</p><label><input type="checkbox" data-mirror> Mirrored resizing (opposite edges)</label><div class="input-grid"><label>Width (px)<input class="input" type="number" min="50" data-width></label><label>Height (px)<input class="input" type="number" min="50" data-height></label></div><p data-status aria-live="polite"></p><div class="input-grid"><button class="input" type="button" data-confirm>Confirm Changes</button><button class="input" type="button" data-cancel>Cancel</button></div>';
   document.body.appendChild(panel);panel.querySelector('[data-close]').onclick=cancel;panel.querySelector('[data-cancel]').onclick=cancel;panel.querySelector('[data-confirm]').onclick=confirm;
-  for(const key of ['width','height'])panel.querySelector('[data-'+key+']').onchange=event=>{if(!session)return;const amount=(Number(event.target.value)-(key==='width'?session.draft.width*card.width:session.draft.height*card.height))/(key==='width'?card.width:card.height);session.draft=resized(session.draft,key==='width'?'right':'bottom',key==='width'?amount/(mirrored()?2:1):0,key==='height'?amount/(mirrored()?2:1):0,mirrored(),card.width,card.height);refresh();drawCard();};
+  for(const key of ['width','height'])panel.querySelector('[data-'+key+']').onchange=event=>{if(!session)return;const amount=(Number(event.target.value)-(key==='width'?session.draft.width*card.width:session.draft.height*card.height))/(key==='width'?card.width:card.height);session.draft=resized(session.draft,key==='width'?'right':'bottom',key==='width'?amount/(mirrored()?2:1):0,key==='height'?amount/(mirrored()?2:1):0,mirrored(),card.width,card.height);refresh();requestPreview();};
  }
  function mirrored(){return !!document.querySelector('#container-resize-editor [data-mirror]')?.checked;}
  function refresh(){const panel=document.querySelector('#container-resize-editor');if(!panel||!session)return;panel.querySelector('[data-width]').value=Math.round(session.draft.width*card.width);panel.querySelector('[data-height]').value=Math.round(session.draft.height*card.height);}
@@ -39,12 +40,17 @@
    // Include the nearby stroke, without capturing the title or upper frame.
    if(!saved){const pad=6/card.width;outer={x:Math.max(0,outer.x-pad),y:Math.max(0,outer.y-6/card.height),width:Math.min(1,outer.x+outer.width+pad)-Math.max(0,outer.x-pad),height:Math.min(1,outer.y+outer.height+6/card.height)-Math.max(0,outer.y-6/card.height)};}
    else outer=copy(saved.bounds);
-   session={owner,range,types,typeRects,typeBox,pt,original:outer,draft:copy(outer),mode:activeFrameDesignMode,committing:false};
-   CanvasDesignTools.suspend();document.querySelector('#container-resize-editor').hidden=false;message('Type line, rules range, lower pinlines and P/T badge resize together.');refresh();drawCard();
+   session={owner,range,types,typeRects,typeBox,pt,original:outer,draft:copy(outer),mode:activeFrameDesignMode,committing:false,snapshot:createDesignStateSnapshot(),baseline:capture(),pending:null,previewPromise:null,timer:null,previewError:null};
+   CanvasDesignTools.suspend();document.querySelector('#container-resize-editor').hidden=false;message('Live preview includes the fitted font sizes. Confirm keeps changes; Cancel restores the original.');refresh();drawCard();
   }catch(error){notify(error.message,6);}finally{opening=false;}
  }
  function close(){if(!session)return;const mode=session.mode;session=null;drag=null;document.querySelector('#container-resize-editor').hidden=true;previewCanvas.style.cursor='';CanvasDesignTools.resume();setFrameDesignMode(mode);}
- function cancel(){if(session?.committing)return;close();}
+ async function cancel(){const s=session;if(!s||s.committing)return;s.committing=true;s.pending=null;clearTimeout(s.timer);await s.previewPromise;reset(s);close();drawFrames();if(typeof drawText==='function')await drawText();else drawTextBuffer();}
+ function capture(){return{frames:card.frames.slice(),definitions:card.frames.map(frame=>({frame,hasMasks:Object.prototype.hasOwnProperty.call(frame,'masks'),definition:copy(Object.fromEntries(Object.entries(frame).filter(([key])=>!['image','masks'].includes(key)))),image:frame.image,masks:(frame.masks||[]).map(mask=>({definition:copy(Object.fromEntries(Object.entries(mask).filter(([key])=>key!=='image'))),image:mask.image}))})),text:copy(card.text),ranges:copy(card.rulesRanges),setSymbolX:card.setSymbolX,setSymbolY:card.setSymbolY};}
+ function reset(s){const b=s.baseline;card.frames=b.frames.slice();for(const saved of b.definitions){for(const key of Object.keys(saved.frame))delete saved.frame[key];Object.assign(saved.frame,copy(saved.definition),{image:saved.image,masks:saved.masks.map(mask=>({...copy(mask.definition),image:mask.image}))});if(!saved.hasMasks)delete saved.frame.masks;}card.text=copy(b.text);card.rulesRanges=copy(b.ranges);card.setSymbolX=b.setSymbolX;card.setSymbolY=b.setSymbolY;s.range=card.rulesRanges.find(range=>range.id===s.owner.sectionModule.rangeId);}
+ function requestPreview(){if(!session||session.committing)return;session.pending=copy(session.draft);clearTimeout(session.timer);session.timer=setTimeout(()=>runPreview(session),80);drawCard();}
+ function runPreview(s){if(!s||s!==session)return Promise.resolve();clearTimeout(s.timer);if(s.previewPromise)return s.previewPromise;s.previewPromise=(async()=>{while(s.pending&&!s.committing){const target=s.pending;s.pending=null;try{reset(s);await apply(s,target);drawFrames();if(typeof drawText==='function')await drawText();else drawTextBuffer();s.previewError=null;message('Live preview updated. Font reductions are shown on the canvas.');}catch(error){reset(s);s.previewError=error;message(error.message);drawFrames();if(typeof drawText==='function')await drawText();}}})().finally(()=>{s.previewPromise=null;});return s.previewPromise;}
+
  function draw(){if(!session)return false;const b=previewLayoutBounds(session.draft),ctx=previewContext;ctx.save();ctx.strokeStyle='#ba82ff';ctx.lineWidth=2;ctx.setLineDash([8,4]);ctx.strokeRect(b.x,b.y,b.width,b.height);ctx.setLineDash([]);ctx.fillStyle='#ba82ff';for(const x of [b.x,b.x+b.width/2,b.x+b.width])for(const y of [b.y,b.y+b.height/2,b.y+b.height])if(x!==b.x+b.width/2||y!==b.y+b.height/2)ctx.fillRect(x-4,y-4,8,8);ctx.font='bold 14px sans-serif';ctx.fillText('Rules container — resize preview',b.x+8,b.y+18);ctx.restore();return true;}
  function edgeAt(p){if(!session)return '';const b=previewLayoutBounds(session.draft),tol=12;let edge='';if(p.y>=b.y-tol&&p.y<=b.y+b.height+tol){if(Math.abs(p.x-b.x)<=tol)edge+='left';else if(Math.abs(p.x-b.x-b.width)<=tol)edge+='right';}if(p.x>=b.x-tol&&p.x<=b.x+b.width+tol){if(Math.abs(p.y-b.y)<=tol)edge+='top';else if(Math.abs(p.y-b.y-b.height)<=tol)edge+='bottom';}return edge;}
  async function rendered(frame){
@@ -68,11 +74,9 @@
   for(let i=0;i<3;i++){const band=canvas(source.width,sy[i+1]-sy[i]);band.getContext('2d').drawImage(source,0,sy[i],source.width,band.height,0,0,band.width,band.height);ctx.drawImage(slices(band,result.width,Math.max(1,dy[i+1]-dy[i])),0,dy[i]);}return result;
  }
  async function setImage(frame,source,b){frame.src=source.toDataURL('image/png');frame.image=await load(frame.src);frame.bounds=copy(b);frame.masks=[];frame.rotation=0;frame.flipX=false;frame.flipY=false;frame.colorOverlayCheck=false;frame.hslHue=frame.hslSaturation=frame.hslLightness=0;delete frame.ogBounds;delete frame.maskCanvasBounds;delete frame.assetId;frame.resizeContainerRaster=true;frame.fixedAppearance=true;}
- async function confirm(){
-  if(!session||session.committing)return;const s=session;if(JSON.stringify(s.original)===JSON.stringify(s.draft)){close();return;}
-  s.committing=true;message('Applying container changes…');const before=createDesignStateSnapshot();
-  try{
-   const saved=s.owner.resizeContainer,original=s.original,target=s.draft;
+ async function apply(s,target){
+   const original=s.original;
+   const saved=s.owner.resizeContainer;
    const pinlines=saved?saved.pinlineIds.map(id=>card.frames.find(frame=>frame.designLayerId===id)).filter(Boolean):card.frames.filter(frame=>/pinline|pipeline/i.test(frame.componentKind||frame.name||''));
    const pieces=[];
    if(!saved){for(const frame of pinlines){if(frame.rotation)throw Error('Rotated pinline layers must be flattened before creating this container.');const full=await rendered(frame),part=crop(full,original);full.getContext('2d').clearRect(original.x*card.width,original.y*card.height,original.width*card.width,original.height*card.height);await setImage(frame,full,{x:0,y:0,width:1,height:1});const piece={name:frame.name+' — Rules container',src:part.toDataURL(),bounds:copy(original),masks:[],opacity:frame.opacity??100,mode:frame.mode||'source-over',resizeContainerRaster:true,fixedAppearance:true};ensureDesignLayerId(piece);piece.image=await load(piece.src);card.frames.splice(card.frames.indexOf(frame),0,piece);pieces.push(piece);}}
@@ -88,18 +92,24 @@
    if(Number(card.setSymbolZoom)>0){card.setSymbolX=newType.x+(Number(card.setSymbolX)-s.typeBox.x)*newType.width/s.typeBox.width;card.setSymbolY=Number(card.setSymbolY)+newType.y-s.typeBox.y;}
    FrameSectionTools.syncRuleModules();FrameTextPresets.sync();
    s.owner.resizeContainer={bounds:copy(target),typeIds:s.types.map(ensureDesignLayerId),ptIds:s.pt.map(ensureDesignLayerId),pinlineIds:pieces.map(ensureDesignLayerId)};
-   await rebuildFrameLayerList();commitDesignUndoSnapshot(before,'Resize rules container');s.committing=false;close();RulesRange.refresh();drawFrames();drawTextBuffer();
-  }catch(error){await applyDesignStateSnapshot(before);s.committing=false;message(error.message);drawFrames();}
+ }
+ async function confirm(){
+  const s=session;if(!s||s.committing)return;
+  if(JSON.stringify(s.original)===JSON.stringify(s.draft)){await cancel();return;}
+  s.pending=copy(s.draft);await runPreview(s);if(session!==s||s.committing||s.previewError)return;
+  s.committing=true;
+  try{await rebuildFrameLayerList();commitDesignUndoSnapshot(s.snapshot,'Resize rules container');close();RulesRange.refresh();drawFrames();drawTextBuffer();}
+  catch(error){reset(s);s.committing=false;message(error.message);drawFrames();}
  }
  function mount(){
   previewCanvas.addEventListener('pointerdown',event=>{if(!session)return;event.stopImmediatePropagation();event.preventDefault();if(session.committing||event.button!==0)return;const p=layoutHighlightPoint(event),edge=edgeAt(p);if(edge){drag={edge,point:p,bounds:copy(session.draft),pointerId:event.pointerId};previewCanvas.setPointerCapture?.(event.pointerId);}},true);
-  previewCanvas.addEventListener('pointermove',event=>{if(!session)return;event.stopImmediatePropagation();const p=layoutHighlightPoint(event);if(drag){const rx=cardCanvas.width/previewCanvas.width/card.width,ry=cardCanvas.height/previewCanvas.height/card.height;session.draft=resized(drag.bounds,drag.edge,(p.x-drag.point.x)*rx,(p.y-drag.point.y)*ry,mirrored(),card.width,card.height);refresh();drawCard();}else previewCanvas.style.cursor=edgeAt(p)?'crosshair':'default';},true);
-  for(const name of ['pointerup','pointercancel'])previewCanvas.addEventListener(name,event=>{if(!session)return;event.stopImmediatePropagation();if(name==='pointercancel'&&drag){session.draft=drag.bounds;refresh();drawCard();}drag=null;},true);
+  previewCanvas.addEventListener('pointermove',event=>{if(!session)return;event.stopImmediatePropagation();const p=layoutHighlightPoint(event);if(drag){const rx=cardCanvas.width/previewCanvas.width/card.width,ry=cardCanvas.height/previewCanvas.height/card.height;session.draft=resized(drag.bounds,drag.edge,(p.x-drag.point.x)*rx,(p.y-drag.point.y)*ry,mirrored(),card.width,card.height);refresh();requestPreview();}previewCanvas.style.cursor=cursor(drag?.edge||edgeAt(p));},true);
+  for(const name of ['pointerup','pointercancel'])previewCanvas.addEventListener(name,event=>{if(!session)return;event.stopImmediatePropagation();if(name==='pointercancel'&&drag){session.draft=drag.bounds;refresh();requestPreview();}drag=null;},true);
   for(const name of ['dblclick','contextmenu'])previewCanvas.addEventListener(name,event=>{if(session){event.stopImmediatePropagation();event.preventDefault();}},true);
   document.addEventListener('keydown',event=>{if(!session||session.committing)return;if(event.key==='Escape'){cancel();event.preventDefault();}else if(event.ctrlKey&&(event.key==='z'||event.key==='y')){event.preventDefault();event.stopImmediatePropagation();}},true);
   window.addEventListener('creatortabchanged',cancel);window.addEventListener('frameworkspacechanged',cancel);
  }
  function restore(frame,definition){if(!frame.resizeContainerRaster&&!definition.resizeContainerRaster&&!frame.resizeContainer&&!definition.resizeContainer)return;for(const key of ['resizeContainer','resizeContainerRaster','fixedAppearance','ogBounds','maskCanvasBounds','assetId','flipX','flipY','colorOverlayCheck','hslHue','hslSaturation','hslLightness']){if(definition[key]===undefined)delete frame[key];else frame[key]=copy(definition[key]);}frame.src=definition.src;frame.masks=copy(definition.masks||[]);load(frame.src).then(image=>{frame.image=image;return Promise.all(frame.masks.map(async mask=>{mask.image=await load(mask.src);}));}).then(drawFrames);}
- window.ContainerResizeTools={open,cancel,draw,isOpen:()=>!!session,restore,resized,map,slices};
+ window.ContainerResizeTools={open,cancel,draw,isOpen:()=>!!session,restore,resized,map,slices,cursor,flushPreview:()=>runPreview(session)};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
