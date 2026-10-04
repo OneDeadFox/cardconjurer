@@ -46,7 +46,7 @@ const tools=ctx.window.BossFrameTools;
  const portrait=createCanvas(10,30);portrait.getContext('2d').fillStyle='gold';portrait.getContext('2d').fillRect(0,0,10,30);
  card.frames.push({name:'Power/Toughness',image:portrait,masks:[],src:'existing'});
  await tools.addPT();const badge=card.frames.find(frame=>frame.bossStats);
- assert.ok(badge);assert.ok(badge.image.width>badge.image.height);assert.equal(badge.rotation,0);
+ assert.ok(badge);assert.ok(Math.abs(badge.bounds.width*card.width/(card.height/2010)-377)<1e-8);assert.ok(Math.abs(badge.bounds.height*card.height/(card.height/2010)-206)<1e-8);assert.ok(badge.image.width>badge.image.height);assert.equal(badge.rotation,0);
  assert.equal(card.text.pt.text,'8/8');assert.equal(card.text.pt.rotation,0);
  assert.equal(card.text.pt.frameAnchor.id,badge.designLayerId);assert.equal(card.text.defense,undefined);
  assert.ok(card.frames.some(frame=>frame.componentKind==='Title'));assert.ok(card.frames.some(frame=>frame.componentKind==='Rules'));

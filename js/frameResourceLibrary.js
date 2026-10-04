@@ -969,8 +969,11 @@
 		const regular = {x:0.7573, y:0.8848, width:0.188, height:0.0733};
 		const isBattle = card.version === 'battle';
 		const existing = isBattle && card.frames.find(item => item.bossStats);
-		frame.bounds = existing ? JSON.parse(JSON.stringify(existing.bounds)) : isBattle ?
-			{x:0.891, y:0.874, width:0.093, height:0.093 * card.width / card.height * 206 / 377} : regular;
+		const width = 377 / 2010 * card.height / card.width;
+		const battleDefault = window.BossFrameTools?.defaultStatsBounds() || {x:0.984-width,y:0.874,width:width,height:206/2010};
+		const compact = existing && (window.BossFrameTools?.compactStatsBounds(existing.bounds) ||
+			(Math.abs(existing.bounds.x-.891)<1e-8 && Math.abs(existing.bounds.y-.874)<1e-8 && Math.abs(existing.bounds.width-.093)<1e-8));
+		frame.bounds = existing && !compact ? JSON.parse(JSON.stringify(existing.bounds)) : isBattle ? battleDefault : regular;
 		frame.componentKind = 'Power/Toughness';
 		frame.designTextLayout = {text:{pt:{x:0.08,y:0.18,width:0.84,height:0.64,size:0.6}}};
 		// Half masks apply within the cropped component's own rectangle.

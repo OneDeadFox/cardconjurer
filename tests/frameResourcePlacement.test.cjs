@@ -15,14 +15,15 @@ vm.runInContext(source,context);
 vm.runInContext(fs.readFileSync('js/frameTextPresets.js','utf8'),context);
 (async()=>{
  await context.FrameResourceLibrary.createLayer();let frame=added.at(-1).frame;
- assert.equal(frame.rotation,0);assert.equal(frame.orientationPrepared,'landscape');assert.equal(frame.bounds.x,.891);
+ assert.equal(frame.rotation,0);assert.equal(frame.orientationPrepared,'landscape');assert.ok(Math.abs(frame.bounds.x+frame.bounds.width-.984)<1e-8);
  assert.ok(Math.abs((frame.bounds.width*2814)/(frame.bounds.height*2010)-377/206)<1e-8,'Battle badge preserves source proportions');
- assert.ok(frame.bounds.width<.15&&frame.bounds.height<.1);assert.equal(context.selectedFrameIndex,7);assert.equal(context.selectedMaskIndex,5);assert.equal(frame.designResourceComponent,true);
+ assert.ok(Math.abs(frame.bounds.width*2814-377)<1e-8);assert.ok(Math.abs(frame.bounds.height*2010-206)<1e-8);assert.equal(context.selectedFrameIndex,7);assert.equal(context.selectedMaskIndex,5);assert.equal(frame.designResourceComponent,true);
  assert.equal(frame.designTextLayout.text.pt.x,.08,'Inserted text uses badge-local geometry');
  context.FrameTextPresets.insert(frame,'pt',false);const field=context.card.text.pt;assert.ok(field.x>=frame.bounds.x&&field.x+field.width<=frame.bounds.x+frame.bounds.width);assert.ok(field.y>=frame.bounds.y&&field.y+field.height<=frame.bounds.y+frame.bounds.height);assert.ok(field.size>.02,'P/T text must remain legible');
  // Split masks operate on the badge, not the full card.
  selectors['#frame-resource-mask'].value='2';await context.FrameResourceLibrary.createLayer();frame=added.at(-1).frame;
  assert.equal(added.at(-1).masks[0].name,'Right Half');assert.deepEqual(frame.maskCanvasBounds,frame.bounds);
+ context.card.frames=[{bossStats:true,bounds:{x:.891,y:.874,width:.093,height:.06}}];await context.FrameResourceLibrary.createLayer();assert.ok(Math.abs(added.at(-1).frame.bounds.width*2814-377)<1e-8,'Old compact defaults must not override standard size');
  // Respect a hand-positioned Boss badge for subsequent colors.
  context.card.frames=[{bossStats:true,bounds:{x:.8,y:.7,width:.11,height:.08}}];
  await context.FrameResourceLibrary.createLayer();assert.deepEqual(added.at(-1).frame.bounds,context.card.frames[0].bounds);

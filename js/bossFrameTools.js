@@ -5,6 +5,8 @@
  const clone = value => JSON.parse(JSON.stringify(value));
  const label = frame => String(frame.componentKind || frame.name || '').toLowerCase();
  const battle = () => card.version === 'battle';
+ function defaultStatsBounds(){const width=377/2010*card.height/card.width;return {x:.984-width,y:.874,width,height:206/2010};}
+ function compactStatsBounds(bounds){return bounds&&Math.abs(bounds.x-.891)<1e-8&&Math.abs(bounds.y-.874)<1e-8&&Math.abs(bounds.width-.093)<1e-8&&(Math.abs(bounds.height-.060)<1e-8||Math.abs(bounds.height-.093*card.width/card.height*206/377)<1e-8);}
  function isRules(frame) {
   return /^rules$/.test(label(frame)) || /[—–-]\s*rules\b/i.test(frame.name || '') ||
    (frame.masks || []).some(mask => /^(rules|rules text)$/i.test(mask.name || ''));
@@ -121,7 +123,7 @@
    let sources=card.frames.filter(frame=>/power.?\/?toughness|power.*toughness|\bpt\b/i.test(label(frame)) && !frame.bossStats);
    if(!sources.length){const existing=card.frames.find(frame=>frame.bossStats);sources=existing?[existing]:[{src:'/img/frames/m15/borderless/pt/m.png',masks:[]}];}
    const src=await croppedBadge(sources);
-   const existing=card.frames.find(frame=>frame.bossStats),bounds=existing?.bounds||{x:.891,y:.874,width:.093,height:.060};
+   const existing=card.frames.find(frame=>frame.bossStats),bounds=existing?.bounds&&!compactStatsBounds(existing.bounds)?existing.bounds:defaultStatsBounds();
    const frame=existing||{name:'Boss Power/Toughness',masks:[],opacity:100,noThumb:true,bossStats:true};
    frame.src=src;delete frame.assetId;frame.bounds=clone(bounds);frame.rotation=0;frame.imageFit='stretch';
    if(!existing){ensureDesignLayerId(frame);card.frames.unshift(frame);await addFrame([],frame);}else await reload(frame);
@@ -158,7 +160,7 @@
   generic.before(panel);panel.querySelector('#boss-add-pt').onclick=addPT;panel.querySelector('#boss-symbol-face').onchange=event=>setSymbol(event.target.value);
   panel.querySelector('#boss-rules-opacity').oninput=event=>{panel.querySelector('#boss-rules-opacity-value').textContent=event.target.value+'%';};panel.querySelector('#boss-rules-opacity').onchange=event=>setRulesOpacity(event.target.value);refresh();
  }
- window.BossFrameTools={isRules,beginRules,drawRulesLayer,finishRules,setRulesOpacity,setSymbol,addPT,restoreAppearance,mountElement,refresh,iconBounds,iconSource};
+ window.BossFrameTools={defaultStatsBounds,compactStatsBounds,isRules,beginRules,drawRulesLayer,finishRules,setRulesOpacity,setSymbol,addPT,restoreAppearance,mountElement,refresh,iconBounds,iconSource};
  window.addEventListener('frameworkspacechanged',refresh);window.addEventListener('creatortabchanged',refresh);
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
