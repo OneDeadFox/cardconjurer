@@ -201,6 +201,8 @@
 	async function replace(frame,source) {
 		if(!frame||!range())return;
 		const before=createDesignStateSnapshot(),r=range();
+		const sectionRole=window.FrameSectionTools?.role(frame);if(sectionRole)frame.componentKind=sectionRole==='title'?'Title':'Rules';
+		delete frame.bossSymbolCleared;delete frame.bossSymbolOriginalSource;
 		const id=uid('class-appearance');
 		r.visualFamilies=r.visualFamilies||{};
 		// A replacement creates an independent family for this element.

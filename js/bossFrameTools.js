@@ -5,6 +5,7 @@
  const clone = value => JSON.parse(JSON.stringify(value));
  const label = frame => String(frame.componentKind || frame.name || '').toLowerCase();
  const battle = () => card.version === 'battle';
+ function isTitle(frame){if(!frame||frame.sectionCrown)return false;return window.FrameSectionTools?.role(frame)==='title'||frame.sectionAppearance?.role==='title'||/title|header/i.test([frame.componentKind,frame.componentLabel,frame.name].filter(Boolean).join(' '));}
  function defaultStatsBounds(){const width=377/2010*card.height/card.width;return {x:.984-width,y:.874,width,height:206/2010};}
  function compactStatsBounds(bounds){return bounds&&Math.abs(bounds.x-.891)<1e-8&&Math.abs(bounds.y-.874)<1e-8&&Math.abs(bounds.width-.093)<1e-8&&(Math.abs(bounds.height-.060)<1e-8||Math.abs(bounds.height-.093*card.width/card.height*206/377)<1e-8);}
  function isRules(frame) {
@@ -95,8 +96,8 @@
   if (busy) return; busy = true; const before = createDesignStateSnapshot();
   try {
    if(!owner&&battle())await prepare();
-   owner=owner||card.frames.find(item=>!item.bossTitleOwner&&(/title/i.test(label(item))||(item.masks||[]).some(mask=>mask.name==='Title')));
-   const peers=owner?card.frames.filter(item=>item===owner||(!item.bossTitleOwner&&/title/i.test(label(item))&&JSON.stringify(ownerBounds(item))===JSON.stringify(ownerBounds(owner)))):[];
+   owner=owner||card.frames.find(item=>!item.bossTitleOwner&&isTitle(item));
+   const peers=owner?card.frames.filter(item=>item===owner||(!item.bossTitleOwner&&isTitle(item)&&JSON.stringify(ownerBounds(item))===JSON.stringify(ownerBounds(owner)))):[];
    for(const title of peers)await clearOriginalSymbol(title);
    const ownerId = owner ? ensureDesignLayerId(owner) : 'battle-title';
    const ownerIds=new Set(peers.map(ensureDesignLayerId));ownerIds.add(ownerId);if(battle())ownerIds.add('battle-title');
@@ -170,7 +171,7 @@
  }
  function mountElement(container,frame) {
   container.querySelector('.title-transform-controls')?.remove();
-  if(!frame||!(/title/i.test(label(frame))||frame.bossTitleOwner))return;
+  if(!frame||!(isTitle(frame)||frame.bossTitleOwner))return;
   const owner=frame.bossTitleOwner?card.frames.find(item=>ensureDesignLayerId(item)===frame.bossTitleOwner):frame;
   const panel=document.createElement('details');panel.className='title-transform-controls wide';
   panel.innerHTML='<summary>Transform symbol</summary><p>Replace the symbol while keeping the title artwork and placement.</p><button type="button" class="input" data-face="front">Front symbol ↑</button><button type="button" class="input" data-face="back">Back symbol ↓</button>';
@@ -184,7 +185,7 @@
   generic.before(panel);panel.querySelector('#boss-add-pt').onclick=addPT;panel.querySelector('#boss-symbol-face').onchange=event=>setSymbol(event.target.value);
   panel.querySelector('#boss-rules-opacity').oninput=event=>{panel.querySelector('#boss-rules-opacity-value').textContent=event.target.value+'%';};panel.querySelector('#boss-rules-opacity').onchange=event=>setRulesOpacity(event.target.value);refresh();
  }
- window.BossFrameTools={defaultStatsBounds,compactStatsBounds,isRules,beginRules,drawRulesLayer,finishRules,setRulesOpacity,setSymbol,syncSymbols,addPT,restoreAppearance,mountElement,refresh,iconBounds,iconSource};
+ window.BossFrameTools={defaultStatsBounds,compactStatsBounds,isTitle,isRules,beginRules,drawRulesLayer,finishRules,setRulesOpacity,setSymbol,syncSymbols,addPT,restoreAppearance,mountElement,refresh,iconBounds,iconSource};
  window.addEventListener('frameworkspacechanged',refresh);window.addEventListener('creatortabchanged',refresh);
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();

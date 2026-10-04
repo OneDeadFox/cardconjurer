@@ -21,6 +21,14 @@ const ctx={card,Image:BrowserImage,btoa:s=>Buffer.from(s).toString('base64'),fra
 };
 vm.createContext(ctx);vm.runInContext(fs.readFileSync('js/bossFrameTools.js','utf8'),ctx);
 const tools=ctx.window.BossFrameTools;
+assert.equal(tools.isTitle({componentKind:'Header',name:'My custom asset'}),true);
+assert.equal(tools.isTitle({componentKind:'Image',name:'replacement.png',sectionAppearance:{role:'title'}}),true);
+assert.equal(tools.isTitle({componentKind:'Component',componentLabel:'White Frame — Title',name:'replacement.png'}),true);
+assert.equal(tools.isTitle({sectionCrown:{owner:'title'},name:'Title crown'}),false);
+const originalCreate=ctx.document.createElement;let mounted;
+ctx.document.createElement=()=>({querySelectorAll:()=>[{dataset:{face:'front'}},{dataset:{face:'back'}}]});
+tools.mountElement({querySelector:()=>null,appendChild:panel=>{mounted=panel;}},{componentKind:'Header',name:'replacement.png'});assert.ok(mounted.innerHTML.includes('Transform symbol'),'Uploaded/replaced header keeps the original symbol-only controls');
+ctx.document.createElement=originalCreate;
 (async()=>{
  // Render overlapping rules colors, then fade the group once.
  card.bossFrameSettings={rulesOpacity:50};tools.beginRules();
