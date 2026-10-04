@@ -2306,6 +2306,7 @@ function frameElementDoubleClicked(event) {
 		setFrameDesignMode('frames');
 		document.querySelector('#frame-element-editor').classList.add('opened');
 		window.FrameTextPresets?.mount(document.querySelector('#frame-element-editor'),selectedFrame);
+		document.querySelector('#frame-element-editor').scrollTop = 0;
 		if (window.CanvasDesignTools) CanvasDesignTools.suspend();
 		selectedFrame.bounds = selectedFrame.bounds || {};
 		if (selectedFrame.ogBounds == undefined) {

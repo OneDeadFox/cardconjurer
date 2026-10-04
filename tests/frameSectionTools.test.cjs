@@ -28,6 +28,21 @@ const context={Image:BrowserImage,card:{version:'battle',width:2814,height:2010,
 };context.window=context;
 vm.createContext(context);for(const path of ['js/frameTextPresets.js','js/frameSectionCatalog.js','js/frameSectionTools.js'])vm.runInContext(fs.readFileSync(path,'utf8'),context);
 const S=context.FrameSectionTools;
+assert.equal(S.role({componentKind:'Component',componentLabel:'White Frame — Title'}),'title','Generic component labels must not hide title controls');
+assert.equal(S.role({name:'White Frame',masks:[{name:'Title'},{name:'Right Half'}]}),'title','A masked title layer must expose title controls');
+assert.equal(S.role({name:'White Frame',masks:[{name:'Title'},{name:'Rules'}]}),null,'A complete frame must not be treated as one title section');
+// Exercise the appearance mount used by the full layer editor and canvas popup.
+class Control {
+ constructor(){this.options=[];this.controls=new Map();this.value='';}
+ appendChild(child){this.options.push(child);}
+ querySelector(selector){if(!this.controls.has(selector))this.controls.set(selector,new Control());return this.controls.get(selector);}
+ remove(){}
+}
+function editor(reference){const controls=new Control();controls.querySelector=selector=>selector===reference?controls.anchor:selector==='.frame-standard-fields'?controls.fields:null;controls.anchor={};controls.fields={};controls.insertBefore=(panel,before)=>{controls.panel=panel;controls.before=before;};return controls;}
+const originalCreate=context.document.createElement;context.document.createElement=()=>new Control();
+const fullEditor=editor('.frame-editor-number-grid');S.mount(fullEditor,{componentKind:'Title',name:'White Title',src:'/original/w.png',bounds:{x:0,y:0,width:1,height:1},masks:[]});assert.equal(fullEditor.before,fullEditor.anchor,'Title choices must appear before image geometry controls');assert.ok(fullEditor.panel.innerHTML.includes('Title appearance'));assert.ok(fullEditor.panel.querySelector('[data-section-style]').options.some(option=>option.value==='transform-back'),'Title menu exposes transform back style');
+const popup=editor('.frame-standard-fields');S.mount(popup,{componentKind:'Title',masks:[]});assert.equal(popup.before,popup.anchor,'Canvas popup keeps appearance before standard field insertion');
+context.document.createElement=originalCreate;
 function layer(name,color,extra=[]){return{name:color+' Frame — '+name,componentKind:name,src:'/original/'+color+'.png',bounds:{x:.03,y:.02,width:.94,height:.95},rotation:0,opacity:100,masks:[{name,src:'/original/mask'+name+'.png'},...extra]};}
 (async()=>{
  const left=layer('Rules','w'),right=layer('Rules','g',[{name:'Right Half',src:'/original/maskRightHalf.png'}]),pinline=layer('Pinline','g');context.card.frames=[right,left,pinline];
