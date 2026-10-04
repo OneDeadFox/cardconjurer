@@ -349,7 +349,7 @@
    const protoFields=prototypeModule.elements.filter(entry=>entry.kind==='text').map(entry=>({key:entry.key,field:card.text?.[entry.key]})).filter(item=>item.field&&!item.field.hidden);
    const limits=moduleHeightLimits(range,group),hasText=protoFields.some(({field})=>String(field.text||'').trim());
    const overridden=item=>/\{fontoverride(?:[+-]?\d+)?\}/i.test(item.field.text||'');
-   const check=async(items,ignoreOverride)=>{let ok=true;for(const item of items){const result=await fits(item.field,item.key);if(!result&&!(ignoreOverride&&overridden(item)))ok=false;}return ok;};
+   const check=async(items,ignoreOverride)=>{let ok=true;for(const item of items){if(!String(item.field.text||'').trim())continue;const result=await fits(item.field,item.key);if(!result&&!(ignoreOverride&&overridden(item)))ok=false;}return ok;};
    const attempt=async size=>{
     setUniformRulesSize(frame,size,true);
     if(range.autoSizeModules){

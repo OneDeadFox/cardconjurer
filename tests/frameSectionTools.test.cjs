@@ -156,7 +156,7 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.equal(await S.updatePrototype(repairedOwner,{position:'top',pinlines:true}),true);assert.equal(fixedPart.src,outlinedSource,'Restoring pinlines reuses the original artwork');
  // Different defaults and modifiers still produce exactly one shared final size.
  const uniformRange=context.card.rulesRanges[0],body=context.card.text.rules,prototypeField=context.card.text['prototype-'+fixedGroup.partId];uniformRange.uniformTextSize=true;
- body.size=.04;body.fontSize=-3;prototypeField.size=.031;prototypeField.fontSize=2;
+ body.size=.04;body.fontSize=-3;prototypeField.size=.031;prototypeField.fontSize=2;prototypeField.text='Prototype ability';
  const mana=context.card.text['mana2-'+fixedGroup.partId];mana.size=.027;mana.fontSize=4;const manaSize=mana.size*context.card.height+mana.fontSize;let measured=0;
  const effective=field=>field.size*context.card.height+Number(field.fontSize||0)-Number(field.rangeFontReduction||0);
  await S.fitUniformText(async(field,key)=>{measured++;return effective(field)<=(key===fixedGroup.mainKey?47:39);});
@@ -174,7 +174,7 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  const manualFraction=fixedGroup.fraction,totalHeight=fixedGroup.baseBounds.height*context.card.height;
  uniformRange.autoSizeModules=true;body.text='Long main ability';prototypeField.text='';mana.text='';
  const defaultSize=Math.floor(body.size*context.card.height);
- await S.fitUniformText(async(field,key)=>key!==fixedGroup.mainKey||field.height*context.card.height>=effective(field)*4);
+ await S.fitUniformText(async(field,key)=>{assert.ok(field.text.trim(),'Blank fields must not contribute phantom line-height failures');return key!==fixedGroup.mainKey||field.height*context.card.height>=effective(field)*4;});
  assert.ok(fixedGroup.fraction<manualFraction,'Blank Prototype shrinks to free space');
  assert.ok(effective(body)>defaultSize-18,'New room improves the shared font size');
  protoModule.minSize=60;protoModule.maxSize=100;prototypeField.text='Prototype ability';

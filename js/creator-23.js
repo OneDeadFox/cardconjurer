@@ -3277,6 +3277,11 @@ function writeText(textObject, targetContext) {
 	if (textObject.rangeUniformTextSize) collisionMinimumTextSize = startingTextSize;
 	var collisionFit = getCardTextCollisionFit(textObject, textWidth, textHeight);
 	var collisionFitFailed = false;
+	// Empty fields need no line height and must not constrain shared font fitting.
+	if (!String(textObject.text || '').trim()) {
+		recordCardTextFit(textObject, collisionFit, originalStartingTextSize, startingTextSize, false);
+		return;
+	}
 	textWidth = collisionFit.width;
 	textHeight = collisionFit.height;
 	var textFontHeightRatio = 0.7;
