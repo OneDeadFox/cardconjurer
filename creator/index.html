@@ -387,11 +387,11 @@
 </details>
 </div>
 </details>
-<details id='frame-design-element-tools' class='frame-design-section readable-background margin-bottom'>
+<details id='frame-design-element-tools' class='frame-design-section readable-background margin-bottom' open>
 <summary>Element Tools</summary>
 <div class='frame-design-section-body'>
 <details id='frame-design-rules-tools' class='frame-design-subsection'>
-<summary>Rules Ranges and Modules</summary>
+<summary>Rules Ranges</summary>
 <div class='frame-design-section-body'>
 <h5 class='padding margin-bottom input-description'>Define a shared layout area that will contain repeatable rules modules. Drag its purple label to move it or drag an outlined edge to resize it. Double-click or right-click its highlight for bounds, rotation, and module-flow controls.</h5>
 							<div class='input-grid margin-bottom'>
@@ -410,6 +410,13 @@
 								<input id='rules-range-width' type='number' min='10' class='input' placeholder='Width' onchange='RulesRange.updateBounds();' aria-label='Rules range width'>
 								<input id='rules-range-height' type='number' min='10' class='input' placeholder='Height' onchange='RulesRange.updateBounds();' aria-label='Rules range height'>
 							</div>
+<h5 id='rules-range-status' class='padding input-description'>No rules range selected.</h5>
+</div>
+</details>
+<details id='frame-design-module-tools' class='frame-design-subsection'>
+<summary>Modules</summary>
+<div class='frame-design-section-body'>
+<p class='input-description'>Edit modules in the range selected under Rules Ranges.</p>
 							<h5 class='padding margin-bottom input-description'>Modules share the range’s available space. Fixed modules reserve pixels; flexible modules divide the remainder by weight.</h5>
 							<div class='input-grid margin-bottom'>
 								<button class='input' onclick='RulesRange.addModule();'>Add Module</button>
@@ -444,7 +451,6 @@
 								<input id='rules-range-attached-width' type='number' min='1' class='input' placeholder='Width' onchange='RulesRange.updateAttachedOffsets();' aria-label='Attached element width'>
 								<input id='rules-range-attached-height' type='number' min='1' class='input' placeholder='Height' onchange='RulesRange.updateAttachedOffsets();' aria-label='Attached element height'>
 							</div>
-							<h5 id='rules-range-status' class='padding input-description'>No rules range selected.</h5>
 </div>
 </details>
 <details id='frame-design-csv-tools' class='frame-design-subsection'>
@@ -528,7 +534,7 @@
 </details>
 </div>
 </details>
-<details id='frame-design-custom-layouts' class='frame-design-section readable-background margin-bottom'>
+<details id='frame-design-custom-layouts' class='frame-design-section readable-background margin-bottom' open>
 <summary>Custom Layouts</summary>
 <div class='frame-design-section-body'>
 <details id='frame-design-custom-boss' class='frame-design-subsection'>
