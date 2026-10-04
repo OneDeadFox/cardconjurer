@@ -175,9 +175,120 @@
    await rebuildFrameLayerList();refreshGeometry(frame);drawFrames();drawTextBuffer();if(!window.CanvasDesignTools?.editsFrame(frame))commitDesignUndoSnapshot(before,options.remove?'Remove legendary crown':'Change legendary crown');status(panel,options.remove?'Crown removed. Title bar preserved.':'Crown updated. Title bar preserved.');return true;
   }catch(error){await applyDesignStateSnapshot(before);status(panel,error.message);return false;}finally{busy=false;}
  }
- function sync(){for(const frame of card.frames||[]){const appearance=frame.sectionAppearance;if(!appearance)continue;const current=bounds(frame);if(JSON.stringify(current)!==JSON.stringify(appearance.lastBounds)){appearance.baseBounds=mapRect(appearance.baseBounds,appearance.lastBounds,current);if(appearance.iconBounds)appearance.iconBounds=mapRect(appearance.iconBounds,appearance.lastBounds,current);appearance.lastBounds=current;}}for(const frame of card.frames||[]){const crown=frame.sectionCrown;if(!crown)continue;const owner=card.frames.find(item=>item.designLayerId===crown.owner);if(!owner)continue;const current=bounds(owner);if(JSON.stringify(current)!==JSON.stringify(crown.lastOwnerBounds)){const placed=mapRect(bounds(frame),crown.lastOwnerBounds,current);frame.bounds={x:placed.x,y:placed.y,width:placed.width,height:placed.height};frame.rotation=placed.rotation||0;crown.lastOwnerBounds=current;}}window.BossFrameTools?.syncSymbols();}
+ // A rules background remains the outer container; its attached boxes share its space.
+ function moduleId(prefix){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);}
+ function relative(rect,container){return{x:(rect.x-container.x)/container.width,y:(rect.y-container.y)/container.height,width:rect.width/container.width,height:rect.height/container.height};}
+ async function attachPrototype(frame,options={},panel){
+  if(busy||!card.frames.includes(frame)||role(frame)!=='rules')return false;
+  if(frame.sectionModule)return updatePrototype(frame,options,panel);
+  busy=true;const before=createDesignStateSnapshot();
+  try{
+   const owner=ensureDesignLayerId(frame),base=await originalRectangle(frame,'rules');
+   const candidates=Object.entries(card.text||{}).filter(([key,field])=>{const attached=field.frameAnchor?.id===owner&&(field.standardRole==='rules'||!field.oneLine),cx=field.x+field.width/2,cy=field.y+field.height/2;return attached||!field.oneLine&&(key==='rules'||/rules|ability/i.test(field.name||''))&&cx>=base.x&&cx<=base.x+base.width&&cy>=base.y&&cy<=base.y+base.height;});
+   if(!candidates.length)throw Error('Add the main rules text field before attaching a Prototype box.');
+   const [mainKey,main]=candidates.find(([key,field])=>field.frameAnchor?.id===owner)||candidates[0];
+   if((card.rulesRanges||[]).some(range=>range.modules.some(module=>module.elements.some(entry=>entry.kind==='text'&&entry.key===mainKey))))throw Error('This rules field already belongs to a range. Detach it before creating this rules module.');
+   const style=FrameSectionCatalog.styles.find(style=>style.id==='prototype'),left=options.left||frame.sectionAppearance?.left||colorOf(frame),right=options.right||'';
+   const rendered=await renderStyle(style,'rules',left,right,true,false),fraction=.38;
+   const destination={...base,height:base.height*fraction,y:options.position==='bottom'?base.y+base.height*(1-fraction):base.y};
+   const placed=mapRect(rendered.outer,rendered.primary,destination);
+   const part={name:'Prototype box',componentKind:'Prototype Box',src:rendered.src,bounds:{x:placed.x,y:placed.y,width:placed.width,height:placed.height},rotation:placed.rotation||0,masks:[],opacity:100,noThumb:true,imageFit:'stretch',fixedAppearance:true};
+   ensureDesignLayerId(part);part.image=await image(part.src);card.frames.splice(card.frames.indexOf(frame),0,part);
+   const rangeId=moduleId('rules-section'),mainModule={id:moduleId('rules-main'),name:'Rules text',sizing:'flex',size:1,elements:[]},prototypeModule={id:moduleId('rules-prototype'),name:'Prototype',sizing:'fixed',size:destination.height*card.height,elements:[]};
+   const range={id:rangeId,name:'Rules + Prototype',kind:'rules-section',direction:'vertical',bounds:clone(base),rotation:base.rotation||0,modules:options.position==='bottom'?[mainModule,prototypeModule]:[prototypeModule,mainModule]};
+   const mainRelative=relative(main,base),savedAnchor=main.frameAnchor?clone(main.frameAnchor):null;delete main.frameAnchor;
+   // Keep the established horizontal geometry and padding as the available height changes.
+   mainModule.elements.push({kind:'text',key:mainKey,relative:clone(mainRelative),owned:false});
+   prototypeModule.elements.push({kind:'frame',key:part.designLayerId,relative:relative(placed,destination),owned:true});
+   const fields={},definitions=fieldDefinitions('prototype');
+   for(const key of ['prototype','mana2','pt2']){
+    const definition=clone(definitions[key]),target=key+'-'+part.designLayerId;definition.text='';definition.customField=true;definition.sectionOwnerId=owner;definition.sectionField=key;
+    FrameTextPresets.remap(definition,{...rendered.primary,rotation:0},destination,false);
+    fields[target]=definition;prototypeModule.elements.push({kind:'text',key:target,relative:relative(definition,destination),owned:true});
+   }
+   loadTextOptions(fields,false);
+   card.rulesRanges=(card.rulesRanges||[]).concat(range);
+   frame.sectionModule={rangeId,partId:part.designLayerId,mainKey,mainRelative,savedAnchor,position:options.position==='bottom'?'bottom':'top',fraction,left,right,lastOwnerBounds:bounds(frame),lastPartBounds:bounds(part),baseBounds:clone(base)};
+   syncRuleModules();await rebuildFrameLayerList();window.RulesRange?.refresh();drawFrames();drawTextBuffer();
+   if(!window.CanvasDesignTools?.editsFrame(frame))commitDesignUndoSnapshot(before,'Attach Prototype rules module');
+   status(panel,'Prototype attached with fitted rules, mana cost and power/toughness fields.');return true;
+  }catch(error){await applyDesignStateSnapshot(before);status(panel,error.message);return false;}finally{busy=false;}
+ }
+ async function updatePrototype(frame,options={},panel){
+  const group=frame.sectionModule;if(!group)return false;const before=createDesignStateSnapshot();
+  try{
+   if(options.remove){
+    const range=(card.rulesRanges||[]).find(item=>item.id===group.rangeId);
+    card.rulesRanges=(card.rulesRanges||[]).filter(item=>item!==range);
+    if(range)window.RulesRange?.removeOwnedElements(range.modules);
+    restoreMainField(frame,group);delete frame.sectionModule;
+   }else{
+    group.position=options.position==='bottom'?'bottom':'top';
+    const part=card.frames.find(item=>item.designLayerId===group.partId);
+    if(!part)throw Error('The attached Prototype artwork was removed. Remove this attachment and add it again.');
+    const left=options.left||group.left,right=options.right??group.right;
+    if(left!==group.left||right!==group.right){const style=FrameSectionCatalog.styles.find(item=>item.id==='prototype'),rendered=await renderStyle(style,'rules',left,right,true,false);part.src=rendered.src;part.image=await image(part.src);group.left=left;group.right=right;}
+    syncRuleModules();
+   }
+   await rebuildFrameLayerList();window.RulesRange?.refresh();drawFrames();drawTextBuffer();
+   if(!window.CanvasDesignTools?.editsFrame(frame))commitDesignUndoSnapshot(before,options.remove?'Remove Prototype rules module':'Update Prototype rules module');
+   status(panel,options.remove?'Prototype removed. Main rules text restored.':'Prototype placement updated.');return true;
+  }catch(error){await applyDesignStateSnapshot(before);status(panel,error.message);return false;}
+ }
+ function restoreMainField(frame,group){
+  const field=card.text?.[group.mainKey];if(!field)return;
+  const restored=mapRect(group.mainRelative,unit,{...group.baseBounds,rotation:frame.rotation||0});Object.assign(field,{x:restored.x,y:restored.y,width:restored.width,height:restored.height,rotation:restored.rotation});
+  if(group.savedAnchor)field.frameAnchor={...group.savedAnchor,last:bounds(frame)};
+ }
+ function syncRuleModules(){
+  for(const frame of card.frames||[]){
+   const group=frame.sectionModule;if(!group)continue;
+   const range=(card.rulesRanges||[]).find(item=>item.id===group.rangeId),part=card.frames.find(item=>item.designLayerId===group.partId);
+   let current=bounds(frame),rangeChanged=false;
+   if(range&&['x','y','width','height'].some(key=>Math.abs(range.bounds[key]-group.baseBounds[key])>1e-9)&&JSON.stringify(current)===JSON.stringify(group.lastOwnerBounds)){
+    const placed=mapRect(current,group.baseBounds,{...range.bounds,rotation:range.rotation||0});Object.assign(frame.bounds,{x:placed.x,y:placed.y,width:placed.width,height:placed.height});frame.rotation=placed.rotation;current=bounds(frame);rangeChanged=true;
+   }
+   if(JSON.stringify(current)!==JSON.stringify(group.lastOwnerBounds)){group.baseBounds=mapRect(group.baseBounds,group.lastOwnerBounds,current);group.lastOwnerBounds=current;}
+   if(!range||!part||!range.modules.some(module=>module.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId))){
+    if(range){card.rulesRanges=card.rulesRanges.filter(item=>item!==range);window.RulesRange?.removeOwnedElements(range.modules);}
+    restoreMainField(frame,group);delete frame.sectionModule;continue;
+   }
+   const base=group.baseBounds;
+   const mainField=card.text?.[group.mainKey];
+   if(!rangeChanged&&mainField&&group.lastMainBounds&&JSON.stringify({x:mainField.x,y:mainField.y,width:mainField.width,height:mainField.height})!==JSON.stringify(group.lastMainBounds)){
+    const edited=relative(mainField,group.lastMainBox),share=group.lastMainBox.height/base.height;group.mainRelative={...edited,y:edited.y*share,height:1-share+edited.height*share};
+   }
+   const prototype=range.modules.find(module=>module.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId)),main=range.modules.find(module=>module.elements.some(entry=>entry.kind==='text'&&entry.key===group.mainKey));
+   if(!main){card.rulesRanges=card.rulesRanges.filter(item=>item!==range);window.RulesRange?.removeOwnedElements(range.modules);restoreMainField(frame,group);delete frame.sectionModule;continue;}
+   // Dragging the Prototype box changes how much of the outer rules region it occupies.
+   if(JSON.stringify(bounds(part))!==JSON.stringify(group.lastPartBounds)){
+    const entry=prototype.elements.find(entry=>entry.kind==='frame');
+    group.fraction=part.bounds.height/(base.height*(entry.relative?.height||1));
+   }else if(prototype.size!==group.lastModuleSize&&group.lastModuleSize!==undefined)group.fraction=prototype.size/(base.height*card.height);
+   group.fraction=Math.max(.12,Math.min(.75,group.fraction));prototype.size=base.height*card.height*group.fraction;group.lastModuleSize=prototype.size;
+   range.bounds={x:base.x,y:base.y,width:base.width,height:base.height};range.rotation=base.rotation||0;
+   range.modules=group.position==='bottom'?[main,prototype]:[prototype,main];
+   const protoBox={...base,height:base.height*group.fraction,y:group.position==='bottom'?base.y+base.height*(1-group.fraction):base.y};
+   const mainBox={...base,height:base.height*(1-group.fraction),y:group.position==='top'?base.y+base.height*group.fraction:base.y};
+   for(const [module,box] of [[prototype,protoBox],[main,mainBox]])for(const entry of module.elements){
+    const target=entry.kind==='frame'?card.frames.find(item=>item.designLayerId===entry.key):card.text?.[entry.key];if(!target)continue;
+    if(entry.kind==='text'&&entry.key!==group.mainKey&&group.fieldBounds?.[entry.key]&&!rangeChanged){const fieldBounds={x:target.x,y:target.y,width:target.width,height:target.height};if(JSON.stringify(fieldBounds)!==JSON.stringify(group.fieldBounds[entry.key]))entry.relative=relative(target,group.lastProtoBox);}
+    const local=entry.relative||relative(entry.kind==='frame'?target.bounds:target,box);entry.relative=local;delete entry.offset;
+    // The main rules field preserves its original top/bottom inset, rather than compressing its padding.
+    const effective=entry.kind==='text'&&entry.key===group.mainKey?{...group.mainRelative,y:group.mainRelative.y/(1-group.fraction),height:Math.max(.01,(group.mainRelative.height-group.fraction)/(1-group.fraction))}:local;
+    entry.relative=clone(effective);
+    const fitted=mapRect(effective,unit,{...box,rotation:frame.rotation||0});
+    Object.assign(entry.kind==='frame'?target.bounds:target,{x:fitted.x,y:fitted.y,width:fitted.width,height:fitted.height});target.rotation=fitted.rotation;
+    if(target.frameAnchor)delete target.frameAnchor;
+   }
+   group.fieldBounds={};for(const entry of prototype.elements)if(entry.kind==='text'&&card.text?.[entry.key]){const field=card.text[entry.key];group.fieldBounds[entry.key]={x:field.x,y:field.y,width:field.width,height:field.height};}
+   group.lastProtoBox=clone(protoBox);group.lastPartBounds=bounds(part);group.lastMainBox=clone(mainBox);
+   if(mainField)group.lastMainBounds={x:mainField.x,y:mainField.y,width:mainField.width,height:mainField.height};
+  }
+ }
+ function sync(){syncRuleModules();for(const frame of card.frames||[]){const appearance=frame.sectionAppearance;if(!appearance)continue;const current=bounds(frame);if(JSON.stringify(current)!==JSON.stringify(appearance.lastBounds)){appearance.baseBounds=mapRect(appearance.baseBounds,appearance.lastBounds,current);if(appearance.iconBounds)appearance.iconBounds=mapRect(appearance.iconBounds,appearance.lastBounds,current);appearance.lastBounds=current;}}for(const frame of card.frames||[]){const crown=frame.sectionCrown;if(!crown)continue;const owner=card.frames.find(item=>item.designLayerId===crown.owner);if(!owner)continue;const current=bounds(owner);if(JSON.stringify(current)!==JSON.stringify(crown.lastOwnerBounds)){const placed=mapRect(bounds(frame),crown.lastOwnerBounds,current);frame.bounds={x:placed.x,y:placed.y,width:placed.width,height:placed.height};frame.rotation=placed.rotation||0;crown.lastOwnerBounds=current;}}window.BossFrameTools?.syncSymbols();}
  function cutouts(context,frame){if(!frame.sectionCutouts?.length)return;context.save();context.globalCompositeOperation='destination-out';for(const cut of frame.sectionCutouts){const owner=card.frames.find(item=>item.designLayerId===cut.owner);if(!owner?.sectionAppearance&&!owner?.sectionCrown)continue;const b=bounds(owner);context.save();context.translate(scaleX(b.x)+scaleWidth(b.width)/2,scaleY(b.y)+scaleHeight(b.height)/2);context.rotate(b.rotation*Math.PI/180);context.fillStyle='black';context.fillRect(-scaleWidth(b.width)/2,-scaleHeight(b.height)/2,scaleWidth(b.width),scaleHeight(b.height));context.restore();}context.restore();}
- function restoreAppearance(frame,definition){if(!frame.sectionAppearance&&!definition.sectionAppearance&&!frame.sectionCutouts&&!definition.sectionCutouts&&!frame.sectionCrown&&!definition.sectionCrown)return;for(const key of ['sectionAppearance','sectionCrown','sectionCutouts','fixedAppearance','visualFamilyId','componentKind','designTextLayout','maskCanvasBounds','ogBounds','assetId']){if(definition[key]===undefined)delete frame[key];else frame[key]=clone(definition[key]);}frame.src=definition.src;frame.masks=clone(definition.masks||[]);Promise.all([image(frame.src).then(asset=>{frame.image=asset;}),...frame.masks.map(async mask=>{mask.image=await image(mask.src);})]).then(drawFrames).catch(()=>{});}
+ function restoreAppearance(frame,definition){if(!frame.sectionAppearance&&!definition.sectionAppearance&&!frame.sectionCutouts&&!definition.sectionCutouts&&!frame.sectionCrown&&!definition.sectionCrown&&!frame.sectionModule&&!definition.sectionModule)return;for(const key of ['sectionModule','sectionAppearance','sectionCrown','sectionCutouts','fixedAppearance','visualFamilyId','componentKind','designTextLayout','maskCanvasBounds','ogBounds','assetId']){if(definition[key]===undefined)delete frame[key];else frame[key]=clone(definition[key]);}frame.src=definition.src;frame.masks=clone(definition.masks||[]);Promise.all([image(frame.src).then(asset=>{frame.image=asset;}),...frame.masks.map(async mask=>{mask.image=await image(mask.src);})]).then(drawFrames).catch(()=>{});}
  function fieldDefinitions(style){
   if(style==='adventure')return{rules:{name:'Rules Text (Right)',x:.5267,y:.65,width:.3867,height:.2358,size:.0353,font:'mplantin'},mana2:{name:'Adventure Mana Cost',x:.0814,y:.6391,width:.4,height:60/2100,size:60/1638,color:'white',align:'right',oneLine:true,manaCost:true},title2:{name:'Adventure Title',x:.0814,y:.6391,width:.4,height:.0296,size:.0296,color:'white',oneLine:true,font:'belerenb'},type2:{name:'Adventure Type',x:.0814,y:.6839,width:.4,height:.0296,size:.0296,color:'white',oneLine:true,font:'belerenb'},rules2:{name:'Adventure Rules Text',x:.0854,y:.7358,width:.3947,height:.15,size:.0353,font:'mplantin'}};
   if(style==='prototype')return{rules:{name:'Rules Text',x:129/1500,y:1565/2100,width:1242/1500,height:359/2100,size:.0295,font:'mplantin'},prototype:{name:'Prototype Rules',x:129/1500,y:1335/2100,width:1041/1500,height:193/2100,size:.0295,font:'mplantin'},mana2:{name:'Prototype Mana Cost',x:-24/1500,y:1340/2100,width:.9292,height:71/2100,size:72/2100,align:'right',oneLine:true,manaCost:true},pt2:{name:'Prototype Power/Toughness',x:.7928,y:.6935,width:.1367,height:.0372,size:.0372,color:'white',font:'belerenbsc',oneLine:true,align:'center'}};
@@ -195,6 +306,15 @@
    crownControls.querySelector('[data-crown-update]').onclick=async()=>{if(await changeCrown(frame,{type:crownControls.querySelector('[data-crown-type]').value,left:crownControls.querySelector('[data-crown-left]').value,right:crownControls.querySelector('[data-crown-split]').checked?crownControls.querySelector('[data-crown-right]').value:'',pinlines:crownControls.querySelector('[data-crown-pinlines]').checked,backing:crownControls.querySelector('[data-crown-backing]').checked},panel))mount(container,frame);};
    crownControls.querySelector('[data-crown-remove]').disabled=!frame.sectionAppearance?.crown&&!card.frames.some(item=>item.sectionCrown?.owner===frame.designLayerId);crownControls.querySelector('[data-crown-remove]').onclick=async()=>{if(await changeCrown(frame,{remove:true},panel))mount(container,frame);};
   }
+  if(sectionRole==='rules'){
+   const attachment=document.createElement('details');attachment.open=true;
+   attachment.innerHTML='<summary>Attached rules boxes</summary><label>Prototype placement<select class="input" data-prototype-position><option value="top">Top</option><option value="bottom">Bottom</option></select></label><button class="input" type="button" data-prototype-add>'+ (frame.sectionModule?'Update Prototype box':'Attach Prototype box') +'</button><button class="input" type="button" data-prototype-remove>Remove Prototype box</button><p>Keeps this background. Adds fitted Prototype fields and resizes the main rules text to the remaining space. Drag the Prototype box to adjust its height.</p>';
+   attachment.querySelector('[data-prototype-position]').value=frame.sectionModule?.position||'top';
+   attachment.querySelector('[data-prototype-remove]').hidden=!frame.sectionModule;
+   attachment.querySelector('[data-prototype-add]').onclick=async()=>{if(await attachPrototype(frame,{position:attachment.querySelector('[data-prototype-position]').value,left:panel.querySelector('[data-section-left]').value,right:panel.querySelector('[data-section-split]').checked?panel.querySelector('[data-section-right]').value:''},panel))mount(container,frame);};
+   attachment.querySelector('[data-prototype-remove]').onclick=async()=>{if(await updatePrototype(frame,{remove:true},panel))mount(container,frame);};
+   panel.insertBefore(attachment,panel.querySelector('[data-section-status]'));
+  }
   const appearance=frame.sectionAppearance||{};const select=panel.querySelector('[data-section-style]');for(const style of FrameSectionCatalog.styles.filter(style=>style.roles.includes(sectionRole))){const option=document.createElement('option');option.value=style.id;option.textContent=style.label;select.appendChild(option);}if(appearance.style==='browse'){const option=document.createElement('option');option.value='browse';option.textContent='Custom / Browse asset';select.appendChild(option);}select.value=appearance.style||FrameSectionCatalog.styles.find(style=>Object.values(style.variants).some(variant=>(variant.src===frame.src||variant.src===frame.bossSymbolOriginalSource)))?.id||'regular';
   for(const selector of ['[data-section-left]','[data-section-right]'])for(const[key,label]of Object.entries(colors)){const option=document.createElement('option');option.value=key;option.textContent=label;panel.querySelector(selector).appendChild(option);}
   const same=members(frame,sectionRole),rightPiece=same.find(item=>(item.masks||[]).some(mask=>/^right half$/i.test(mask.name||''))),leftPiece=same.find(item=>item!==rightPiece),right=appearance.right||(same.length>1?colorOf(rightPiece||same.find(item=>item!==frame)):'');panel.querySelector('[data-section-left]').value=appearance.left||colorOf(leftPiece||frame);panel.querySelector('[data-section-right]').value=right||'u';panel.querySelector('[data-section-split]').checked=!!right;panel.querySelector('[data-section-right-row]').hidden=!right;panel.querySelector('[data-section-pinlines]').checked=appearance.pinlines!==false;panel.querySelector('[data-section-opacity]').value=frame.opacity??100;if(sectionRole==='title'){panel.querySelector('[data-section-fit-text]').checked=appearance.fitTitleText!==false;}
@@ -205,5 +325,5 @@
   panel.querySelector('[data-section-browse]').onclick=async()=>{if(typeof availableFrames==='undefined'||typeof selectedFrameIndex==='undefined'||!availableFrames[selectedFrameIndex]){status(panel,'Choose a frame asset in Browse Frames first.');return;}const resource=availableFrames[selectedFrameIndex],ok=await apply(frame,{role:sectionRole,style:'browse',browseResource:clone(resource),left:colorOf(resource),right:'',crown:false,pinlines:panel.querySelector('[data-section-pinlines]').checked,opacity:panel.querySelector('[data-section-opacity]').value,fitTitleText:false},panel);if(ok)mount(container,frame);};
   insertAppearance(container,panel);
  }
- window.FrameSectionTools={role,apply,changeCrown,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
+ window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
 })();

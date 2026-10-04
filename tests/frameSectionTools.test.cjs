@@ -3,6 +3,7 @@ const {createCanvas,Image,loadImage}=require('@napi-rs/canvas');
 const loadedAssets=[];let sequence=0,commits=0;const snapshots=[];
 const palette={w:'#eeeedd',u:'#3366cc',b:'#252525',r:'#cc3333',g:'#229955',m:'#ccbb44',a:'#999999',l:'#996633',c:'#bbbbbb',v:'#777777'};
 function fixture(src){
+ const actual=process.env.PROTOTYPE_ASSET_ROOT+src;if(process.env.PROTOTYPE_ASSET_ROOT&&fs.existsSync(actual))return fs.readFileSync(actual);
  const image=createCanvas(200,280),ctx=image.getContext('2d');const path=src.toLowerCase();
  if(/mask|\/new\/(title|rules|pinline|border)\.png|book\.svg|pinline\.svg/.test(path)){
   ctx.fillStyle='black';
@@ -11,7 +12,7 @@ function fixture(src){
   else if(/rules|book/.test(path))ctx.fillRect(14,174,172,86);
   else if(/crown/.test(path))ctx.fillRect(5,5,190,28);
   else {ctx.strokeStyle='black';ctx.lineWidth=3;ctx.strokeRect(10,10,180,260);}
- }else {const key=path.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/)?.[1]||'m';ctx.fillStyle=palette[key];ctx.fillRect(0,0,200,280);if(/cleartextbox/.test(path))ctx.clearRect(14,174,172,86);if(/(?:borderless|genericshowcase)\/m15genericshowcaseframe/.test(path)){ctx.clearRect(14,174,172,86);ctx.fillStyle=/genericshowcase\/m15genericshowcaseframe/.test(path)?palette[key]+'80':'rgba(0,0,0,0.5)';ctx.fillRect(14,174,172,86);ctx.strokeStyle=palette[key];ctx.lineWidth=2;ctx.strokeRect(14,174,172,86);}}
+ }else if(/prototype/.test(path)){ctx.fillStyle='#3366cc';ctx.fillRect(12,175,176,31);}else {const key=path.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/)?.[1]||'m';ctx.fillStyle=palette[key];ctx.fillRect(0,0,200,280);if(/cleartextbox/.test(path))ctx.clearRect(14,174,172,86);if(/(?:borderless|genericshowcase)\/m15genericshowcaseframe/.test(path)){ctx.clearRect(14,174,172,86);ctx.fillStyle=/genericshowcase\/m15genericshowcaseframe/.test(path)?palette[key]+'80':'rgba(0,0,0,0.5)';ctx.fillRect(14,174,172,86);ctx.strokeStyle=palette[key];ctx.lineWidth=2;ctx.strokeRect(14,174,172,86);}}
  return image.toBuffer('image/png');
 }
 class BrowserImage extends Image {set src(value){loadedAssets.push(value);super.src=/^(data:|blob:)/.test(value)?value:fixture(value);}get src(){return super.src;}}
@@ -24,7 +25,7 @@ const context={Image:BrowserImage,card:{version:'battle',width:2814,height:2010,
  async rebuildFrameLayerList(){},drawFrames(){},drawTextBuffer(){},drawCard(){},resetSetSymbol(){},
  loadTextOptions(fields){Object.assign(context.card.text,fields);},
  scaleX:x=>x*context.card.width,scaleY:y=>y*context.card.height,scaleWidth:w=>w*context.card.width,scaleHeight:h=>h*context.card.height,
- RulesRange:{updateElementRelative(){},removeElementReferences(){}},CanvasDesignTools:{editsFrame:()=>false}
+ RulesRange:{refresh(){},updateElementRelative(){},removeElementReferences(){}},CanvasDesignTools:{editsFrame:()=>false}
 };context.window=context;
 vm.createContext(context);for(const path of ['js/frameTextPresets.js','js/frameSectionCatalog.js','js/frameSectionTools.js'])vm.runInContext(fs.readFileSync(path,'utf8'),context);
 const S=context.FrameSectionTools;
@@ -114,5 +115,28 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.ok(commits>=5);assert.equal(snapshots[0].frames.length,3,'Undo snapshot includes original separate color layers');
  const saved=JSON.parse(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value));assert.ok(saved.frames.find(frame=>frame.sectionAppearance)?.src.startsWith('data:'));
  const liveTitle=context.card.frames.find(item=>item.designLayerId===customTitle.designLayerId);const beforeBadCrown=JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value);assert.equal(await S.changeCrown(liveTitle,{left:'v'}),false);assert.equal(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value),beforeBadCrown,'Failed crown updates restore the previous crown and title');
+ // Attaching a Prototype preserves the existing background and creates a reusable range.
+ const rules=layer('Rules','u');context.ensureDesignLayerId(rules);context.card.frames=[rules];context.card.rulesRanges=[];
+ const outer=await S.originalRectangle(rules,'rules');
+ context.card.text={rules:{name:'Rules Text',text:'Preserve this ability.',x:outer.x+.01,y:outer.y+.01,width:outer.width-.02,height:outer.height-.02,size:.0362,font:'mplantin',frameAnchor:{id:rules.designLayerId,last:{...rules.bounds,rotation:0}},standardRole:'rules'}};
+ const originalField=JSON.parse(JSON.stringify(context.card.text.rules)),originalSource=rules.src,originalBounds=JSON.stringify(rules.bounds),startCommits=commits;
+ context.RulesRange.removeOwnedElements=modules=>{for(const entry of modules.flatMap(module=>module.elements)){if(!entry.owned)continue;if(entry.kind==='text')delete context.card.text[entry.key];else context.card.frames=context.card.frames.filter(frame=>frame.designLayerId!==entry.key);}};
+ assert.equal(await S.attachPrototype(rules,{position:'top',left:'u',right:'r'}),true);
+ assert.equal(rules.src,originalSource);assert.equal(JSON.stringify(rules.bounds),originalBounds);assert.equal(commits,startCommits+1,'Attachment is one undoable action');
+ const group=rules.sectionModule,range=context.card.rulesRanges[0],prototype=context.card.frames.find(frame=>frame.designLayerId===group.partId);
+ assert.equal(range.modules.length,2);assert.equal(range.modules[0].name,'Prototype');assert.equal(range.modules[0].elements.length,4,'Prototype artwork and all three fitted fields belong to one module');
+ assert.equal(context.card.text.rules.text,originalField.text);assert.equal(context.card.text.rules.size,originalField.size,'Resizing the main rules container preserves its default font size');
+ assert.ok(context.card.text.rules.y>originalField.y);assert.ok(context.card.text.rules.height<originalField.height);
+ for(const entry of range.modules[0].elements.filter(entry=>entry.kind==='text')){const field=context.card.text[entry.key];assert.ok(field.width>0&&field.height>0);assert.ok(field.y>=outer.y-.001&&field.y+field.height<=outer.y+outer.height*group.fraction+.001,'Preset fields fit vertically inside the attached region');}
+ const beforeResize=context.card.text.rules.height;prototype.bounds.height*=1.2;S.sync();assert.ok(context.card.text.rules.height<beforeResize,'Growing the Prototype box shrinks the remaining rules container');
+ assert.equal(await S.updatePrototype(rules,{position:'bottom'}),true);assert.equal(range.modules[1].name,'Prototype');assert.ok(Math.abs(context.card.text.rules.y-originalField.y)<1e-8,'Bottom attachment preserves the main field top inset');
+ // Move and resize the complete rules background: both sections follow together.
+ const beforeMove=context.card.text.rules.x;rules.bounds.x+=.1;rules.bounds.width*=.8;S.sync();assert.ok(context.card.text.rules.x>beforeMove);assert.equal(range.bounds.x,group.baseBounds.x);
+ const beforeRangeMove=rules.bounds.x;range.bounds.x+=.04;S.sync();assert.ok(rules.bounds.x>beforeRangeMove,'Moving the range carries its existing rules background');
+ const prototypeTextKey=range.modules.find(module=>module.name==='Prototype').elements.find(entry=>entry.kind==='text').key;const prototypeText=context.card.text[prototypeTextKey];prototypeText.width*=.9;const editedWidth=prototypeText.width;S.sync();assert.ok(Math.abs(prototypeText.width-editedWidth)<1e-8,'Manual edits to a fitted Prototype field survive module sync');
+ const savedModule=JSON.parse(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value));assert.equal(savedModule.frames.find(frame=>frame.sectionModule).sectionModule.rangeId,range.id,'Saved metadata links the module to its range');
+ assert.equal(await S.updatePrototype(rules,{remove:true}),true);assert.equal(context.card.rulesRanges.length,0);assert.equal(context.card.frames.length,1);assert.equal(Object.keys(context.card.text).length,1);assert.equal(context.card.text.rules.text,originalField.text);assert.equal(rules.sectionModule,undefined);assert.ok(context.card.text.rules.frameAnchor,'Removal restores the original main field anchor');
+ // Removing the attached module through the range also restores the main rules field.
+ assert.equal(await S.attachPrototype(rules,{position:'bottom',left:'u'}),true);const attachedRange=context.card.rulesRanges[0];const attachedModule=attachedRange.modules.find(module=>module.name==='Prototype');attachedRange.modules=attachedRange.modules.filter(module=>module!==attachedModule);context.RulesRange.removeOwnedElements([attachedModule]);S.sync();assert.equal(rules.sectionModule,undefined);assert.equal(context.card.rulesRanges.length,0);assert.equal(Object.keys(context.card.text).length,1);
  console.log('PASS: shared section swaps, split composition, geometry/content preservation, pinline/crown removal, preset fields, movement, rollback and serializable assets.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
