@@ -294,7 +294,7 @@
 		const generic=document.querySelector('#rules-range-list')?.closest('.readable-background');if(!generic)return;
 		const panel=document.createElement('section');panel.id='class-level-panel';panel.className='readable-background padding margin-bottom';panel.hidden=true;
 		panel.innerHTML='<h3>Class levels</h3><p>Select a level on the canvas or below. Double-click its banner to edit its design.</p><label>Appearance<select id="class-variant" class="input"></select></label><div id="class-level-list"></div><button id="class-add-level" class="input" type="button">Add level</button><details><summary>Text fitting</summary><label><input id="class-auto-size" type="checkbox"> Fit level heights to text</label><label><input id="class-uniform-text" type="checkbox"> Keep text sizes uniform</label></details><details><summary>Advanced layout</summary><button id="class-range-editor" class="input" type="button">Edit Class area bounds</button><label class="input">Use a custom base frame<input id="class-base-image" type="file" accept="image/*"></label><p>Replaces the base texture while keeping its existing masks and layout.</p></details><p id="class-level-status" role="status"></p>';
-		generic.before(panel);
+		const destination=document.querySelector('#frame-design-class-slot');if(destination)destination.appendChild(panel);else generic.before(panel);
 		for(const [key,label]of Object.entries(variants)){const option=document.createElement('option');option.value=key;option.textContent=label;panel.querySelector('#class-variant').appendChild(option);}
 		panel.querySelector('#class-variant').onchange=function(){applyVariant(this.value);};
 		panel.querySelector('#class-add-level').onclick=()=>add();

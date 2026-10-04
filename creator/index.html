@@ -220,9 +220,43 @@
 						</div>
 						</div>
 						<div id='frame-workspace-design' class='hidden' role='tabpanel'>
-						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Design Editing Mode</h5>
-							<select id='frame-design-mode' class='input margin-bottom' onchange='setFrameDesignMode(this.value);' aria-label='Design editing mode'>
+<details id='frame-design-resources' class='frame-design-section readable-background margin-bottom'>
+<summary>Frame Construction Resources</summary>
+<div class='frame-design-section-body'>
+<h5 class='padding margin-bottom input-description'>Combine a built-in or imported texture with a built-in or imported mask to make a new editable frame layer.</h5>
+							<div class='frame-resource-imports margin-bottom'>
+								<label class='frame-resource-import input'>Import Textures
+									<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' onchange='FrameResourceLibrary.importFiles(event.target.files, "texture"); this.value="";' aria-label='Import texture images'>
+								</label>
+								<label class='frame-resource-import input'>Import Custom Masks
+									<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' onchange='FrameResourceLibrary.importFiles(event.target.files, "mask"); this.value="";' aria-label='Import custom mask images'>
+								</label>
+							</div>
+							<div class='frame-resource-grid margin-bottom'>
+								<div class='frame-resource-column'>
+									<h5 class='input-description'>Texture</h5>
+									<select id='frame-resource-texture' class='input' onchange='FrameResourceLibrary.updateTexturePreview();' aria-label='Texture image'></select>
+									<div id='frame-resource-texture-preview' class='frame-resource-preview'><span>Import and select a texture</span></div>
+								</div>
+								<div class='frame-resource-column'>
+									<h5 class='input-description'>Component Mask</h5>
+									<div class='frame-resource-mask-filters'>
+										<select id='frame-resource-mask-family' class='input' onchange='FrameResourceLibrary.filterFamily();' aria-label='Frame family'></select>
+										<select id='frame-resource-mask-category' class='input' onchange='FrameResourceLibrary.filterMasks();' aria-label='Component type'></select>
+										<input id='frame-resource-mask-search' type='search' class='input frame-resource-mask-search' placeholder='Search components' oninput='FrameResourceLibrary.filterMasks();' aria-label='Search frame components'>
+									</div>
+									<select id='frame-resource-mask' class='input' onchange='FrameResourceLibrary.updateMaskPreview();' aria-label='Construction component mask'></select>
+									<div id='frame-resource-mask-preview' class='frame-resource-preview frame-resource-mask-preview'><span>Select a component mask</span></div>
+								</div>
+							</div>
+							<button class='input margin-bottom' onclick='FrameResourceLibrary.createLayer();'>Create Layer from Texture + Mask</button>
+							<h5 id='frame-resource-status' class='padding input-description'>Choose a texture, then filter the curated component masks by frame family and component type.</h5>
+</div>
+</details>
+<details id='frame-design-editing-mode' class='frame-design-section readable-background margin-bottom' open>
+<summary>Design Editing Mode</summary>
+<div class='frame-design-section-body'>
+<select id='frame-design-mode' class='input margin-bottom' onchange='setFrameDesignMode(this.value);' aria-label='Design editing mode'>
 								<option value='fields'>Layout Fields</option>
 								<option value='frames'>Frame Components</option>
 							</select>
@@ -236,20 +270,27 @@
 							<button class='input margin-bottom' onclick='undoDesignChange();'>Undo Last Design Change (Ctrl+Z)</button>
 							<h5 id='design-undo-status' class='padding margin-bottom input-description'>No design changes to undo. Up to 30 changes are retained.</h5>
 							<h5 id='frame-decomposition-status' class='padding input-description'>Newly added unmasked built-in frames will be split into editable components when this tab opens.</h5>
-						</div>
-						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Layout Templates</h5>
-							<h5 class='padding margin-bottom input-description'>Choose a frame type and variant to apply its text fields, art bounds, set-symbol placement, orientation, and other card settings. Applying a layout does not add, remove, or reorder your frame image layers.</h5>
+</div>
+</details>
+<details id='frame-design-layout' class='frame-design-section readable-background margin-bottom' open>
+<summary>Layout</summary>
+<div class='frame-design-section-body'>
+<details id='frame-design-layout-templates' class='frame-design-subsection'>
+<summary>Layout Templates</summary>
+<div class='frame-design-section-body'>
+<h5 class='padding margin-bottom input-description'>Choose a frame type and variant to apply its text fields, art bounds, set-symbol placement, orientation, and other card settings. Applying a layout does not add, remove, or reorder your frame image layers.</h5>
 							<h5 class='input-description margin-bottom'>Frame Type</h5>
 							<select id='frame-layout-template-group' class='input margin-bottom' onchange='selectFrameLayoutGroup(this.value);' aria-label='Layout frame type'></select>
 							<h5 class='input-description margin-bottom'>Frame Variant</h5>
 							<select id='frame-layout-template-pack' class='input margin-bottom' onchange='selectFrameLayoutPack(this.value);' aria-label='Layout frame variant'></select>
 							<button id='apply-frame-layout-template' class='input margin-bottom' onclick='applyCurrentFrameLayout({force:true, source:"design"});'>Apply Layout Template</button>
 							<h5 id='frame-layout-template-status' class='padding input-description'>Choose a frame type and variant.</h5>
-						</div>
-						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Layout Highlights</h5>
-							<h5 class='padding margin-bottom input-description'>Drag a label to move its field, drag any outlined edge to resize that axis, or double-click a label for detailed controls. These preview-only outlines are never included in downloaded cards.</h5>
+</div>
+</details>
+<details id='frame-design-layout-highlights' class='frame-design-subsection'>
+<summary>Layout Highlights</summary>
+<div class='frame-design-section-body'>
+<h5 class='padding margin-bottom input-description'>Drag a label to move its field, drag any outlined edge to resize that axis, or double-click a label for detailed controls. These preview-only outlines are never included in downloaded cards.</h5>
 							<div class='input-grid margin-bottom'>
 								<label class='checkbox-container input'>Text Fields
 									<input id='layout-highlight-text' type='checkbox' checked onchange='drawCard();'>
@@ -273,10 +314,86 @@
 								</label>
 							</div>
 							<h5 class='padding input-description'><span style='color:#43d9ff'>Text</span> · <span style='color:#52e36f'>Art</span> · <span style='color:#ff59d6'>Custom images</span> · <span style='color:#ffd34e'>Symbols and watermark</span> · <span style='color:#b784ff'>Rules ranges</span></h5>
-						</div>
-						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Rules Ranges</h5>
-							<h5 class='padding margin-bottom input-description'>Define a shared layout area that will contain repeatable rules modules. Drag its purple label to move it or drag an outlined edge to resize it. Double-click or right-click its highlight for bounds, rotation, and module-flow controls.</h5>
+<h5 class='input-description margin-bottom'>Show guidelines for text, art, watermark, and set symbols</h5>
+							<label class='checkbox-container input margin-bottom'>Guidelines
+								<input id='show-guidelines' type='checkbox' onchange='drawCard();'>
+								<span class='checkmark'></span>
+							</label>
+							<h5 class='input-description margin-bottom'>Highlight transparencies in card</h5>
+							<label class='checkbox-container input'>Transparencies
+								<input id='highlight-transparencies' type='checkbox' onchange='toggleCardBackgroundColor(this.checked);'>
+								<span class='checkmark'></span>
+							</label>
+</div>
+</details>
+<details id='frame-design-rounded' class='frame-design-subsection'>
+<summary>Rounded Corners</summary>
+<div class='frame-design-section-body'>
+<label class='checkbox-container input margin-bottom'>Rounded Corners
+								<input id='rounded-corners' checked="true" type='checkbox' onchange='setRoundedCorners(this.checked);'>
+								<span class='checkmark'></span>
+							</label>
+
+</div>
+</details>
+<details id='frame-design-auto-update' class='frame-design-subsection'>
+<summary>Automatically Update Frame</summary>
+<div class='frame-design-section-body'>
+<div class='padding input-grid'>
+						<select id="autoFrame" class="input" onchange="setAutoFrame()" aria-label="Automatically update frame">
+							<option value="false">Disabled</option>
+							<option value="M15Regular-1">Regular</option>
+							<option value="M15BoxTopper">Extended Art</option>
+							<option value="M15ExtendedArtShort">Extended Art (Shorter Textbox)</option>
+							<option value="UB">Universes Beyond</option>
+							<option value="Etched">Etched</option>
+							<option value="Borderless">Borderless (Alt)</option>
+							<option value="BorderlessUB">Borderless (Alt) (Universes Beyond)</option>
+							<option value="Praetors">Phyrexian</option>
+							<option value="8th">Eighth Edition</option>
+							<option value="Seventh">Seventh Edition</option>
+
+							<option disabled>Showcase frames</option>
+							<option value="JapanShowcase">Japan Showcase</option>
+							<option value="Vault">Vault (BIG)</option>
+
+							<option disabled>Alternative Layouts</option>
+							<option value="Adventure">Adventure</option>
+							<option value="Omen">Omen</option>
+							<option value="Prepare">Prepare</option>
+
+							<option disabled>Redone frames</option>
+							<option value="M15RegularNew">Regular (Accurate)</option>
+							<option value="FullArtNew">Full art (Accurate)</option>
+							<option value="UBNew">Universes Beyond (Accurate)</option>
+
+							<option disabled>Custom frames</option>
+							<option value="Circuit">Circuit</option>
+							<option value="M15Eighth">M15-Eighth</option>
+							<option value="M15EighthUB">M15-Eighth Universes Beyond</option>
+						</select>
+
+
+						<!-- <button class='input' onclick='autoFrame("M15");'>M15</button>
+						<button class='input' onclick='autoFrame("UB");'>Universes Beyond</button> -->
+					</div>
+					<div class='padding input-grid'>
+						<label class='checkbox-container input'>Use Nyx frame for all Enchantments (where applicable)
+							<input id='autoframe-always-nyx' type='checkbox' onchange='setAutoframeNyx(this.checked);'>
+							<span class='checkmark'></span>
+						</label>
+					</div>
+</div>
+</details>
+</div>
+</details>
+<details id='frame-design-element-tools' class='frame-design-section readable-background margin-bottom'>
+<summary>Element Tools</summary>
+<div class='frame-design-section-body'>
+<details id='frame-design-rules-tools' class='frame-design-subsection'>
+<summary>Rules Ranges and Modules</summary>
+<div class='frame-design-section-body'>
+<h5 class='padding margin-bottom input-description'>Define a shared layout area that will contain repeatable rules modules. Drag its purple label to move it or drag an outlined edge to resize it. Double-click or right-click its highlight for bounds, rotation, and module-flow controls.</h5>
 							<div class='input-grid margin-bottom'>
 								<button class='input' onclick='RulesRange.add();'>Add Rules Range</button>
 								<button class='input' onclick='RulesRange.removeSelected();'>Remove Selected</button>
@@ -326,51 +443,29 @@
 								<input id='rules-range-attached-height' type='number' min='1' class='input' placeholder='Height' onchange='RulesRange.updateAttachedOffsets();' aria-label='Attached element height'>
 							</div>
 							<h5 id='rules-range-status' class='padding input-description'>No rules range selected.</h5>
-						</div>
-						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Frame Construction Resources</h5>
-							<h5 class='padding margin-bottom input-description'>Combine a built-in or imported texture with a built-in or imported mask to make a new editable frame layer.</h5>
-							<div class='frame-resource-imports margin-bottom'>
-								<label class='frame-resource-import input'>Import Textures
-									<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' onchange='FrameResourceLibrary.importFiles(event.target.files, "texture"); this.value="";' aria-label='Import texture images'>
-								</label>
-								<label class='frame-resource-import input'>Import Custom Masks
-									<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' onchange='FrameResourceLibrary.importFiles(event.target.files, "mask"); this.value="";' aria-label='Import custom mask images'>
-								</label>
-							</div>
-							<div class='frame-resource-grid margin-bottom'>
-								<div class='frame-resource-column'>
-									<h5 class='input-description'>Texture</h5>
-									<select id='frame-resource-texture' class='input' onchange='FrameResourceLibrary.updateTexturePreview();' aria-label='Texture image'></select>
-									<div id='frame-resource-texture-preview' class='frame-resource-preview'><span>Import and select a texture</span></div>
-								</div>
-								<div class='frame-resource-column'>
-									<h5 class='input-description'>Component Mask</h5>
-									<div class='frame-resource-mask-filters'>
-										<select id='frame-resource-mask-family' class='input' onchange='FrameResourceLibrary.filterFamily();' aria-label='Frame family'></select>
-										<select id='frame-resource-mask-category' class='input' onchange='FrameResourceLibrary.filterMasks();' aria-label='Component type'></select>
-										<input id='frame-resource-mask-search' type='search' class='input frame-resource-mask-search' placeholder='Search components' oninput='FrameResourceLibrary.filterMasks();' aria-label='Search frame components'>
-									</div>
-									<select id='frame-resource-mask' class='input' onchange='FrameResourceLibrary.updateMaskPreview();' aria-label='Construction component mask'></select>
-									<div id='frame-resource-mask-preview' class='frame-resource-preview frame-resource-mask-preview'><span>Select a component mask</span></div>
-								</div>
-							</div>
-							<button class='input margin-bottom' onclick='FrameResourceLibrary.createLayer();'>Create Layer from Texture + Mask</button>
-							<h5 id='frame-resource-status' class='padding input-description'>Choose a texture, then filter the curated component masks by frame family and component type.</h5>
-						</div>
-						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Custom CSV Fields</h5>
-							<h5 class='padding margin-bottom input-description'>Create a labeled text box or image slot that can be matched to a CSV column and saved with this frame project.</h5>
+</div>
+</details>
+<details id='frame-design-csv-tools' class='frame-design-subsection'>
+<summary>Custom CSV Fields</summary>
+<div class='frame-design-section-body'>
+<h5 class='padding margin-bottom input-description'>Create a labeled text box or image slot that can be matched to a CSV column and saved with this frame project.</h5>
 							<input id='custom-template-field-label' type='text' class='input margin-bottom' placeholder='Field label, such as Chapter Name or Faction Icon' aria-label='Custom CSV field label'>
 							<div class='input-grid margin-bottom'>
 								<button class='input' onclick='addCustomTemplateField("text");'>Add Text Field</button>
 								<button class='input' onclick='addCustomTemplateField("image");'>Add Image Field</button>
 							</div>
 							<h5 id='custom-template-field-status' class='padding input-description'>Custom fields will appear as named targets in CSV Import.</h5>
-						</div>
-						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Frame Designer Projects</h5>
-							<h5 class='padding margin-bottom input-description'>Save the editable frame, text layout, and card settings as a draft on this device.</h5>
+</div>
+</details>
+</div>
+</details>
+<details id='frame-design-save-tools' class='frame-design-section readable-background margin-bottom' open>
+<summary>Save Tools</summary>
+<div class='frame-design-section-body'>
+<details id='frame-design-projects' class='frame-design-subsection' open>
+<summary>Frame Designer Projects</summary>
+<div class='frame-design-section-body'>
+<h5 class='padding margin-bottom input-description'>Save the editable frame, text layout, and card settings as a draft on this device.</h5>
 							<input id='frame-project-name' type='text' class='input margin-bottom' placeholder='Project name' aria-label='Frame project name'>
 							<div class='input-grid margin-bottom'>
 								<button class='input' onclick='FrameProjectStore.saveProject();'>Save Project</button>
@@ -387,21 +482,26 @@
 							</div>
 							<input id='frame-project-import' type='file' accept='.ccproject,.zip,application/zip' hidden oninput='FrameProjectStore.importProjectFile(event.target.files[0]); this.value="";' aria-label='Import a Card Conjurer frame project backup'>
 							<h5 class='padding margin-bottom input-description'>Project backups include the editable layout and all saved images used by that project.</h5>
-							<h5 class='padding margin-bottom input-description'>Full Project Library</h5>
+							<h5 id='frame-project-status' class='padding input-description'>Opening the Frame Designer project store...</h5>
+</div>
+</details>
+<details id='frame-design-project-library' class='frame-design-subsection'>
+<summary>Project Library</summary>
+<div class='frame-design-section-body'>
+
 							<div class='input-grid margin-bottom'>
 								<button class='input' onclick='FrameProjectStore.exportProjectLibrary();'>Export Entire Library</button>
 								<button class='input' onclick='document.querySelector("#frame-library-import").click();'>Import Library</button>
 							</div>
 							<input id='frame-library-import' type='file' accept='.cclibrary,.zip,application/zip' hidden oninput='FrameProjectStore.importProjectLibrary(event.target.files[0]); this.value="";' aria-label='Import a Card Conjurer project library'>
 							<h5 id='frame-library-status' class='padding margin-bottom input-description'>A library backup contains every saved project and every custom asset stored on this site.</h5>
-							<h5 class='padding margin-bottom input-description'>Current Project Assets</h5>
-							<button class='input margin-bottom' onclick='FrameProjectStore.viewCurrentProjectAssets();'>Refresh Project Assets</button>
-							<div id='current-project-assets' class='project-assets-panel'>Load or start a project to inspect its assets.</div>
-							<h5 id='frame-project-status' class='padding input-description'>Opening the Frame Designer project store...</h5>
-						</div>
-						<div class='readable-background padding margin-bottom'>
-							<h5 class='margin-bottom padding input-description'>Persistent Frame Asset Library</h5>
-							<h5 class='padding margin-bottom input-description'>Imported images are stored once on this device and can be reused in multiple frame projects.</h5>
+
+</div>
+</details>
+<details id='frame-design-asset-library' class='frame-design-subsection'>
+<summary>Persistent Frame Asset Library</summary>
+<div class='frame-design-section-body'>
+<h5 class='padding margin-bottom input-description'>Imported images are stored once on this device and can be reused in multiple frame projects.</h5>
 							<input type='file' multiple accept='.png, .svg, .jpg, .jpeg, .bmp, .webp' class='input margin-bottom' oninput='FrameProjectStore.importFiles(event.target.files, "frame"); this.value="";' aria-label='Import frame images'>
 							<div class='input-grid margin-bottom'>
 								<input id='frame-asset-url' type='url' placeholder='Image URL' class='input' aria-label='Frame asset image URL'>
@@ -413,25 +513,44 @@
 								<button class='input' onclick='FrameProjectStore.deleteSelectedAsset();'>Delete Asset</button>
 							</div>
 							<h5 id='frame-asset-status' class='padding input-description'>Opening the frame asset library...</h5>
-						</div>
-						</div>
-						<div class='readable-background padding'>
-							<h5 class='input-description margin-bottom'>Rounded Corners (When Downloaded)</h5>
-							<label class='checkbox-container input margin-bottom'>Rounded Corners
-								<input id='rounded-corners' checked="true" type='checkbox' onchange='setRoundedCorners(this.checked);'>
-								<span class='checkmark'></span>
-							</label>
-							<h5 class='input-description margin-bottom'>Show guidelines for text, art, watermark, and set symbols</h5>
-							<label class='checkbox-container input margin-bottom'>Guidelines
-								<input id='show-guidelines' type='checkbox' onchange='drawCard();'>
-								<span class='checkmark'></span>
-							</label>
-							<h5 class='input-description margin-bottom'>Highlight transparencies in card</h5>
-							<label class='checkbox-container input'>Transparencies
-								<input id='highlight-transparencies' type='checkbox' onchange='toggleCardBackgroundColor(this.checked);'>
-								<span class='checkmark'></span>
-							</label>
-						</div>
+</div>
+</details>
+<details id='frame-design-asset-gallery' class='frame-design-subsection'>
+<summary>Asset Gallery</summary>
+<div class='frame-design-section-body'>
+
+							<button class='input margin-bottom' onclick='FrameProjectStore.viewCurrentProjectAssets();'>Refresh Project Assets</button>
+							<div id='current-project-assets' class='project-assets-panel'>Load or start a project to inspect its assets.</div>
+
+</div>
+</details>
+</div>
+</details>
+<details id='frame-design-custom-layouts' class='frame-design-section readable-background margin-bottom'>
+<summary>Custom Layouts</summary>
+<div class='frame-design-section-body'>
+<details id='frame-design-custom-boss' class='frame-design-subsection'>
+<summary>Battle / Boss</summary>
+<div class='frame-design-section-body'>
+<p class='input-description'>These controls are available when the matching card layout is active.</p><div id='frame-design-boss-slot'></div>
+</div>
+</details>
+<details id='frame-design-custom-class' class='frame-design-subsection'>
+<summary>Class</summary>
+<div class='frame-design-section-body'>
+<p class='input-description'>These controls are available when the matching card layout is active.</p><div id='frame-design-class-slot'></div>
+</div>
+</details>
+<details id='frame-design-custom-dungeon' class='frame-design-subsection'>
+<summary>Dungeon</summary>
+<div class='frame-design-section-body'>
+<p class='input-description'>These controls are available when the matching card layout is active.</p><div id='frame-design-dungeon-slot'></div>
+</div>
+</details>
+</div>
+</details>
+</div>
+
 					</div>
 					<div id='creator-menu-text' class='hidden'>
 						<div class='readable-background padding margin-bottom'>
@@ -1074,53 +1193,7 @@
 						</div>
 					</div>
 				</div>
-				<div class='readable-background padding margin-bottom'>
-					<h5 class='padding input-description'>Automatically update frame</h5>
-					<div class='padding input-grid'>
-						<select id="autoFrame" class="input" onchange="setAutoFrame()" aria-label="Automatically update frame">
-							<option value="false">Disabled</option>
-							<option value="M15Regular-1">Regular</option>
-							<option value="M15BoxTopper">Extended Art</option>
-							<option value="M15ExtendedArtShort">Extended Art (Shorter Textbox)</option>
-							<option value="UB">Universes Beyond</option>
-							<option value="Etched">Etched</option>
-							<option value="Borderless">Borderless (Alt)</option>
-							<option value="BorderlessUB">Borderless (Alt) (Universes Beyond)</option>
-							<option value="Praetors">Phyrexian</option>
-							<option value="8th">Eighth Edition</option>
-							<option value="Seventh">Seventh Edition</option>
 
-							<option disabled>Showcase frames</option>
-							<option value="JapanShowcase">Japan Showcase</option>
-							<option value="Vault">Vault (BIG)</option>
-							
-							<option disabled>Alternative Layouts</option>
-							<option value="Adventure">Adventure</option>
-							<option value="Omen">Omen</option>
-							<option value="Prepare">Prepare</option>
-
-							<option disabled>Redone frames</option>
-							<option value="M15RegularNew">Regular (Accurate)</option>
-							<option value="FullArtNew">Full art (Accurate)</option>
-							<option value="UBNew">Universes Beyond (Accurate)</option>
-
-							<option disabled>Custom frames</option>
-							<option value="Circuit">Circuit</option>
-							<option value="M15Eighth">M15-Eighth</option>
-							<option value="M15EighthUB">M15-Eighth Universes Beyond</option>
-						</select>
-
-						
-						<!-- <button class='input' onclick='autoFrame("M15");'>M15</button>
-						<button class='input' onclick='autoFrame("UB");'>Universes Beyond</button> -->
-					</div>
-					<div class='padding input-grid'>
-						<label class='checkbox-container input'>Use Nyx frame for all Enchantments (where applicable)
-							<input id='autoframe-always-nyx' type='checkbox' onchange='setAutoframeNyx(this.checked);'>
-							<span class='checkmark'></span>
-						</label>
-					</div>
-				</div>
 				<div class='readable-background padding'>
 					<h3 class='download padding' onclick='downloadCard();'>Download your card</h3>
 					<h5 onclick='downloadCard(false, true);' id='downloadJpg' href='' target='_blank' class='padding download input-description'>Click here to download as JPEG</h5>

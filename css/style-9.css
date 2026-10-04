@@ -1428,3 +1428,16 @@ textarea.input {
 .frame-section-tools details label, .frame-section-tools details button { margin-top:.6rem; }
 .frame-section-tools p { margin:0; font-size:13px; line-height:1.4; }
 .frame-section-tools [hidden] { display:none; }
+
+/* Frame Design: a consistent, keyboard-accessible hierarchy of disclosure panels. */
+#frame-workspace-design .frame-design-section { padding: 0; border: 1px solid #ffffff24; border-radius: .45rem; overflow: hidden; }
+#frame-workspace-design .frame-design-section > summary { padding: .9rem 1rem; font-size: 1rem; font-weight: 700; cursor: pointer; }
+#frame-workspace-design .frame-design-section[open] > summary { border-bottom: 1px solid #ffffff24; }
+#frame-workspace-design .frame-design-section-body { padding: .85rem; }
+#frame-workspace-design .frame-design-subsection { margin-bottom: .65rem; border: 1px solid #ffffff24; border-radius: .35rem; }
+#frame-workspace-design .frame-design-subsection:last-child { margin-bottom: 0; }
+#frame-workspace-design .frame-design-subsection > summary { padding: .75rem; cursor: pointer; font-weight: 600; }
+#frame-workspace-design .frame-design-subsection[open] > summary { border-bottom: 1px solid #ffffff20; }
+#frame-workspace-design summary:focus-visible { outline: 2px solid #43d9ff; outline-offset: -3px; }
+#frame-workspace-design .frame-design-section-body > .readable-background { margin-bottom: 0; padding: 0; background: transparent; }
+#frame-design-asset-gallery .project-assets-panel { max-height: 24rem; overflow-y: auto; }
