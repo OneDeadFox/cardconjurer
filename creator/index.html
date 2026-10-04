@@ -402,6 +402,7 @@
 							<input id='rules-range-name' type='text' class='input margin-bottom' placeholder='Rules range name' onchange='RulesRange.renameSelected(this.value);' aria-label='Rules range name'>
 							<label class='input'><input id='rules-range-auto-size' type='checkbox' onchange='RulesRange.updateOptions();'> Auto-size modules to text</label>
 							<label class='input margin-bottom'><input id='rules-range-uniform-text' type='checkbox' onchange='RulesRange.updateOptions();'> Uniform text size across modules</label>
+							<details class='frame-design-subsection'><summary>Font limits</summary><div class='frame-design-section-body'><label>Maximum font reduction (px)<input id='rules-range-max-font-reduction' type='number' min='0' step='1' class='input' placeholder='Unlimited' onchange='RulesRange.updateOptions();'></label><p class='input-description'>18 sets a minimum of default size minus 18 pixels. Blank keeps automatic fitting unrestricted. Inline font overrides retain their explicit size.</p></div></details>
 							<h5 class='padding margin-bottom input-description'>Range bounds in editor pixels</h5>
 							<div class='input-grid margin-bottom'>
 								<input id='rules-range-x' type='number' class='input' placeholder='X' onchange='RulesRange.updateBounds();' aria-label='Rules range X'>
@@ -427,6 +428,7 @@
 									<option value='fixed'>Fixed Pixels</option>
 								</select>
 								<input id='rules-range-module-size' type='number' min='1' step='1' class='input' placeholder='Flex weight' onchange='RulesRange.updateModule();' aria-label='Module size or flexible weight'>
+							<details class='wide frame-design-subsection'><summary>Module height limits</summary><div class='frame-design-section-body'><label>Minimum height (px)<input id='rules-range-module-min' type='number' min='0' class='input' placeholder='Automatic' onchange='RulesRange.updateModule();'></label><label>Maximum height (px)<input id='rules-range-module-max' type='number' min='0' class='input' placeholder='Unlimited' onchange='RulesRange.updateModule();'></label><button type='button' class='input' onclick='RulesRange.capModuleAtCurrentSize();'>Use Current Height as Maximum</button></div></details>
 							</div>
 							<h5 class='padding margin-bottom input-description'>Attach an existing text box or image layer to the selected module. Its position and size will follow that module.</h5>
 							<select id='rules-range-element-list' class='input margin-bottom' onfocus='RulesRange.refreshElements();' aria-label='Available module elements'></select>

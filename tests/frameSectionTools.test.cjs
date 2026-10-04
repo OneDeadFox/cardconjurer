@@ -25,7 +25,7 @@ const context={Image:BrowserImage,card:{version:'battle',width:2814,height:2010,
  async rebuildFrameLayerList(){},drawFrames(){},drawTextBuffer(){},drawCard(){},resetSetSymbol(){},
  loadTextOptions(fields){Object.assign(context.card.text,fields);},
  scaleX:x=>x*context.card.width,scaleY:y=>y*context.card.height,scaleWidth:w=>w*context.card.width,scaleHeight:h=>h*context.card.height,
- RulesRange:{refresh(){},updateElementRelative(){},removeElementReferences(){}},CanvasDesignTools:{editsFrame:()=>false}
+ RulesRange:{refresh(){},refreshInputs(){},updateElementRelative(){},removeElementReferences(){}},CanvasDesignTools:{editsFrame:()=>false}
 };context.window=context;
 vm.createContext(context);for(const path of ['js/frameTextPresets.js','js/frameSectionCatalog.js','js/frameSectionTools.js'])vm.runInContext(fs.readFileSync(path,'utf8'),context);
 const S=context.FrameSectionTools;
@@ -169,6 +169,24 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  delete fixedGroup.rulesFontVersion;prototypeField.fontSize=0;prototypeField.font='mplantin';prototypeField.size=.0295*fixedGroup.baseBounds.height*.38/fixedGroup.nativePrimary.height;
  const legacyDefault=prototypeField.size;const fixedGeometry=JSON.stringify({x:prototypeField.x,y:prototypeField.y,width:prototypeField.width,height:prototypeField.height});S.syncRuleModules();assert.equal(prototypeField.size,body.size);assert.equal(JSON.stringify({x:prototypeField.x,y:prototypeField.y,width:prototypeField.width,height:prototypeField.height}),fixedGeometry,'Repair preserves hand-placed textbox geometry');assert.notEqual(prototypeField.size,legacyDefault);
  body.fontSize=0;uniformRange.uniformTextSize=true;body.text='Short ability';prototypeField.text='Short Prototype';await S.fitUniformText(async()=>true);assert.ok(body.rangeFontReduction<1,'Matching short text must not inherit the old artificially small default');assert.ok(prototypeField.rangeFontReduction<1);
+ // Auto sizing gives an empty Prototype's unused height back to the main rules.
+ const protoModule=uniformRange.modules.find(module=>module.name==='Prototype');
+ const manualFraction=fixedGroup.fraction,totalHeight=fixedGroup.baseBounds.height*context.card.height;
+ uniformRange.autoSizeModules=true;body.text='Long main ability';prototypeField.text='';mana.text='';
+ const defaultSize=Math.floor(body.size*context.card.height);
+ await S.fitUniformText(async(field,key)=>key!==fixedGroup.mainKey||field.height*context.card.height>=effective(field)*4);
+ assert.ok(fixedGroup.fraction<manualFraction,'Blank Prototype shrinks to free space');
+ assert.ok(effective(body)>defaultSize-18,'New room improves the shared font size');
+ protoModule.minSize=60;protoModule.maxSize=100;prototypeField.text='Prototype ability';
+ await S.fitUniformText(async(field,key)=>field.text===''||field.height*context.card.height>=effective(field)*(key===fixedGroup.mainKey?4:1.2));
+ assert.ok(protoModule.size>=60&&protoModule.size<=100,'Auto height respects both module limits');
+ uniformRange.maxFontReduction=18;body.text+=' impossible fit';
+ await S.fitUniformText(async(field,key)=>key!==fixedGroup.mainKey||effective(field)<=defaultSize-30);
+ assert.equal(effective(body),Math.ceil(body.size*context.card.height)-18,'Minimum font limit prevents additional shrink');assert.equal(uniformRange.fitOverflow,true,'Unresolvable fit is flagged');
+ body.text='{fontoverride-12}fixed main';prototypeField.text='normal';delete uniformRange.maxFontReduction;
+ await S.fitUniformText(async(field,key)=>key!==fixedGroup.mainKey);
+ assert.ok(effective(prototypeField)>=defaultSize-1,'Fixed override overflow must not shrink other fields');
+ uniformRange.autoSizeModules=false;S.syncRuleModules();assert.ok(Math.abs(fixedGroup.fraction-manualFraction)<1e-8,'Disabling auto height restores manual height');
  delete fixedGroup.rulesFontVersion;prototypeField.size=.0123;prototypeField.fontSize=-4;S.syncRuleModules();assert.equal(prototypeField.size,.0123);assert.equal(prototypeField.fontSize,-4,'Migration must preserve explicit font choices');
  console.log('PASS: shared section swaps, split composition, geometry/content preservation, pinline/crown removal, preset fields, movement, rollback and serializable assets.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

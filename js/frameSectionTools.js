@@ -318,21 +318,59 @@
  function defaultPixelSize(field){return Math.max(1,(Number(field.size)||.038)*card.height+(parseInt(field.fontSize||'0',10)||0));}
  function setUniformRulesSize(frame,size,enabled){for(const {field} of uniformRulesFields(frame)){field.rangeUniformTextSize=enabled;field.rangeFontReduction=enabled?Math.max(0,defaultPixelSize(field)-size):0;}}
  const uniformRulesCache=new Map();
+ function sectionLayouts(range){
+  const frame=card.frames.find(frame=>frame.sectionModule?.rangeId===range.id);if(!frame)return null;
+  const group=frame.sectionModule,base=group.baseBounds,prototype=range.modules.find(module=>module.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId));
+  return range.modules.map(module=>{const isPrototype=module===prototype,fraction=isPrototype?group.fraction:1-group.fraction;const box={x:base.x,y:base.y,width:base.width,height:base.height*fraction};if(group.position==='top'?!isPrototype:isPrototype)box.y+=base.height*(isPrototype?1-group.fraction:group.fraction);return{module,bounds:box,pixels:box.height*card.height,overflow:!!range.fitOverflow};});
+ }
+ function moduleHeightLimits(range,group){
+  const total=group.baseBounds.height*card.height,prototype=range.modules.find(module=>module.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId)),main=range.modules.find(module=>module!==prototype);
+  const max=value=>Number.isFinite(value)&&value>=0?value:Infinity;
+  const low=Math.max(10,Number(prototype.minSize)||0,total-max(main?.maxSize));
+  const high=Math.min(total-Math.max(10,Number(main?.minSize)||0),max(prototype.maxSize));
+  return{low:Math.max(1,Math.min(low,high)),high:Math.max(1,high),conflict:low>high};
+ }
+ function setSectionHeight(frame,pixels){
+  const group=frame.sectionModule,range=card.rulesRanges.find(range=>range.id===group.rangeId),module=range.modules.find(module=>module.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId));
+  group.fraction=pixels/(group.baseBounds.height*card.height);module.size=pixels;group.lastModuleSize=pixels;syncRuleModules();
+ }
  async function fitUniformText(fits){
   syncRuleModules();
   for(const frame of card.frames||[]){
    const group=frame.sectionModule;if(!group)continue;repairPrototypeRulesDefault(frame);
    const range=(card.rulesRanges||[]).find(item=>item.id===group.rangeId),fields=uniformRulesFields(frame);
-   if(!range?.uniformTextSize||fields.length<2){setUniformRulesSize(frame,0,false);uniformRulesCache.delete(group.rangeId);continue;}
-   const max=Math.max(1,Math.floor(Math.min(...fields.map(({field})=>defaultPixelSize(field)))));
-   const signature=JSON.stringify({height:card.height,width:card.width,fields:fields.map(({key,field})=>({key,...Object.fromEntries(Object.entries(field).filter(([name])=>!['rangeFontReduction','rangeUniformTextSize','rangeClip'].includes(name)))})),obstacles:card.frames.filter(item=>/power|toughness/i.test(item.componentKind||item.name||'')).map(item=>({bounds:item.bounds,rotation:item.rotation,hidden:item.hidden}))});
+   if(!range||(fields.length<2)||(!range.uniformTextSize&&!range.autoSizeModules)){setUniformRulesSize(frame,0,false);uniformRulesCache.delete(group.rangeId);continue;}
+   const max=Math.max(1,Math.floor(Math.min(...fields.map(({field})=>defaultPixelSize(field))))),limit=Number.isFinite(range.maxFontReduction)?Math.max(0,range.maxFontReduction):Infinity,min=Math.max(1,Math.ceil(Math.max(...fields.filter(({field})=>!/\{fontoverride(?:[+-]?\d+)?\}/i.test(field.text||'')).map(({field})=>defaultPixelSize(field)-limit),max-limit)));
+   const signature=()=>JSON.stringify({height:card.height,width:card.width,auto:range.autoSizeModules,uniform:range.uniformTextSize,limit:range.maxFontReduction,modules:range.modules.map(module=>({id:module.id,min:module.minSize,max:module.maxSize})),fields:fields.map(({key,field})=>({key,...Object.fromEntries(Object.entries(field).filter(([name])=>!['rangeFontReduction','rangeUniformTextSize','rangeClip'].includes(name)))})),obstacles:card.frames.filter(item=>/power|toughness/i.test(item.componentKind||item.name||'')).map(item=>({bounds:item.bounds,rotation:item.rotation,hidden:item.hidden}))});
    const cached=uniformRulesCache.get(group.rangeId);
-   if(cached?.signature===signature){group.uniformSize=cached.size;setUniformRulesSize(frame,cached.size,true);continue;}
-   let low=1,high=max,best=1;
-   // Ask the normal renderer, including mana tokens, wrapping and P/T obstacles.
-   // Both fields stay at the candidate size during each fit check.
-   while(low<=high){const candidate=Math.floor((low+high)/2);setUniformRulesSize(frame,candidate,true);let success=true;for(const {key,field} of fields)if(!await fits(field,key))success=false;if(success){best=candidate;low=candidate+1;}else high=candidate-1;}
-   group.uniformSize=best;setUniformRulesSize(frame,best,true);uniformRulesCache.set(group.rangeId,{signature,size:best});
+   if(cached?.signature===signature()){group.uniformSize=cached.size;setUniformRulesSize(frame,cached.size,range.uniformTextSize);continue;}
+   if(range.autoSizeModules&&!group.autoSizingActive){group.manualFraction=group.fraction;group.autoSizingActive=true;}
+   const prototypeModule=range.modules.find(module=>module.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId));
+   const protoFields=prototypeModule.elements.filter(entry=>entry.kind==='text').map(entry=>({key:entry.key,field:card.text?.[entry.key]})).filter(item=>item.field&&!item.field.hidden);
+   const limits=moduleHeightLimits(range,group),hasText=protoFields.some(({field})=>String(field.text||'').trim());
+   const overridden=item=>/\{fontoverride(?:[+-]?\d+)?\}/i.test(item.field.text||'');
+   const check=async(items,ignoreOverride)=>{let ok=true;for(const item of items){const result=await fits(item.field,item.key);if(!result&&!(ignoreOverride&&overridden(item)))ok=false;}return ok;};
+   const attempt=async size=>{
+    setUniformRulesSize(frame,size,true);
+    if(range.autoSizeModules){
+     let height=limits.low;
+     if(hasText){let low=Math.ceil(limits.low),high=Math.floor(limits.high);height=limits.high;
+      while(low<=high){const candidate=Math.floor((low+high)/2);setSectionHeight(frame,candidate);setUniformRulesSize(frame,size,true);if(await check(protoFields,false)){height=candidate;high=candidate-1;}else low=candidate+1;}
+     }
+     setSectionHeight(frame,height);setUniformRulesSize(frame,size,true);
+    }
+    // Fixed inline overrides stay fixed. An overflowing explicit override is
+    // reported by the final render instead of forcing unrelated text smaller.
+    return await check(fields,true)&&!limits.conflict;
+   };
+   let low=min,high=max,best=min,bestHeight=group.fraction*group.baseBounds.height*card.height,found=false;
+   while(low<=high){const candidate=Math.floor((low+high)/2);if(await attempt(candidate)){found=true;best=candidate;bestHeight=group.fraction*group.baseBounds.height*card.height;low=candidate+1;}else high=candidate-1;}
+   if(!found){await attempt(min);bestHeight=group.fraction*group.baseBounds.height*card.height;}
+   if(range.autoSizeModules)setSectionHeight(frame,bestHeight);
+   group.uniformSize=best;range.fitOverflow=!found;setUniformRulesSize(frame,best,range.uniformTextSize);uniformRulesCache.set(group.rangeId,{signature:signature(),size:best});
+   // Geometry changes made during text fitting also need a frame redraw.
+   if(range.autoSizeModules&&typeof redrawFrames!=='undefined')redrawFrames=true;
+   if(!document.activeElement||!/^rules-range-/.test(document.activeElement.id||''))window.RulesRange?.refreshInputs?.();
   }
  }
  function syncRuleModules(){
@@ -348,6 +386,7 @@
     if(range){card.rulesRanges=card.rulesRanges.filter(item=>item!==range);window.RulesRange?.removeOwnedElements(range.modules);}
     restoreMainField(frame,group);delete frame.sectionModule;continue;
    }
+   if(!range.autoSizeModules&&group.autoSizingActive){group.fraction=group.manualFraction??group.fraction;delete group.autoSizingActive;delete group.uniformSize;const resetModule=range.modules.find(module=>module.elements.some(entry=>entry.key===group.partId));resetModule.size=group.baseBounds.height*card.height*group.fraction;group.lastModuleSize=resetModule.size;}
    const base=group.baseBounds;
    const mainField=card.text?.[group.mainKey];
    if(!rangeChanged&&mainField&&group.lastMainBounds&&JSON.stringify({x:mainField.x,y:mainField.y,width:mainField.width,height:mainField.height})!==JSON.stringify(group.lastMainBounds)){
@@ -360,7 +399,7 @@
     const entry=prototype.elements.find(entry=>entry.kind==='frame');
     group.fraction=part.bounds.height/(base.height*(entry.relative?.height||1));
    }else if(prototype.size!==group.lastModuleSize&&group.lastModuleSize!==undefined)group.fraction=prototype.size/(base.height*card.height);
-   group.fraction=Math.max(.12,Math.min(.75,group.fraction));prototype.size=base.height*card.height*group.fraction;group.lastModuleSize=prototype.size;
+   group.fraction=Math.max(range.autoSizeModules?1/(base.height*card.height):.01,Math.min(.99,group.fraction));prototype.size=base.height*card.height*group.fraction;group.lastModuleSize=prototype.size;
    range.bounds={x:base.x,y:base.y,width:base.width,height:base.height};range.rotation=base.rotation||0;
    range.modules=group.position==='bottom'?[main,prototype]:[prototype,main];
    const protoBox={...base,height:base.height*group.fraction,y:group.position==='bottom'?base.y+base.height*(1-group.fraction):base.y};
@@ -431,5 +470,5 @@
   panel.querySelector('[data-section-browse]').onclick=async()=>{if(typeof availableFrames==='undefined'||typeof selectedFrameIndex==='undefined'||!availableFrames[selectedFrameIndex]){status(panel,'Choose a frame asset in Browse Frames first.');return;}const resource=availableFrames[selectedFrameIndex],ok=await apply(frame,{role:sectionRole,style:'browse',browseResource:clone(resource),left:colorOf(resource),right:'',crown:false,pinlines:panel.querySelector('[data-section-pinlines]').checked,opacity:panel.querySelector('[data-section-opacity]').value,fitTitleText:false},panel);if(ok)mount(container,frame);};
   insertAppearance(container,panel);
  }
- window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,fitUniformText,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
+ window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,fitUniformText,sectionLayouts,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
 })();
