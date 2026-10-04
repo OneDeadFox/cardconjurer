@@ -124,7 +124,16 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.equal(await S.attachPrototype(rules,{position:'top',left:'u',right:'r'}),true);
  assert.equal(rules.src,originalSource);assert.equal(JSON.stringify(rules.bounds),originalBounds);assert.equal(commits,startCommits+1,'Attachment is one undoable action');
  const group=rules.sectionModule,range=context.card.rulesRanges[0],prototype=context.card.frames.find(frame=>frame.designLayerId===group.partId);
- assert.equal(range.modules.length,2);assert.equal(range.modules[0].name,'Prototype');assert.equal(range.modules[0].elements.length,4,'Prototype artwork and all three fitted fields belong to one module');
+ assert.equal(range.modules.length,2);assert.equal(range.modules[0].name,'Prototype');assert.equal(range.modules[0].elements.length,4,'Prototype background, mana artwork and their fitted text fields belong to one module');
+ assert.equal(context.card.text['pt2-'+group.partId],undefined,'P/T is optional and is not inserted by default');
+ assert.ok(!context.card.frames.some(frame=>frame.prototypePiece?.kind==='pt'));
+ const visiblePrototype=await loadImage(prototype.src),prototypePixels=createCanvas(visiblePrototype.width,visiblePrototype.height);prototypePixels.getContext('2d').drawImage(visiblePrototype,0,0);assert.ok(prototypePixels.getContext('2d').getImageData(visiblePrototype.width/2,visiblePrototype.height/2,1,1).data[3]>200,'Prototype interior must remain visible without a Pinline-only mask');
+ if(process.env.PROTOTYPE_ASSET_ROOT)fs.writeFileSync('/tmp/prototype-background-fixed.png',prototypePixels.toBuffer('image/png'));
+ assert.equal(await S.updatePrototype(rules,{position:'top',left:'u',right:'r',ptFrame:true,ptText:true}),true);
+ const ptField='pt2-'+group.partId;assert.ok(context.card.text[ptField]);assert.ok(context.card.frames.some(frame=>frame.prototypePiece?.kind==='pt'));
+ assert.equal(await S.updatePrototype(rules,{position:'top',ptFrame:false,ptText:true}),true);assert.ok(context.card.text[ptField],'Removing P/T artwork alone preserves its text');assert.ok(!context.card.frames.some(frame=>frame.prototypePiece?.kind==='pt'));
+ assert.equal(await S.updatePrototype(rules,{position:'top',ptFrame:true,ptText:false}),true);assert.equal(context.card.text[ptField],undefined);assert.ok(context.card.frames.some(frame=>frame.prototypePiece?.kind==='pt'),'P/T artwork can exist independently of its text');
+ assert.equal(await S.updatePrototype(rules,{position:'top',ptFrame:false,ptText:false}),true);
  assert.equal(context.card.text.rules.text,originalField.text);assert.equal(context.card.text.rules.size,originalField.size,'Resizing the main rules container preserves its default font size');
  assert.ok(context.card.text.rules.y>originalField.y);assert.ok(context.card.text.rules.height<originalField.height);
  for(const entry of range.modules[0].elements.filter(entry=>entry.kind==='text')){const field=context.card.text[entry.key];assert.ok(field.width>0&&field.height>0);assert.ok(field.y>=outer.y-.001&&field.y+field.height<=outer.y+outer.height*group.fraction+.001,'Preset fields fit vertically inside the attached region');}
@@ -138,5 +147,7 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.equal(await S.updatePrototype(rules,{remove:true}),true);assert.equal(context.card.rulesRanges.length,0);assert.equal(context.card.frames.length,1);assert.equal(Object.keys(context.card.text).length,1);assert.equal(context.card.text.rules.text,originalField.text);assert.equal(rules.sectionModule,undefined);assert.ok(context.card.text.rules.frameAnchor,'Removal restores the original main field anchor');
  // Removing the attached module through the range also restores the main rules field.
  assert.equal(await S.attachPrototype(rules,{position:'bottom',left:'u'}),true);const attachedRange=context.card.rulesRanges[0];const attachedModule=attachedRange.modules.find(module=>module.name==='Prototype');attachedRange.modules=attachedRange.modules.filter(module=>module!==attachedModule);context.RulesRange.removeOwnedElements([attachedModule]);S.sync();assert.equal(rules.sectionModule,undefined);assert.equal(context.card.rulesRanges.length,0);assert.equal(Object.keys(context.card.text).length,1);
+ // Repair an attachment saved by the earlier renderer without losing its ability text.
+ const repairedOwner=context.card.frames[0];assert.equal(await S.attachPrototype(repairedOwner,{position:'top',left:'u'}),true);delete repairedOwner.sectionModule.partsVersion;delete repairedOwner.sectionModule.nativePrimary;assert.equal(await S.updatePrototype(repairedOwner,{position:'top',left:'r',ptFrame:false,ptText:false}),true);assert.equal(repairedOwner.sectionModule.partsVersion,2);assert.equal(context.card.text.rules.text,originalField.text);
  console.log('PASS: shared section swaps, split composition, geometry/content preservation, pinline/crown removal, preset fields, movement, rollback and serializable assets.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -83,7 +83,7 @@
   const primary=await drawResource(resource,maskNames),size={width:primary.width,height:primary.height};let rect;try{rect=alphaBounds(primary);}catch(error){if(!primaryMask)throw error;const shape=canvas(size.width,size.height);shape.getContext('2d').drawImage(await image(primaryMask.src),0,0,size.width,size.height);rect=alphaBounds(shape);}
   const renderColor=async key=>{
    const variant=style.variants[key];if(!variant)throw Error(style.label+' does not have a '+colors[key]+' appearance.');
-   const names=maskNames.slice();if(pinlines)for(const mask of variant.masks||[])if(mask.name==='Pinline')names.push(mask.name);
+   const names=maskNames.slice();if(pinlines&&primaryMask)for(const mask of variant.masks||[])if(mask.name==='Pinline')names.push(mask.name);
    const layer=await drawResource(variant,names,size),ctx=layer.getContext('2d');
    // Pinline masks span the entire card. Keep only this section's portion.
    if(pinlines&&names.length>maskNames.length){const clip=expand(rect,.004);ctx.globalCompositeOperation='destination-in';ctx.fillStyle='black';const limiter=canvas(size.width,size.height);limiter.getContext('2d').fillRect(clip.x*size.width,clip.y*size.height,clip.width*size.width,clip.height*size.height);ctx.drawImage(limiter,0,0);}
@@ -178,6 +178,58 @@
  // A rules background remains the outer container; its attached boxes share its space.
  function moduleId(prefix){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);}
  function relative(rect,container){return{x:(rect.x-container.x)/container.width,y:(rect.y-container.y)/container.height,width:rect.width/container.width,height:rect.height/container.height};}
+ const prototypeCache=new Map();
+ function renderPrototype(left,right){const key=left+":"+(right||"");if(!prototypeCache.has(key))prototypeCache.set(key,renderPrototypeArtwork(left,right).catch(error=>{prototypeCache.delete(key);throw error;}));return prototypeCache.get(key);}
+ async function renderPrototypeArtwork(left,right){
+  const style=FrameSectionCatalog.styles.find(style=>style.id==='prototype'),variant=style.variants[left];
+  if(!variant)throw Error('Prototype boxes support white, blue, black, red, green and multicolor.');
+  // Prototype rules artwork is already a cropped section on a full-card canvas.
+  // Its Pinline mask is only a border, not a mask for the complete rules interior.
+  const layer=await drawResource(variant,[]),size={width:layer.width,height:layer.height},primary=alphaBounds(layer);
+  if(right){const other=style.variants[right];if(!other)throw Error('This Prototype color is not available.');await blendColors(layer,await drawResource(other,[],size),primary);}
+  const crop=source=>{const rect=alphaBounds(source),out=canvas(rect.width*source.width,rect.height*source.height);out.getContext('2d').drawImage(source,rect.x*source.width,rect.y*source.height,rect.width*source.width,rect.height*source.height,0,0,out.width,out.height);return{src:out.toDataURL('image/png'),rect};};
+  const result={...crop(layer),primary,extras:{}};
+  for(const [index,kind] of ['mana','pt'].entries()){
+   const source=await drawResource(variant.extras[index],[],size);
+   if(right)await blendColors(source,await drawResource(style.variants[right].extras[index],[],size),primary);
+   result.extras[kind]=crop(source);
+  }
+  return result;
+ }
+ async function configurePrototypeParts(frame,options={}){
+  const group=frame.sectionModule,range=card.rulesRanges.find(item=>item.id===group.rangeId),part=card.frames.find(item=>item.designLayerId===group.partId);
+  const module=range.modules.find(item=>item.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId));
+  const rendered=await renderPrototype(options.left||group.left,options.right??group.right),base=group.baseBounds;
+  const destination={...base,height:base.height*group.fraction,y:group.position==='bottom'?base.y+base.height*(1-group.fraction):base.y};
+  part.src=rendered.src;part.image=await image(part.src);const primaryEntry=module.elements.find(entry=>entry.kind==='frame'&&entry.key===group.partId);primaryEntry.relative=clone(unit);delete primaryEntry.offset;
+  part.bounds={x:destination.x,y:destination.y,width:destination.width,height:destination.height};part.rotation=frame.rotation||0;group.lastPartBounds=bounds(part);
+  group.left=options.left||group.left;group.right=options.right??group.right;group.partsVersion=2;
+  group.pieces={manaFrame:options.manaFrame??group.pieces?.manaFrame??true,manaText:options.manaText??group.pieces?.manaText??true,ptFrame:options.ptFrame??group.pieces?.ptFrame??false,ptText:options.ptText??group.pieces?.ptText??false};
+  const fields={};
+  for(const kind of ['mana','pt']){
+   const existing=card.frames.filter(item=>item.prototypePiece?.owner===frame.designLayerId&&item.prototypePiece.kind===kind);
+   if(!group.pieces[kind+'Frame']){
+    const ids=new Set(existing.map(item=>item.designLayerId));card.frames=card.frames.filter(item=>!ids.has(item.designLayerId));module.elements=module.elements.filter(entry=>entry.kind!=='frame'||!ids.has(entry.key));
+   }else{
+    const resource=rendered.extras[kind],placed=mapRect(resource.rect,rendered.primary,destination);
+    const extra=existing[0]||{name:kind==='pt'?'Prototype Power/Toughness':'Prototype mana cost box',componentKind:kind==='pt'?'Power/Toughness':'Mana Cost',bounds:{},rotation:frame.rotation||0,masks:[],opacity:100,noThumb:true,imageFit:'stretch',fixedAppearance:true,prototypePiece:{owner:frame.designLayerId,kind}};
+    extra.src=resource.src;extra.image=await image(extra.src);extra.bounds={x:placed.x,y:placed.y,width:placed.width,height:placed.height};ensureDesignLayerId(extra);
+    if(!existing.length){card.frames.splice(card.frames.indexOf(part),0,extra);module.elements.push({kind:'frame',key:extra.designLayerId,relative:relative(placed,destination),owned:true});}
+   }
+   const fieldKey=(kind==='pt'?'pt2':'mana2')+'-'+part.designLayerId;
+   if(!group.pieces[kind+'Text']){delete card.text[fieldKey];module.elements=module.elements.filter(entry=>entry.kind!=='text'||entry.key!==fieldKey);}
+   else if(!card.text[fieldKey]){
+    const field=clone(fieldDefinitions('prototype')[kind==='pt'?'pt2':'mana2']);field.text='';field.customField=true;field.sectionOwnerId=frame.designLayerId;field.sectionField=kind==='pt'?'pt2':'mana2';FrameTextPresets.remap(field,{...rendered.primary,rotation:0},destination,false);fields[fieldKey]=field;module.elements.push({kind:'text',key:fieldKey,relative:relative(field,destination),owned:true});
+   }
+  }
+  // Correct the fitted fields of older attachments whose background was masked away.
+  if(!group.nativePrimary){for(const entry of module.elements){if(entry.kind!=='text')continue;const field=card.text[entry.key],native=fieldDefinitions('prototype')[field?.sectionField];if(!field||!native)continue;const fit=clone(native);FrameTextPresets.remap(fit,{...rendered.primary,rotation:0},destination,false);entry.relative=relative(fit,destination);delete entry.offset;Object.assign(field,{x:fit.x,y:fit.y,width:fit.width,height:fit.height,size:fit.size});}}
+  group.nativePrimary=clone(rendered.primary);group.fieldBounds={};
+  if(Object.keys(fields).length)loadTextOptions(fields,false);
+  // Rebuild the textbox selector after individually removing a preset field.
+  if(Object.keys(card.text||{}).length)loadTextOptions(card.text,true);
+  syncRuleModules();
+ }
  async function attachPrototype(frame,options={},panel){
   if(busy||!card.frames.includes(frame)||role(frame)!=='rules')return false;
   if(frame.sectionModule)return updatePrototype(frame,options,panel);
@@ -189,9 +241,9 @@
    const [mainKey,main]=candidates.find(([key,field])=>field.frameAnchor?.id===owner)||candidates[0];
    if((card.rulesRanges||[]).some(range=>range.modules.some(module=>module.elements.some(entry=>entry.kind==='text'&&entry.key===mainKey))))throw Error('This rules field already belongs to a range. Detach it before creating this rules module.');
    const style=FrameSectionCatalog.styles.find(style=>style.id==='prototype'),left=options.left||frame.sectionAppearance?.left||colorOf(frame),right=options.right||'';
-   const rendered=await renderStyle(style,'rules',left,right,true,false),fraction=.38;
+   const rendered=await renderPrototype(left,right),fraction=.38;
    const destination={...base,height:base.height*fraction,y:options.position==='bottom'?base.y+base.height*(1-fraction):base.y};
-   const placed=mapRect(rendered.outer,rendered.primary,destination);
+   const placed=mapRect(rendered.rect,rendered.primary,destination);
    const part={name:'Prototype box',componentKind:'Prototype Box',src:rendered.src,bounds:{x:placed.x,y:placed.y,width:placed.width,height:placed.height},rotation:placed.rotation||0,masks:[],opacity:100,noThumb:true,imageFit:'stretch',fixedAppearance:true};
    ensureDesignLayerId(part);part.image=await image(part.src);card.frames.splice(card.frames.indexOf(frame),0,part);
    const rangeId=moduleId('rules-section'),mainModule={id:moduleId('rules-main'),name:'Rules text',sizing:'flex',size:1,elements:[]},prototypeModule={id:moduleId('rules-prototype'),name:'Prototype',sizing:'fixed',size:destination.height*card.height,elements:[]};
@@ -201,7 +253,7 @@
    mainModule.elements.push({kind:'text',key:mainKey,relative:clone(mainRelative),owned:false});
    prototypeModule.elements.push({kind:'frame',key:part.designLayerId,relative:relative(placed,destination),owned:true});
    const fields={},definitions=fieldDefinitions('prototype');
-   for(const key of ['prototype','mana2','pt2']){
+   for(const key of ['prototype']){
     const definition=clone(definitions[key]),target=key+'-'+part.designLayerId;definition.text='';definition.customField=true;definition.sectionOwnerId=owner;definition.sectionField=key;
     FrameTextPresets.remap(definition,{...rendered.primary,rotation:0},destination,false);
     fields[target]=definition;prototypeModule.elements.push({kind:'text',key:target,relative:relative(definition,destination),owned:true});
@@ -209,9 +261,9 @@
    loadTextOptions(fields,false);
    card.rulesRanges=(card.rulesRanges||[]).concat(range);
    frame.sectionModule={rangeId,partId:part.designLayerId,mainKey,mainRelative,savedAnchor,position:options.position==='bottom'?'bottom':'top',fraction,left,right,lastOwnerBounds:bounds(frame),lastPartBounds:bounds(part),baseBounds:clone(base)};
-   syncRuleModules();await rebuildFrameLayerList();window.RulesRange?.refresh();drawFrames();drawTextBuffer();
+   await configurePrototypeParts(frame,options);syncRuleModules();await rebuildFrameLayerList();window.RulesRange?.refresh();drawFrames();drawTextBuffer();
    if(!window.CanvasDesignTools?.editsFrame(frame))commitDesignUndoSnapshot(before,'Attach Prototype rules module');
-   status(panel,'Prototype attached with fitted rules, mana cost and power/toughness fields.');return true;
+   status(panel,'Prototype attached. Its background and optional mana/P/T pieces are separate elements.');return true;
   }catch(error){await applyDesignStateSnapshot(before);status(panel,error.message);return false;}finally{busy=false;}
  }
  async function updatePrototype(frame,options={},panel){
@@ -226,8 +278,7 @@
     group.position=options.position==='bottom'?'bottom':'top';
     const part=card.frames.find(item=>item.designLayerId===group.partId);
     if(!part)throw Error('The attached Prototype artwork was removed. Remove this attachment and add it again.');
-    const left=options.left||group.left,right=options.right??group.right;
-    if(left!==group.left||right!==group.right){const style=FrameSectionCatalog.styles.find(item=>item.id==='prototype'),rendered=await renderStyle(style,'rules',left,right,true,false);part.src=rendered.src;part.image=await image(part.src);group.left=left;group.right=right;}
+    await configurePrototypeParts(frame,options);
     syncRuleModules();
    }
    await rebuildFrameLayerList();window.RulesRange?.refresh();drawFrames();drawTextBuffer();
@@ -288,7 +339,7 @@
  }
  function sync(){syncRuleModules();for(const frame of card.frames||[]){const appearance=frame.sectionAppearance;if(!appearance)continue;const current=bounds(frame);if(JSON.stringify(current)!==JSON.stringify(appearance.lastBounds)){appearance.baseBounds=mapRect(appearance.baseBounds,appearance.lastBounds,current);if(appearance.iconBounds)appearance.iconBounds=mapRect(appearance.iconBounds,appearance.lastBounds,current);appearance.lastBounds=current;}}for(const frame of card.frames||[]){const crown=frame.sectionCrown;if(!crown)continue;const owner=card.frames.find(item=>item.designLayerId===crown.owner);if(!owner)continue;const current=bounds(owner);if(JSON.stringify(current)!==JSON.stringify(crown.lastOwnerBounds)){const placed=mapRect(bounds(frame),crown.lastOwnerBounds,current);frame.bounds={x:placed.x,y:placed.y,width:placed.width,height:placed.height};frame.rotation=placed.rotation||0;crown.lastOwnerBounds=current;}}window.BossFrameTools?.syncSymbols();}
  function cutouts(context,frame){if(!frame.sectionCutouts?.length)return;context.save();context.globalCompositeOperation='destination-out';for(const cut of frame.sectionCutouts){const owner=card.frames.find(item=>item.designLayerId===cut.owner);if(!owner?.sectionAppearance&&!owner?.sectionCrown)continue;const b=bounds(owner);context.save();context.translate(scaleX(b.x)+scaleWidth(b.width)/2,scaleY(b.y)+scaleHeight(b.height)/2);context.rotate(b.rotation*Math.PI/180);context.fillStyle='black';context.fillRect(-scaleWidth(b.width)/2,-scaleHeight(b.height)/2,scaleWidth(b.width),scaleHeight(b.height));context.restore();}context.restore();}
- function restoreAppearance(frame,definition){if(!frame.sectionAppearance&&!definition.sectionAppearance&&!frame.sectionCutouts&&!definition.sectionCutouts&&!frame.sectionCrown&&!definition.sectionCrown&&!frame.sectionModule&&!definition.sectionModule)return;for(const key of ['sectionModule','sectionAppearance','sectionCrown','sectionCutouts','fixedAppearance','visualFamilyId','componentKind','designTextLayout','maskCanvasBounds','ogBounds','assetId']){if(definition[key]===undefined)delete frame[key];else frame[key]=clone(definition[key]);}frame.src=definition.src;frame.masks=clone(definition.masks||[]);Promise.all([image(frame.src).then(asset=>{frame.image=asset;}),...frame.masks.map(async mask=>{mask.image=await image(mask.src);})]).then(drawFrames).catch(()=>{});}
+ function restoreAppearance(frame,definition){if(!frame.sectionAppearance&&!definition.sectionAppearance&&!frame.sectionCutouts&&!definition.sectionCutouts&&!frame.sectionCrown&&!definition.sectionCrown&&!frame.sectionModule&&!definition.sectionModule&&!frame.prototypePiece&&!definition.prototypePiece)return;for(const key of ['prototypePiece','sectionModule','sectionAppearance','sectionCrown','sectionCutouts','fixedAppearance','visualFamilyId','componentKind','designTextLayout','maskCanvasBounds','ogBounds','assetId']){if(definition[key]===undefined)delete frame[key];else frame[key]=clone(definition[key]);}frame.src=definition.src;frame.masks=clone(definition.masks||[]);Promise.all([image(frame.src).then(asset=>{frame.image=asset;}),...frame.masks.map(async mask=>{mask.image=await image(mask.src);})]).then(drawFrames).catch(()=>{});}
  function fieldDefinitions(style){
   if(style==='adventure')return{rules:{name:'Rules Text (Right)',x:.5267,y:.65,width:.3867,height:.2358,size:.0353,font:'mplantin'},mana2:{name:'Adventure Mana Cost',x:.0814,y:.6391,width:.4,height:60/2100,size:60/1638,color:'white',align:'right',oneLine:true,manaCost:true},title2:{name:'Adventure Title',x:.0814,y:.6391,width:.4,height:.0296,size:.0296,color:'white',oneLine:true,font:'belerenb'},type2:{name:'Adventure Type',x:.0814,y:.6839,width:.4,height:.0296,size:.0296,color:'white',oneLine:true,font:'belerenb'},rules2:{name:'Adventure Rules Text',x:.0854,y:.7358,width:.3947,height:.15,size:.0353,font:'mplantin'}};
   if(style==='prototype')return{rules:{name:'Rules Text',x:129/1500,y:1565/2100,width:1242/1500,height:359/2100,size:.0295,font:'mplantin'},prototype:{name:'Prototype Rules',x:129/1500,y:1335/2100,width:1041/1500,height:193/2100,size:.0295,font:'mplantin'},mana2:{name:'Prototype Mana Cost',x:-24/1500,y:1340/2100,width:.9292,height:71/2100,size:72/2100,align:'right',oneLine:true,manaCost:true},pt2:{name:'Prototype Power/Toughness',x:.7928,y:.6935,width:.1367,height:.0372,size:.0372,color:'white',font:'belerenbsc',oneLine:true,align:'center'}};
@@ -308,10 +359,20 @@
   }
   if(sectionRole==='rules'){
    const attachment=document.createElement('details');attachment.open=true;
-   attachment.innerHTML='<summary>Attached rules boxes</summary><label>Prototype placement<select class="input" data-prototype-position><option value="top">Top</option><option value="bottom">Bottom</option></select></label><button class="input" type="button" data-prototype-add>'+ (frame.sectionModule?'Update Prototype box':'Attach Prototype box') +'</button><button class="input" type="button" data-prototype-remove>Remove Prototype box</button><p>Keeps this background. Adds fitted Prototype fields and resizes the main rules text to the remaining space. Drag the Prototype box to adjust its height.</p>';
-   attachment.querySelector('[data-prototype-position]').value=frame.sectionModule?.position||'top';
-   attachment.querySelector('[data-prototype-remove]').hidden=!frame.sectionModule;
-   attachment.querySelector('[data-prototype-add]').onclick=async()=>{if(await attachPrototype(frame,{position:attachment.querySelector('[data-prototype-position]').value,left:panel.querySelector('[data-section-left]').value,right:panel.querySelector('[data-section-split]').checked?panel.querySelector('[data-section-right]').value:''},panel))mount(container,frame);};
+   attachment.innerHTML='<summary>Attached rules boxes</summary><label>Prototype placement<select class="input" data-prototype-position><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label>Prototype color<select class="input" data-prototype-color></select></label><label><input type="checkbox" data-prototype-split> Split Prototype colors</label><label data-prototype-right-row hidden>Right Prototype color<select class="input" data-prototype-right></select></label><details><summary>Optional pieces</summary><label><input type="checkbox" data-prototype-mana-frame> Mana cost artwork</label><label><input type="checkbox" data-prototype-mana-text> Mana cost text</label><label><input type="checkbox" data-prototype-pt-frame> Power/toughness artwork</label><label><input type="checkbox" data-prototype-pt-text> Power/toughness text</label></details><button class="input" type="button" data-prototype-add>'+ (frame.sectionModule?'Update Prototype box':'Attach Prototype box') +'</button><button class="input" type="button" data-prototype-remove>Remove Prototype box</button><p>Keeps this background. Drag the Prototype box to adjust the space available to the main rules text. Optional pieces can also be selected and removed individually on the canvas.</p>';
+   const group=frame.sectionModule;
+   attachment.querySelector('[data-prototype-position]').value=group?.position||'top';
+   for(const selector of ['[data-prototype-color]','[data-prototype-right]'])for(const key of Object.keys(FrameSectionCatalog.styles.find(style=>style.id==='prototype').variants)){const option=document.createElement('option');option.value=key;option.textContent=colors[key];attachment.querySelector(selector).appendChild(option);}
+   const initialColor=group?.left||frame.sectionAppearance?.left||colorOf(frame);attachment.querySelector('[data-prototype-color]').value=['w','u','b','r','g','m'].includes(initialColor)?initialColor:'m';
+   attachment.querySelector('[data-prototype-right]').value=group?.right||'u';attachment.querySelector('[data-prototype-split]').checked=!!group?.right;attachment.querySelector('[data-prototype-right-row]').hidden=!group?.right;
+   attachment.querySelector('[data-prototype-split]').onchange=event=>{attachment.querySelector('[data-prototype-right-row]').hidden=!event.target.checked;};
+   for(const [key,selector,fallback] of [['manaFrame','mana-frame',true],['manaText','mana-text',true],['ptFrame','pt-frame',false],['ptText','pt-text',false]]){
+    let checked=group?.pieces?.[key]??fallback;
+    if(group?.partsVersion===2){const kind=key.startsWith('pt')?'pt':'mana';checked=key.endsWith('Frame')?card.frames.some(item=>item.prototypePiece?.owner===frame.designLayerId&&item.prototypePiece.kind===kind):!!card.text[(kind==='pt'?'pt2':'mana2')+'-'+group.partId];}
+    attachment.querySelector('[data-prototype-'+selector+']').checked=checked;
+   }
+   attachment.querySelector('[data-prototype-remove]').hidden=!group;
+   attachment.querySelector('[data-prototype-add]').onclick=async()=>{if(await attachPrototype(frame,{position:attachment.querySelector('[data-prototype-position]').value,left:attachment.querySelector('[data-prototype-color]').value,right:attachment.querySelector('[data-prototype-split]').checked?attachment.querySelector('[data-prototype-right]').value:'',manaFrame:attachment.querySelector('[data-prototype-mana-frame]').checked,manaText:attachment.querySelector('[data-prototype-mana-text]').checked,ptFrame:attachment.querySelector('[data-prototype-pt-frame]').checked,ptText:attachment.querySelector('[data-prototype-pt-text]').checked},panel))mount(container,frame);};
    attachment.querySelector('[data-prototype-remove]').onclick=async()=>{if(await updatePrototype(frame,{remove:true},panel))mount(container,frame);};
    panel.insertBefore(attachment,panel.querySelector('[data-section-status]'));
   }
@@ -325,5 +386,5 @@
   panel.querySelector('[data-section-browse]').onclick=async()=>{if(typeof availableFrames==='undefined'||typeof selectedFrameIndex==='undefined'||!availableFrames[selectedFrameIndex]){status(panel,'Choose a frame asset in Browse Frames first.');return;}const resource=availableFrames[selectedFrameIndex],ok=await apply(frame,{role:sectionRole,style:'browse',browseResource:clone(resource),left:colorOf(resource),right:'',crown:false,pinlines:panel.querySelector('[data-section-pinlines]').checked,opacity:panel.querySelector('[data-section-opacity]').value,fitTitleText:false},panel);if(ok)mount(container,frame);};
   insertAppearance(container,panel);
  }
- window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
+ window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
 })();
