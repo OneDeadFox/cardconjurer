@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const {createCanvas,Image}=require('@napi-rs/canvas');
+const {createCanvas,Image,loadImage}=require('@napi-rs/canvas');
 let sequence=0,commits=0;const snapshots=[];
 const palette={w:'#eeeedd',u:'#3366cc',b:'#252525',r:'#cc3333',g:'#229955',m:'#ccbb44',a:'#999999',l:'#996633',c:'#bbbbbb',v:'#777777'};
 function fixture(src){
@@ -11,7 +11,7 @@ function fixture(src){
   else if(/rules|book/.test(path))ctx.fillRect(14,174,172,86);
   else if(/crown/.test(path))ctx.fillRect(5,5,190,28);
   else {ctx.strokeStyle='black';ctx.lineWidth=3;ctx.strokeRect(10,10,180,260);}
- }else {const key=path.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/)?.[1]||'m';ctx.fillStyle=palette[key];ctx.fillRect(0,0,200,280);if(/cleartextbox/.test(path))ctx.clearRect(14,174,172,86);}
+ }else {const key=path.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/)?.[1]||'m';ctx.fillStyle=palette[key];ctx.fillRect(0,0,200,280);if(/cleartextbox/.test(path))ctx.clearRect(14,174,172,86);if(/borderless\/m15genericshowcaseframe/.test(path)){ctx.clearRect(14,174,172,86);ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(14,174,172,86);ctx.strokeStyle=palette[key];ctx.lineWidth=2;ctx.strokeRect(14,174,172,86);}}
  return image.toBuffer('image/png');
 }
 class BrowserImage extends Image {set src(value){super.src=/^(data:|blob:)/.test(value)?value:fixture(value);}get src(){return super.src;}}
@@ -45,6 +45,10 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  const a=bitmap.getContext('2d').getImageData(10,20,1,1).data,b=bitmap.getContext('2d').getImageData(bitmap.width-10,20,1,1).data;
  assert.ok(a[0]>b[0]);assert.equal(a[3],b[3]);
  assert.equal(await S.apply(right,{role:'rules',style:'clear',left:'w',opacity:100,pinlines:false}),true,'Fully transparent sections are valid');const clearPixels=createCanvas(right.image.width,right.image.height);clearPixels.getContext('2d').drawImage(right.image,0,0);assert.equal(clearPixels.getContext('2d').getImageData(20,20,1,1).data[3],0);
+ const borderless=context.FrameSectionCatalog.styles.find(style=>style.id==='borderless');assert.equal(borderless.sourcePack,'Borderless');assert.ok(borderless.label.includes('Borderless'));
+ const transparent=await S.renderStyle(borderless,'rules','u','r',true,false),transparentImage=await loadImage(transparent.src);const transparentPixels=createCanvas(transparentImage.width,transparentImage.height),tc=transparentPixels.getContext('2d');tc.drawImage(transparentImage,0,0);
+ const interior=tc.getImageData(transparentImage.width/4,transparentImage.height/2,1,1).data;assert.equal(interior[3],127,'Original translucent interior must remain translucent');const edge=tc.getImageData(0,transparentImage.height/2,1,1).data;assert.ok(edge[2]>edge[0],'Blue edge survives section extraction');const redEdge=tc.getImageData(transparentImage.width-1,transparentImage.height/2,1,1).data;assert.ok(redEdge[0]>redEdge[2],'Split red edge survives section extraction');
+ assert.equal(await S.apply(right,{role:'rules',style:'borderless',left:'u',right:'r',opacity:100,pinlines:true}),true);assert.equal(context.card.text.rules.text,'Boss ability');assert.equal(right.sectionAppearance.baseBounds.x,base.x);
  assert.equal(await S.apply(right,{role:'rules',style:'adventure',left:'u',opacity:60,pinlines:false}),true);
  assert.equal(pinline.sectionCutouts.length,0,'Disabling matched pinlines restores the original ones');
  const beforeContent=context.card.text.rules.text;S.insertFields(right);assert.equal(context.card.text.rules.text,beforeContent);
