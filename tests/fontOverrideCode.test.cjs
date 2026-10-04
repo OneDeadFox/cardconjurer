@@ -1,0 +1,8 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync('js/creator-23.js','utf8'),start=source.indexOf('function cardTextFontOverrideSize('),end=source.indexOf('function writeText(',start),context={};vm.createContext(context);vm.runInContext(source.slice(start,end),context);
+const size=context.cardTextFontOverrideSize;
+assert.equal(size('fontoverride-12',72),60);assert.equal(size('fontoverride+8',72),80);assert.equal(size('fontoverride0',72),72);assert.equal(size('fontoverride',72),72);assert.equal(size('fontoverride-100',72),1);assert.equal(size('fontsize-12',72),null);assert.equal(size('fontoverride12pt',72),null);
+const branchStart=source.indexOf("} else if (/^fontoverride"),branchEnd=source.indexOf("} else if (possibleCode.includes('fontsize'))",branchStart),branch=source.slice(branchStart+2,branchEnd);
+for(const fitted of [72,60,26]){const render={...context,possibleCode:'fontoverride-12',originalStartingTextSize:72,startingTextSize:fitted,textSize:fitted,textFontStyle:'',textFont:'mplantin',textFontExtension:'',lineContext:{}};vm.createContext(render);vm.runInContext("if(false){} "+branch+"}",render);assert.equal(render.textSize,60,'The inline override must use the original default during every fit retry');assert.equal(render.lineContext.font,'60px mplantin');}
+const reference=fs.readFileSync('creator/index.html','utf8');assert.ok(reference.includes('<h5>{fontoverride#}</h5>'));assert.ok(reference.includes('{fontoverride-12}'));
+console.log('PASS: inline font override uses the original default, accepts signed offsets, clamps size and is documented.');

@@ -3258,6 +3258,10 @@ function drawRubyHorizontal(base, annotation, ctx, paragraphCtx, lineCanvas, ann
 	ctx.fillText(base, state.currentX + opts.canvasMargin + baseOffsetX, baseY);
 	state.currentX += totalWidth;
 }
+function cardTextFontOverrideSize(code, defaultSize) {
+	const match=/^fontoverride([+-]?\d+)?$/.exec(code);
+	return match ? Math.max(1,defaultSize+(Number(match[1])||0)) : null;
+}
 function writeText(textObject, targetContext) {
 	manaSymbolsToRender = [];
 	//Most bits of info about text loaded, with defaults when needed
@@ -3687,6 +3691,9 @@ function writeText(textObject, targetContext) {
 				} else if (possibleCode.includes('fontcolor')) {
 					textColor = possibleCode.replace('fontcolor', '');
 					lineContext.fillStyle = textColor;
+				} else if (/^fontoverride([+-]?\d+)?$/.test(possibleCode)) {
+					textSize = cardTextFontOverrideSize(possibleCode, originalStartingTextSize);
+					lineContext.font = textFontStyle + textSize + 'px ' + textFont + textFontExtension;
 				} else if (possibleCode.includes('fontsize')) {
 					if (possibleCode.slice(-2) === "pt") {
 						textSize = (parseInt(possibleCode.replace('fontsize', '').replace('pt', '')) * 600 / 72) || 0;
