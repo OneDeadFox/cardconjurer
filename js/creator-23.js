@@ -1345,7 +1345,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	snapshotFrames.forEach(record => {
 		const frame=(card.frames || []).find(item => ensureDesignLayerId(item)==record.id);
 		if (frame) {
-			if (record.definition) {window.ClassLevels?.restoreAppearance(frame,record.definition);window.BossFrameTools?.restoreAppearance(frame,record.definition);window.FrameSectionTools?.restoreAppearance(frame,record.definition);}
+			if (record.definition) {window.ClassLevels?.restoreAppearance(frame,record.definition);window.BossFrameTools?.restoreAppearance(frame,record.definition);window.FrameSectionTools?.restoreAppearance(frame,record.definition);window.ContainerResizeTools?.restore(frame,record.definition);}
 			applyFrameEditorState(frame,record.state);
 			syncFrameElementVisibility(frame);
 		}
@@ -5253,6 +5253,7 @@ function drawRulesRangeModules(range) {
 }
 function drawLayoutHighlights() {
 	layoutHighlightHitAreas = [];
+	if(window.ContainerResizeTools?.draw())return;
 	if (!shouldDrawLayoutHighlights()) {
 		return;
 	}
