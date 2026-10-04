@@ -1,20 +1,20 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const {createCanvas,Image,loadImage}=require('@napi-rs/canvas');
-let sequence=0,commits=0;const snapshots=[];
+const loadedAssets=[];let sequence=0,commits=0;const snapshots=[];
 const palette={w:'#eeeedd',u:'#3366cc',b:'#252525',r:'#cc3333',g:'#229955',m:'#ccbb44',a:'#999999',l:'#996633',c:'#bbbbbb',v:'#777777'};
 function fixture(src){
  const image=createCanvas(200,280),ctx=image.getContext('2d');const path=src.toLowerCase();
  if(/mask|\/new\/(title|rules|pinline|border)\.png|book\.svg|pinline\.svg/.test(path)){
   ctx.fillStyle='black';
   if(/right.?half/.test(path)){const gradient=ctx.createLinearGradient(90,0,110,0);gradient.addColorStop(0,'rgba(0,0,0,0)');gradient.addColorStop(1,'black');ctx.fillStyle=gradient;ctx.fillRect(0,0,200,280);}
-  else if(/title/.test(path))ctx.fillRect(12,13,176,20);
+  else if(/title/.test(path)){if(/battle/.test(path))ctx.fillRect(8,10,184,28);else ctx.fillRect(12,13,176,20);}
   else if(/rules|book/.test(path))ctx.fillRect(14,174,172,86);
   else if(/crown/.test(path))ctx.fillRect(5,5,190,28);
   else {ctx.strokeStyle='black';ctx.lineWidth=3;ctx.strokeRect(10,10,180,260);}
  }else {const key=path.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/)?.[1]||'m';ctx.fillStyle=palette[key];ctx.fillRect(0,0,200,280);if(/cleartextbox/.test(path))ctx.clearRect(14,174,172,86);if(/(?:borderless|genericshowcase)\/m15genericshowcaseframe/.test(path)){ctx.clearRect(14,174,172,86);ctx.fillStyle=/genericshowcase\/m15genericshowcaseframe/.test(path)?palette[key]+'80':'rgba(0,0,0,0.5)';ctx.fillRect(14,174,172,86);ctx.strokeStyle=palette[key];ctx.lineWidth=2;ctx.strokeRect(14,174,172,86);}}
  return image.toBuffer('image/png');
 }
-class BrowserImage extends Image {set src(value){super.src=/^(data:|blob:)/.test(value)?value:fixture(value);}get src(){return super.src;}}
+class BrowserImage extends Image {set src(value){loadedAssets.push(value);super.src=/^(data:|blob:)/.test(value)?value:fixture(value);}get src(){return super.src;}}
 const context={Image:BrowserImage,card:{version:'battle',width:2814,height:2010,frames:[],text:{rules:{name:'Rules Text',text:'Boss ability',x:.1,y:.64,width:.8,height:.2,size:.04},title:{name:'Title',text:'Boss title',x:.19,y:.052,width:.7,height:.05,size:.04}}},
  document:{createElement:tag=>{assert.equal(tag,'canvas');return createCanvas(1,1);},querySelector:()=>null},
  ensureDesignLayerId:frame=>frame.designLayerId ||= 'frame-'+ ++sequence,
@@ -85,6 +85,12 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.ok(title.sectionAppearance.iconBounds);
  assert.equal(await S.apply(title,{role:'title',style:'regular',left:'w',crown:false,pinlines:false}),true);
  assert.equal(border.sectionCutouts.length,0);assert.equal(title.sectionAppearance.baseBounds.y,titleBase.y);
+ // Battle uses the left-symbol transform crown and maps its native region to the landscape title.
+ const battleTitle=layer('Title','u'),backSymbol={bossTitleOwner:'battle-title',bossSymbolFace:'back',src:'custom-back-symbol',bounds:{x:0,y:0,width:.05,height:.05}};context.card.frames.push(battleTitle,backSymbol);const battleBase=await S.originalRectangle(battleTitle,'title');
+ assert.equal(await S.apply(battleTitle,{role:'title',style:'battle',left:'u',crown:true,pinlines:true}),true);
+ assert.ok(context.card.frames.includes(backSymbol));assert.equal(backSymbol.bossSymbolFace,'back');assert.equal(backSymbol.bossTitleOwner,battleTitle.designLayerId);assert.equal(backSymbol.bounds.x,battleTitle.sectionAppearance.iconBounds.x);assert.ok(loadedAssets.includes('/img/frames/m15/transform/crowns/regular/u.png'),'Battle must use transform-front crown artwork');assert.equal(battleTitle.sectionAppearance.baseBounds.y,battleBase.y);assert.ok(battleTitle.bounds.y<battleBase.y);
+ const crownedWidth=battleTitle.bounds.width;battleTitle.bounds.width*=.8;S.sync();const movedBase=battleTitle.sectionAppearance.baseBounds.width;assert.equal(await S.apply(battleTitle,{role:'title',style:'battle',left:'u',crown:true,pinlines:true}),true);assert.ok(Math.abs(battleTitle.sectionAppearance.baseBounds.width-movedBase)<1e-8);assert.ok(Math.abs(battleTitle.bounds.width-crownedWidth*.8)<1e-8,'Reapplying a crown preserves the resized title');
+ assert.equal(await S.apply(battleTitle,{role:'title',style:'transform-back',left:'u',crown:true,pinlines:false}),true);assert.ok(loadedAssets.includes('/img/frames/m15/transform/crowns/regular/new/u.png'),'Back title uses the back transform crown');
  // Missing colors fail atomically without removing a user's layout.
  const beforeFailure=JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value);
  assert.equal(await S.apply(title,{role:'title',style:'clear',left:'v'}),false);

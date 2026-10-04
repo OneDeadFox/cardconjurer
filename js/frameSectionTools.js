@@ -68,9 +68,23 @@
    ctx.globalCompositeOperation='source-over';
    if(style.id==='prototype')for(const extra of variant.extras||[])ctx.drawImage(await drawResource(extra,[],size),0,0);
    if(crown&&sectionRole==='title'){
-    const crownStyle=style.id.startsWith('transform-')?style.id:'regular';const crownResource=FrameSectionCatalog.crowns[crownStyle]?.[key];if(!crownResource)throw Error('No legendary crown is available for this color.');
+    // Battle keeps its transform symbol on the left, like the transform-front title.
+    const crownStyle=style.id==='battle'?'transform-front':style.id.startsWith('transform-')?style.id:'regular';const crownResource=FrameSectionCatalog.crowns[crownStyle]?.[key];if(!crownResource)throw Error('No legendary crown is available for this color.');
     const masks=crownResource.masks.filter(mask=>pinlines?/With Pinlines/i.test(mask.name):/Without Pinlines/i.test(mask.name)).map(mask=>mask.name);
-    ctx.drawImage(await drawResource(crownResource,masks,size),0,0);
+    const reference=FrameSectionCatalog.styles.find(item=>item.id===crownStyle).variants[key]||FrameSectionCatalog.styles.find(item=>item.id===crownStyle).variants.m;
+    const titleMask=await image(reference.masks.find(mask=>mask.name==='Title').src),referenceCanvas=canvas(titleMask.naturalWidth||titleMask.width,titleMask.naturalHeight||titleMask.height);referenceCanvas.getContext('2d').drawImage(titleMask,0,0);
+    const from=alphaBounds(referenceCanvas),crownLayer=await drawResource(crownResource,masks,{width:referenceCanvas.width,height:referenceCanvas.height});
+    // Map the crown's native title region to this title, rather than stretching
+    // its complete portrait canvas into a landscape card canvas.
+    const sy=rect.height*size.height/(from.height*referenceCanvas.height),cap=Math.min(from.width*referenceCanvas.width/3,from.height*referenceCanvas.height*2),scale=Math.min(sy,rect.width*size.width/(cap*2));
+    const sourceLeft=from.x*referenceCanvas.width+cap,sourceRight=(from.x+from.width)*referenceCanvas.width-cap,targetLeft=rect.x*size.width+cap*scale,targetRight=(rect.x+rect.width)*size.width-cap*scale;
+    const y=(rect.y-from.y*rect.height/from.height)*size.height,height=sy*referenceCanvas.height;
+    // Preserve the icon surround and rounded end at the title's height scale;
+    // only stretch the middle of the crown for a wider landscape title.
+    const x=rect.x*size.width-from.x*referenceCanvas.width*scale;
+    ctx.drawImage(crownLayer,0,0,sourceLeft,referenceCanvas.height,x,y,sourceLeft*scale,height);
+    ctx.drawImage(crownLayer,sourceLeft,0,sourceRight-sourceLeft,referenceCanvas.height,targetLeft,y,targetRight-targetLeft,height);
+    ctx.drawImage(crownLayer,sourceRight,0,referenceCanvas.width-sourceRight,referenceCanvas.height,targetRight,y,(referenceCanvas.width-sourceRight)*scale,height);
    }
    return layer;
   };
@@ -106,6 +120,7 @@
    const previousSource=frame.src,previousBounds=bounds(frame),owner=ensureDesignLayerId(frame),appearance={role:sectionRole,style:style.id,fitTitleText:options.fitTitleText!==false,left:options.left||colorOf(frame),right:options.right||'',pinlines:options.pinlines!==false,crown:!!options.crown,baseBounds:base,sourceRegion:rendered.primary,originalFamily:frame.sectionAppearance?.originalFamily||family(frame.src),originalBounds:frame.sectionAppearance?.originalBounds||bounds(frame),opacity:Math.max(0,Math.min(100,Number(options.opacity??frame.opacity??100)))};
    const expanded=mapRect(rendered.outer,rendered.primary,base);
    if(sectionRole==='title'&&style.id.startsWith('transform-'))appearance.iconBounds=mapRect({x:style.id==='transform-back'?1737/2010:.0594,y:.0505,width:.0734,height:.0524},rendered.primary,base);
+   if(sectionRole==='title'&&style.id==='battle')appearance.iconBounds=mapRect({x:.116,y:.056,width:.047,height:.066},rendered.primary,base);
    frame.src=rendered.src;delete frame.assetId;frame.masks=[];delete frame.maskCanvasBounds;delete frame.ogBounds;delete frame.visualFamilyId;frame.fixedAppearance=true;
    if(sectionRole==='rules'&&card.version==='battle')card.bossFrameSettings={...(card.bossFrameSettings||{}),rulesOpacity:appearance.opacity};
    frame.bounds={x:expanded.x,y:expanded.y,width:expanded.width,height:expanded.height};frame.rotation=expanded.rotation||0;frame.imageFit='stretch';frame.opacity=appearance.opacity;frame.noThumb=true;frame.componentKind=sectionRole==='title'?'Title':'Rules';frame.sectionAppearance=appearance;appearance.lastBounds=bounds(frame);
@@ -117,7 +132,8 @@
    if(sectionRole==='title'){
     // A replacement title includes its own symbol; remove the previous overlay.
     const icons=card.frames.filter(item=>item.bossTitleOwner===owner||(card.version==='battle'&&item.bossTitleOwner==='battle-title'));
-    card.frames=card.frames.filter(item=>!icons.includes(item));for(const icon of icons)window.RulesRange?.removeElementReferences('frame',ensureDesignLayerId(icon));
+    if(style.id==='battle')for(const icon of icons){icon.bossTitleOwner=owner;icon.bounds=clone(appearance.iconBounds);icon.rotation=icon.bounds.rotation||0;}
+    else {card.frames=card.frames.filter(item=>!icons.includes(item));for(const icon of icons)window.RulesRange?.removeElementReferences('frame',ensureDesignLayerId(icon));}
    }
    frame.image=await image(frame.src);window.RulesRange?.updateElementRelative('frame',owner,{resizeVertical:true});await rebuildFrameLayerList();refreshGeometry(frame);drawFrames();drawTextBuffer();
    if(!window.CanvasDesignTools?.editsFrame(frame))commitDesignUndoSnapshot(before,'Change '+sectionRole+' section appearance');
