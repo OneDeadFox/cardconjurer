@@ -3704,7 +3704,7 @@ function writeText(textObject, targetContext) {
 					if (word.includes('set')) {
 						var bottomTextSubstring = card.bottomInfo.midLeft.text.substring(0, card.bottomInfo.midLeft.text.indexOf('  {savex}')).replace('{elemidinfo-set}', document.querySelector('#info-set').value || '').replace('{elemidinfo-language}', document.querySelector('#info-language').value || '');
 						justifyWidth = lineContext.measureText(bottomTextSubstring).width;
-					} else if (word.includes('number') && wordToWrite.includes('/') && !['pokemon', '8thPlaytest'].includes(card.version)) {
+					} else if (word.includes('number') && wordToWrite.includes('/') && !textObject.collectorNumberInline && !['pokemon', '8thPlaytest'].includes(card.version)) {
 						fillJustify = true;
 						wordToWrite = Array.from(wordToWrite).join(' ');
 					}
@@ -4857,6 +4857,15 @@ async function loadBottomInfo(textObjects = []) {
 	await bottomInfoEdited();
 	bottomInfoEdited();
 }
+function collectorInfoRenderFields(fields, number) {
+	// Classic collector rows used the set/language width to justify the number
+	// and position rarity. A longer number/total must keep its natural spacing.
+	const inlineNumber = String(number || '').includes('/') &&
+		fields?.topLeft?.text === '{elemidinfo-number}' &&
+		fields?.rarity?.text === '{loadx}{elemidinfo-rarity}';
+	return Object.entries(fields || {}).filter(([key]) => !inlineNumber || key !== 'rarity').map(([key, field]) =>
+		[key, inlineNumber && key === 'topLeft' ? {...field, text:'{elemidinfo-number}  {elemidinfo-rarity}', collectorNumberInline:true} : field]);
+}
 async function bottomInfoEdited() {
 	await bottomInfoContext.clearRect(0, 0, bottomInfoCanvas.width, bottomInfoCanvas.height);
 	card.infoNumber = document.querySelector('#info-number').value;
@@ -4868,7 +4877,7 @@ async function bottomInfoEdited() {
 	card.infoNote = document.querySelector('#info-note').value;
 
 	if (document.querySelector('#enableCollectorInfo').checked) {
-		for (var textObject of Object.entries(card.bottomInfo)) {
+		for (var textObject of collectorInfoRenderFields(card.bottomInfo, card.infoNumber)) {
 			if (["NOT FOR SALE", "Wizards of the Coast", "CardConjurer.com", "cardconjurer.com"].some(v => textObject[1].text.includes(v))) {
 				continue;
 			} else {
