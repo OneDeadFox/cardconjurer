@@ -72,22 +72,43 @@
  }
  function iconBounds(owner) {
   if(owner?.sectionAppearance?.iconBounds)return {...owner.sectionAppearance.iconBounds};
-  const native = battle() ? {x: .116, y: .056, width: .047, height: .066} : {x: .061, y: .052, width: .070, height: .050};
+  const source=owner?.bossSymbolOriginalSource||owner?.src||'',back=/\/transform\/.*\/back[^/]*\.png$/i.test(source),transform=/\/transform\//i.test(source);
+  const native = back ? {x:1737/2010,y:.0505,width:.0734,height:.0524} : battle()&&!transform ? {x: .116, y: .056, width: .047, height: .066} : {x: .061, y: .052, width: .070, height: .050};
   const bounds = owner?.bounds || {x: 0, y: 0, width: 1, height: 1};
   const icon = {...native, rotation: 0};
   if (owner) FrameTextPresets.remap(icon, {x:0,y:0,width:1,height:1,rotation:0}, {...bounds,rotation:owner.rotation || 0}, false);
   return icon;
  }
+ function ownerBounds(owner){return {x:0,y:0,width:1,height:1,...owner.bounds,rotation:Number(owner.rotation)||0};}
+ async function clearOriginalSymbol(owner){
+  if(owner.bossSymbolCleared)return;
+  if(!owner.image)await reload(owner);
+  const icon=iconBounds(owner),local={...icon};FrameTextPresets.remap(local,ownerBounds(owner),{x:0,y:0,width:1,height:1,rotation:0},false);
+  const bitmap=newCanvas(owner.image.naturalWidth||owner.image.width,owner.image.naturalHeight||owner.image.height),ctx=bitmap.getContext('2d');ctx.drawImage(owner.image,0,0);
+  // Keep the printed surround; remove the old glyph inside its black disk.
+  ctx.globalCompositeOperation='source-atop';ctx.fillStyle='black';ctx.beginPath();ctx.ellipse((local.x+local.width/2)*bitmap.width,(local.y+local.height/2)*bitmap.height,local.width*bitmap.width/2,local.height*bitmap.height/2,0,0,Math.PI*2);ctx.fill();
+  if(!/^data:|^blob:/.test(owner.src))owner.bossSymbolOriginalSource=owner.src;
+  owner.src=bitmap.toDataURL('image/png');delete owner.assetId;owner.bossSymbolCleared=true;await reload(owner);
+ }
+ function syncSymbols(){for(const symbol of card.frames){if(!symbol.bossTitleOwnerBounds)continue;const owner=card.frames.find(item=>item.designLayerId===symbol.bossTitleOwner);if(!owner)continue;const current=ownerBounds(owner);if(JSON.stringify(current)!==JSON.stringify(symbol.bossTitleOwnerBounds)){const placed={...symbol.bounds,rotation:symbol.rotation||0};FrameTextPresets.remap(placed,symbol.bossTitleOwnerBounds,current,false);symbol.bounds={x:placed.x,y:placed.y,width:placed.width,height:placed.height};symbol.rotation=placed.rotation||0;symbol.bossTitleOwnerBounds=current;}}}
  async function setSymbol(face, owner) {
   if (busy) return; busy = true; const before = createDesignStateSnapshot();
   try {
+   if(!owner&&battle())await prepare();
+   owner=owner||card.frames.find(item=>!item.bossTitleOwner&&(/title/i.test(label(item))||(item.masks||[]).some(mask=>mask.name==='Title')));
+   const peers=owner?card.frames.filter(item=>item===owner||(!item.bossTitleOwner&&/title/i.test(label(item))&&JSON.stringify(ownerBounds(item))===JSON.stringify(ownerBounds(owner)))):[];
+   for(const title of peers)await clearOriginalSymbol(title);
    const ownerId = owner ? ensureDesignLayerId(owner) : 'battle-title';
-   let frame = card.frames.find(item => item.bossTitleOwner === ownerId);
+   const ownerIds=new Set(peers.map(ensureDesignLayerId));ownerIds.add(ownerId);if(battle())ownerIds.add('battle-title');
+   const existing=card.frames.filter(item=>ownerIds.has(item.bossTitleOwner));let frame=existing.find(item=>item.bossTitleOwner===ownerId)||existing[0];
+   const duplicates=existing.filter(item=>item!==frame);card.frames=card.frames.filter(item=>!duplicates.includes(item));for(const item of duplicates)window.RulesRange?.removeElementReferences('frame',item.designLayerId);
    const src = iconSource(face);
    if (!frame) {
     frame = {name:'Transform symbol', src, masks:[], bounds:iconBounds(owner), opacity:100, noThumb:true, bossTitleOwner:ownerId, bossSymbolFace:face};
     ensureDesignLayerId(frame); card.frames.unshift(frame); await addFrame([],frame);
-   } else { frame.src = src; delete frame.assetId; frame.bossSymbolFace = face; await reload(frame); }
+   } else { frame.src = src; delete frame.assetId; frame.bossSymbolFace = face;frame.bossTitleOwner=ownerId;frame.bounds=iconBounds(owner);frame.rotation=frame.bounds.rotation||0; await reload(frame); }
+   if(owner)frame.bossTitleOwnerBounds=ownerBounds(owner);
+   await rebuildFrameLayerList();
    if (battle()) card.bossFrameSettings = {...settings(), symbolFace:face};
    drawFrames(); commitDesignUndoSnapshot(before, 'Change transform symbol'); status('Transform symbol replaced. Its layer remains editable.');
   } catch(error) { await applyDesignStateSnapshot(before); status(error.message); }
@@ -143,8 +164,9 @@
   finally{busy=false;refresh();}
  }
  function restoreAppearance(frame,definition) {
-  for(const key of ['bossStats','bossTitleOwner','bossSymbolFace']){if(definition[key]===undefined)delete frame[key];else frame[key]=definition[key];}
-  if((definition.bossStats||definition.bossTitleOwner)&&frame.src!==definition.src){frame.src=definition.src;reload(frame).then(drawFrames).catch(error=>status(error.message));}
+  const cleared=frame.bossSymbolCleared||definition.bossSymbolCleared;
+  for(const key of ['bossStats','bossTitleOwner','bossSymbolFace','bossTitleOwnerBounds','bossSymbolCleared','bossSymbolOriginalSource']){if(definition[key]===undefined)delete frame[key];else frame[key]=clone(definition[key]);}
+  if((cleared||definition.bossStats||definition.bossTitleOwner)&&frame.src!==definition.src){frame.src=definition.src;reload(frame).then(drawFrames).catch(error=>status(error.message));}
  }
  function mountElement(container,frame) {
   container.querySelector('.title-transform-controls')?.remove();
@@ -162,7 +184,7 @@
   generic.before(panel);panel.querySelector('#boss-add-pt').onclick=addPT;panel.querySelector('#boss-symbol-face').onchange=event=>setSymbol(event.target.value);
   panel.querySelector('#boss-rules-opacity').oninput=event=>{panel.querySelector('#boss-rules-opacity-value').textContent=event.target.value+'%';};panel.querySelector('#boss-rules-opacity').onchange=event=>setRulesOpacity(event.target.value);refresh();
  }
- window.BossFrameTools={defaultStatsBounds,compactStatsBounds,isRules,beginRules,drawRulesLayer,finishRules,setRulesOpacity,setSymbol,addPT,restoreAppearance,mountElement,refresh,iconBounds,iconSource};
+ window.BossFrameTools={defaultStatsBounds,compactStatsBounds,isRules,beginRules,drawRulesLayer,finishRules,setRulesOpacity,setSymbol,syncSymbols,addPT,restoreAppearance,mountElement,refresh,iconBounds,iconSource};
  window.addEventListener('frameworkspacechanged',refresh);window.addEventListener('creatortabchanged',refresh);
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();

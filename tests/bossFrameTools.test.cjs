@@ -16,7 +16,7 @@ const ctx={card,Image:BrowserImage,btoa:s=>Buffer.from(s).toString('base64'),fra
  async rebuildFrameLayerList(){},drawFrames(){},drawTextBuffer(){},
  loadTextOptions(fields){Object.assign(card.text,fields);},
  async addFrame(masks,frame){frame.image=await new Promise((resolve,reject)=>{const image=new BrowserImage();image.onload=()=>resolve(image);image.onerror=reject;image.src=frame.src;});},
- FrameTextPresets:{remap(field,from,to){field.x=to.x+field.x*to.width;field.y=to.y+field.y*to.height;field.width*=to.width;field.height*=to.height;}},
+ FrameTextPresets:{remap(field,from,to){field.x=to.x+(field.x-from.x)*to.width/from.width;field.y=to.y+(field.y-from.y)*to.height/from.height;field.width*=to.width/from.width;field.height*=to.height/from.height;}},
  RulesRange:{removeElementReferences(){}}
 };
 vm.createContext(ctx);vm.runInContext(fs.readFileSync('js/bossFrameTools.js','utf8'),ctx);
@@ -51,10 +51,16 @@ const tools=ctx.window.BossFrameTools;
  assert.equal(card.text.pt.frameAnchor.id,badge.designLayerId);assert.equal(card.text.defense,undefined);
  assert.ok(card.frames.some(frame=>frame.componentKind==='Title'));assert.ok(card.frames.some(frame=>frame.componentKind==='Rules'));
  assert.equal(card.frames.some(frame=>frame.componentKind==='Defense'),false);
+ const titleOwner=card.frames.find(frame=>frame.componentKind==='Title'),titleArt=createCanvas(200,140),titleCtx=titleArt.getContext('2d');titleCtx.fillStyle='gold';titleCtx.fillRect(0,0,200,140);titleCtx.fillStyle='white';titleCtx.fillRect(25,9,5,6);titleOwner.image=titleArt;titleOwner.src=titleArt.toDataURL('image/png');titleOwner.bounds={x:0,y:0,width:1,height:1};
  // Symbol changes reuse the same editable frame and preserve the title.
  await tools.setSymbol('back');const symbol=card.frames.find(frame=>frame.bossTitleOwner);
  assert.ok(symbol);const id=symbol.designLayerId;await tools.setSymbol('front');
  assert.equal(card.frames.filter(frame=>frame.bossTitleOwner).length,1);assert.equal(symbol.designLayerId,id);assert.equal(symbol.bossSymbolFace,'front');
+ assert.equal(titleOwner.bossSymbolCleared,true);const cleaned=createCanvas(200,140);cleaned.getContext('2d').drawImage(titleOwner.image,0,0);assert.deepEqual(Array.from(cleaned.getContext('2d').getImageData(27,12,1,1).data),[0,0,0,255],'Original white glyph is removed from title artwork');
+ card.frames.unshift({designLayerId:'old-global-symbol',bossTitleOwner:'battle-title',bossSymbolFace:'front',src:symbol.src,bounds:{x:0,y:0,width:.1,height:.1}});await tools.setSymbol('back',titleOwner);assert.equal(card.frames.filter(frame=>frame.bossTitleOwner).length,1,'Changing a symbol removes stale global and owner-specific duplicates');assert.equal(symbol.bossSymbolFace,'back');
+ const oldSymbolY=symbol.bounds.y;titleOwner.bounds.y+=.2;tools.syncSymbols();assert.ok(Math.abs(symbol.bounds.y-oldSymbolY-.2)<1e-8,'Replacement follows a moved title');const oldWidth=symbol.bounds.width;titleOwner.bounds.width*=.8;tools.syncSymbols();assert.ok(Math.abs(symbol.bounds.width-oldWidth*.8)<1e-8,'Replacement follows title resizing');
+ const oldTitleSource=titleOwner.src;await tools.setSymbol('front',titleOwner);assert.equal(titleOwner.src,oldTitleSource,'Repeated swaps do not rebake or distort the title');
+
  const data=JSON.parse(JSON.stringify(card,(key,value)=>key==='image'?undefined:value));assert.equal(data.bossFrameSettings.rulesOpacity,65);assert.ok(data.frames.find(frame=>frame.bossStats).src.startsWith('data:'));
  assert.ok(commits>=4);
  console.log('PASS: Boss split-mask preservation, grouped opacity, horizontal P/T replacement, symbol reuse and serializable layout.');
