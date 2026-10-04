@@ -30,14 +30,30 @@
   // Placement metadata belongs to the new frame, never an older text anchor.
   delete layout.symbol.frameAnchor;return layout;
  }
- function insert(frame,kind,cropped){if(!frame||!groups[kind])return;sync();const before=createDesignStateSnapshot(),id=ensureDesignLayerId(frame),from=cropped?regions[kind]:{x:0,y:0,width:1,height:1},to=transform(frame),fields={},native=cropped?{text:templates,symbol:{x:.9213,y:.591,width:.12,height:.041,vertical:'center',horizontal:'right'}}:nativeLayout(frame);
+ function standalonePT(frame){
+  if(frame.bossStats||/\/m15PT[^/]*\.png(?:$|[?#])|\/borderless\/pt\//i.test(frame.src||''))return true;
+  if(frame.designTextLayout?.coordinateSpace==='component'&&frame.designTextLayout.text?.pt)return true;
+  const name=frame.componentKind||frame.componentLabel||frame.name||'',b=frame.bounds||{};
+  return /power|toughness|\bpt\b|p\/t/i.test(name)&&b.width<.5&&b.height<.5&&
+   !(frame.masks||[]).some(mask=>! /^(left|right|top|bottom) half$/i.test(mask.name||''));
+ }
+ function badgeTextLayout(frame){
+  const field=clone(templates.pt);
+  // Exact M15 cropped-art bounds, so the normal badge retains its normal text.
+  remap(field,{x:.7573,y:.8848,width:.188,height:.0733},{x:0,y:0,width:1,height:1,rotation:0},false);
+  const saved=frame.designTextLayout?.text?.pt;
+  if(saved&&(frame.designTextLayout.coordinateSpace==='component'||(saved.x<.5&&saved.y<.5)))
+   ['x','y','width','height','size','font','align','color','oneLine'].forEach(key=>{if(saved[key]!==undefined)field[key]=saved[key];});
+  return {text:{pt:field}};
+ }
+ function insert(frame,kind,cropped){if(!frame||!groups[kind])return;sync();const before=createDesignStateSnapshot(),id=ensureDesignLayerId(frame),badge=kind==='pt'&&(cropped||standalonePT(frame)),from=badge?{x:0,y:0,width:1,height:1}:cropped?regions[kind]:{x:0,y:0,width:1,height:1},to=transform(frame),fields={},native=badge?badgeTextLayout(frame):cropped?{text:templates,symbol:{x:.9213,y:.591,width:.12,height:.041,vertical:'center',horizontal:'right'}}:nativeLayout(frame);
   groups[kind].forEach(role=>{let key=Object.keys(card.text||{}).find(k=>card.text[k].frameAnchor?.id===id&&card.text[k].standardRole===role);if(!key)key=!card.text[role]?.frameAnchor?role:role+'-'+id;const old=card.text[key];let field=clone(native.text[role]);field.text=old?.text||'';field.standardRole=role;field.customField=true;remap(field,from,to,false);attach(field,frame);fields[key]=field;});loadTextOptions(fields,false);
   if(kind==='type'){card.setSymbolBounds=clone(native.symbol);remap(card.setSymbolBounds,from,to,true);attach(card.setSymbolBounds,frame);resetSetSymbol();}
   drawTextBuffer();drawCard();commitDesignUndoSnapshot(before,'Insert standard frame fields');
  }
  function duplicate(source,copy){const id=ensureDesignLayerId(source),newId=ensureDesignLayerId(copy),fields={};Object.entries(card.text).forEach(([key,text])=>{if(text.frameAnchor?.id!==id)return;const field=clone(text);field.frameAnchor.id=newId;fields[key+'-'+newId]=field;});if(Object.keys(fields).length)loadTextOptions(fields,false);}
  function mount(container,frame){let panel=container.querySelector('.frame-standard-fields');if(!panel){panel=document.createElement('div');panel.className='frame-standard-fields wide';panel.innerHTML='<h3>Add standard fields</h3><label>Preset<select class="input preset-kind"><option value="title">Title and mana cost</option><option value="type">Type line and set symbol</option><option value="rules">Rules and flavor text</option><option value="pt">Power / toughness</option></select></label><label>Artwork layout<select class="input preset-layout"><option value="full">Full-card artwork (source frame placement)</option><option value="cropped">Cropped component</option></select></label><p>Uses the source frame’s field placement, adjusted to this layer’s position and size. Existing standard text is preserved. The type preset positions the current rarity-colored set symbol.</p><button type="button" class="input preset-add">Insert fields</button>';container.appendChild(panel);}
-  panel.hidden=!frame;window.BossFrameTools?.mountElement(container,frame);if(!frame)return;const name=(frame.componentLabel||frame.name||'').toLowerCase();panel.querySelector('.preset-kind').value=/power|toughness|\bpt\b/.test(name)?'pt':/type/.test(name)?'type':/rules|text/.test(name)?'rules':'title';panel.querySelector('.preset-add').onclick=()=>insert(frame,panel.querySelector('.preset-kind').value,panel.querySelector('.preset-layout').value==='cropped');
+  panel.hidden=!frame;window.BossFrameTools?.mountElement(container,frame);if(!frame)return;const name=(frame.componentKind||frame.componentLabel||frame.name||'').toLowerCase();panel.querySelector('.preset-kind').value=/power|toughness|\bpt\b|p\/t/.test(name)?'pt':/type/.test(name)?'type':/rules|text/.test(name)?'rules':'title';if(panel.querySelector('.preset-kind').value==='pt')panel.querySelector('.preset-layout').value=standalonePT(frame)?'cropped':'full';panel.querySelector('.preset-add').onclick=()=>insert(frame,panel.querySelector('.preset-kind').value,panel.querySelector('.preset-layout').value==='cropped');
  }
  window.FrameTextPresets={insert,sync,duplicate,mount,remap,templates};
 })();
