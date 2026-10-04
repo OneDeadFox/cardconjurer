@@ -95,9 +95,13 @@
 		if(!target)return;
 		const bounds=entry.kind==='text'?target:target.bounds,original={x:bounds.x,y:bounds.y,width:bounds.width,height:bounds.height},before=createDesignStateSnapshot(),preview=document.querySelector('#rules-module-preview'),rect=preview.getBoundingClientRect(),action=event.target.dataset.action||'move',startX=event.clientX,startY=event.clientY;
 		const select=document.querySelector('#rules-module-elements');select.value=index;
+		document.querySelector('#rules-module-replace').disabled=entry.kind!=='frame';
+		let moved=false;
 		preview.querySelectorAll('.module-part').forEach(item=>{item.style.outline=item===part?'2px solid white':'';item.classList.toggle('selected',item===part);});
 		part.setPointerCapture(event.pointerId);
 		function move(e){
+			if(!moved&&Math.hypot(e.clientX-startX,e.clientY-startY)<3)return;
+			moved=true;
 			const dx=(e.clientX-startX)/rect.width*moduleBounds.width,dy=(e.clientY-startY)/rect.height*moduleBounds.height,next={...original};
 			if(action==='move'){next.x+=dx;next.y+=dy;}
 			else{
@@ -119,10 +123,11 @@
 		function finish(e){
 			part.removeEventListener('pointermove',move);part.removeEventListener('pointerup',finish);part.removeEventListener('pointercancel',cancel);
 			if(part.hasPointerCapture(e.pointerId))part.releasePointerCapture(e.pointerId);
+			if(!moved)return;
 			RulesRange.updateElementRelative(entry.kind,entry.key,{resizeVertical:action.includes('top')||action.includes('bottom')});
 			RulesRange.syncElements();commitDesignUndoSnapshot(before,'Move or resize module element');refreshModule();
 		}
-		function cancel(e){part.removeEventListener('pointermove',move);part.removeEventListener('pointerup',finish);part.removeEventListener('pointercancel',cancel);if(part.hasPointerCapture(e.pointerId))part.releasePointerCapture(e.pointerId);Object.assign(bounds,original);RulesRange.syncElements();refreshModule();}
+		function cancel(e){part.removeEventListener('pointermove',move);part.removeEventListener('pointerup',finish);part.removeEventListener('pointercancel',cancel);if(part.hasPointerCapture(e.pointerId))part.releasePointerCapture(e.pointerId);if(moved){Object.assign(bounds,original);RulesRange.syncElements();refreshModule();}}
 		part.addEventListener('pointermove',move);part.addEventListener('pointerup',finish);part.addEventListener('pointercancel',cancel);
 		event.preventDefault();
 	}
