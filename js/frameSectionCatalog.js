@@ -3458,5 +3458,34 @@ window.FrameSectionCatalog = {
         ]
       }
     }
+  },
+  "crownCovers": {
+    "regular": {
+      "src": "/img/black.png",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 1,
+        "height": 0.04868514570007108
+      }
+    },
+    "transform-front": {
+      "src": "/img/black.png",
+      "bounds": {
+        "x": 0.0394,
+        "y": 0.0277,
+        "width": 0.9214,
+        "height": 0.0177
+      }
+    },
+    "transform-back": {
+      "src": "/img/black.png",
+      "bounds": {
+        "x": 0.0394,
+        "y": 0.0277,
+        "width": 0.9214,
+        "height": 0.0177
+      }
+    }
   }
 };
