@@ -231,7 +231,7 @@
    }
   }
   // Correct the fitted fields of older attachments whose background was masked away.
-  if(!group.nativePrimary){for(const entry of module.elements){if(entry.kind!=='text')continue;const field=card.text[entry.key],native=fieldDefinitions('prototype')[field?.sectionField];if(!field||!native)continue;const fit=clone(native);FrameTextPresets.remap(fit,{...rendered.primary,rotation:0},destination,false);entry.relative=relative(fit,destination);delete entry.offset;Object.assign(field,{x:fit.x,y:fit.y,width:fit.width,height:fit.height,size:fit.size});}}
+  if(!group.nativePrimary){for(const entry of module.elements){if(entry.kind!=='text')continue;const field=card.text[entry.key],native=fieldDefinitions('prototype')[field?.sectionField];if(!field||!native)continue;const fit=clone(native);FrameTextPresets.remap(fit,{...rendered.primary,rotation:0},destination,false);entry.relative=relative(fit,destination);delete entry.offset;Object.assign(field,{x:fit.x,y:fit.y,width:fit.width,height:fit.height,size:field.sectionField==='prototype'?(Number(card.text[group.mainKey]?.size)||.038):fit.size});}}
   group.nativePrimary=clone(rendered.primary);group.fieldBounds={};
   if(Object.keys(fields).length)loadTextOptions(fields,false);
   // Rebuild the textbox selector after individually removing a preset field.
@@ -264,11 +264,12 @@
    for(const key of ['prototype']){
     const definition=clone(definitions[key]),target=key+'-'+part.designLayerId;definition.text='';definition.customField=true;definition.sectionOwnerId=owner;definition.sectionField=key;
     FrameTextPresets.remap(definition,{...rendered.primary,rotation:0},destination,false);
+    definition.size=Number(main.size)||.038;
     fields[target]=definition;prototypeModule.elements.push({kind:'text',key:target,relative:relative(definition,destination),owned:true});
    }
    loadTextOptions(fields,false);
    card.rulesRanges=(card.rulesRanges||[]).concat(range);
-   frame.sectionModule={rangeId,partId:part.designLayerId,mainKey,mainRelative,savedAnchor,position:options.position==='bottom'?'bottom':'top',fraction,left,right,lastOwnerBounds:bounds(frame),lastPartBounds:bounds(part),baseBounds:clone(base)};
+   frame.sectionModule={rangeId,partId:part.designLayerId,mainKey,mainRelative,savedAnchor,position:options.position==='bottom'?'bottom':'top',fraction,left,right,rulesFontVersion:1,lastOwnerBounds:bounds(frame),lastPartBounds:bounds(part),baseBounds:clone(base)};
    await configurePrototypeParts(frame,options);syncRuleModules();await rebuildFrameLayerList();window.RulesRange?.refresh();drawFrames();drawTextBuffer();
    if(!window.CanvasDesignTools?.editsFrame(frame))commitDesignUndoSnapshot(before,'Attach Prototype rules module');
    status(panel,'Prototype attached. Its background and optional mana/P/T pieces are separate elements.');return true;
@@ -299,6 +300,20 @@
   const restored=mapRect(group.mainRelative,unit,{...group.baseBounds,rotation:frame.rotation||0});Object.assign(field,{x:restored.x,y:restored.y,width:restored.width,height:restored.height,rotation:restored.rotation});
   if(group.savedAnchor)field.frameAnchor={...group.savedAnchor,last:bounds(frame)};
  }
+ function repairPrototypeRulesDefault(frame){
+  const group=frame.sectionModule;if(!group||group.rulesFontVersion===1)return;
+  const field=card.text?.['prototype-'+group.partId],main=card.text?.[group.mainKey],range=(card.rulesRanges||[]).find(item=>item.id===group.rangeId);
+  if(!field||!main)return;
+  const entry=range?.modules.flatMap(module=>module.elements).find(entry=>entry.kind==='text'&&entry.key==='prototype-'+group.partId);
+  // Repair only a generated, unstyled default. Preserve explicit size overrides
+  // and style families, and leave the text box's geometry unchanged.
+  const nativeHeight=group.nativePrimary?.height;
+  const generatedSizes=nativeHeight?[group.fraction,.38].map(fraction=>.0295*group.baseBounds.height*fraction/nativeHeight):[];
+  if(!entry?.textFamilyId&&(field.font||'mplantin')==='mplantin'&&!Number(field.fontSize)&&generatedSizes.some(size=>Math.abs(size-Number(field.size))<.000001)){
+   field.size=Number(main.size)||.038;delete group.uniformSize;uniformRulesCache.delete(group.rangeId);
+  }
+  group.rulesFontVersion=1;
+ }
  function uniformRulesFields(frame){const group=frame.sectionModule;if(!group)return[];return [group.mainKey,'prototype-'+group.partId].map(key=>({key,field:card.text?.[key]})).filter(item=>item.field&&!item.field.hidden);}
  function defaultPixelSize(field){return Math.max(1,(Number(field.size)||.038)*card.height+(parseInt(field.fontSize||'0',10)||0));}
  function setUniformRulesSize(frame,size,enabled){for(const {field} of uniformRulesFields(frame)){field.rangeUniformTextSize=enabled;field.rangeFontReduction=enabled?Math.max(0,defaultPixelSize(field)-size):0;}}
@@ -306,7 +321,7 @@
  async function fitUniformText(fits){
   syncRuleModules();
   for(const frame of card.frames||[]){
-   const group=frame.sectionModule;if(!group)continue;
+   const group=frame.sectionModule;if(!group)continue;repairPrototypeRulesDefault(frame);
    const range=(card.rulesRanges||[]).find(item=>item.id===group.rangeId),fields=uniformRulesFields(frame);
    if(!range?.uniformTextSize||fields.length<2){setUniformRulesSize(frame,0,false);uniformRulesCache.delete(group.rangeId);continue;}
    const max=Math.max(1,Math.floor(Math.min(...fields.map(({field})=>defaultPixelSize(field)))));
@@ -322,7 +337,7 @@
  }
  function syncRuleModules(){
   for(const frame of card.frames||[]){
-   const group=frame.sectionModule;if(!group)continue;
+   const group=frame.sectionModule;if(!group)continue;repairPrototypeRulesDefault(frame);
    const range=(card.rulesRanges||[]).find(item=>item.id===group.rangeId),part=card.frames.find(item=>item.designLayerId===group.partId);
    let current=bounds(frame),rangeChanged=false;
    if(range&&['x','y','width','height'].some(key=>Math.abs(range.bounds[key]-group.baseBounds[key])>1e-9)&&JSON.stringify(current)===JSON.stringify(group.lastOwnerBounds)){
