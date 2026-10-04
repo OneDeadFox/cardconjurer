@@ -35,6 +35,7 @@ assert.equal(S.role({name:'White Frame',masks:[{name:'Title'},{name:'Rules'}]}),
 class Control {
  constructor(){this.options=[];this.controls=new Map();this.value='';}
  appendChild(child){this.options.push(child);}
+ insertBefore(child){this.options.push(child);}
  querySelector(selector){if(!this.controls.has(selector))this.controls.set(selector,new Control());return this.controls.get(selector);}
  remove(){}
 }
@@ -91,11 +92,23 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.ok(context.card.frames.includes(backSymbol));assert.equal(backSymbol.bossSymbolFace,'back');assert.equal(backSymbol.bossTitleOwner,battleTitle.designLayerId);assert.equal(backSymbol.bounds.x,battleTitle.sectionAppearance.iconBounds.x);assert.ok(loadedAssets.includes('/img/frames/m15/transform/crowns/regular/u.png'),'Battle must use transform-front crown artwork');assert.equal(battleTitle.sectionAppearance.baseBounds.y,battleBase.y);assert.ok(battleTitle.bounds.y<battleBase.y);
  const crownedWidth=battleTitle.bounds.width;battleTitle.bounds.width*=.8;S.sync();const movedBase=battleTitle.sectionAppearance.baseBounds.width;assert.equal(await S.apply(battleTitle,{role:'title',style:'battle',left:'u',crown:true,pinlines:true}),true);assert.ok(Math.abs(battleTitle.sectionAppearance.baseBounds.width-movedBase)<1e-8);assert.ok(Math.abs(battleTitle.bounds.width-crownedWidth*.8)<1e-8,'Reapplying a crown preserves the resized title');
  assert.equal(await S.apply(battleTitle,{role:'title',style:'transform-back',left:'u',crown:true,pinlines:false}),true);assert.ok(loadedAssets.includes('/img/frames/m15/transform/crowns/regular/new/u.png'),'Back title uses the back transform crown');
+ // Crown-only actions preserve uploaded/custom title artwork and all title settings.
+ const customTitle={name:'Custom Battle Title',componentKind:'Title',src:'/custom/my-title.png',bounds:{x:.2,y:.12,width:.65,height:.08},rotation:7,masks:[{name:'Title',src:'/custom/maskTitle.png'}],opacity:72},customBorder={name:'Border',componentKind:'Border',src:'/custom/border.png',bounds:{x:.2,y:.12,width:.65,height:.08},rotation:7,masks:[]};context.ensureDesignLayerId(customTitle);context.card.frames.push(customTitle,customBorder);
+ const originalTitle=JSON.stringify(customTitle),originalText=JSON.stringify(context.card.text);
+ assert.equal(await S.changeCrown(customTitle,{left:'u',right:'g',pinlines:false}),true);
+ assert.equal(JSON.stringify(customTitle),originalTitle,'Adding a crown must not rewrite the selected title');assert.equal(JSON.stringify(context.card.text),originalText,'Crown editing must not move text or alter typography');
+ const addedCrown=context.card.frames.find(item=>item.sectionCrown?.owner===customTitle.designLayerId);assert.ok(addedCrown);assert.equal(addedCrown.sectionCrown.right,'g');const savedCrown=JSON.parse(JSON.stringify(addedCrown,(key,value)=>key==='image'?undefined:value));assert.equal(savedCrown.sectionCrown.owner,customTitle.designLayerId);assert.ok(savedCrown.src.startsWith('data:image/png'));assert.ok(customBorder.sectionCutouts.some(cut=>cut.owner===addedCrown.designLayerId));
+ assert.equal(await S.changeCrown(customTitle,{left:'r',pinlines:true}),true);assert.equal(JSON.stringify(customTitle),originalTitle);assert.equal(context.card.frames.filter(item=>item.sectionCrown?.owner===customTitle.designLayerId).length,1,'Updating replaces only the crown');
+ const attached=context.card.frames.find(item=>item.sectionCrown?.owner===customTitle.designLayerId),oldCrownX=attached.bounds.x;customTitle.bounds.x+=.03;S.sync();assert.ok(Math.abs(attached.bounds.x-oldCrownX-.03)<1e-8,'Crown follows its title');customTitle.bounds.x-=.03;S.sync();
+ assert.equal(await S.changeCrown(customTitle,{remove:true}),true);assert.equal(JSON.stringify(customTitle),originalTitle);assert.ok(!context.card.frames.some(item=>item.sectionCrown?.owner===customTitle.designLayerId));assert.equal(customBorder.sectionCutouts.length,0,'Removing crown restores border');
+ // Legacy baked crowns recover the saved title style, never the pending UI choice.
+ const previousStyle=battleTitle.sectionAppearance.style;assert.equal(await S.changeCrown(battleTitle,{remove:true}),true);assert.equal(battleTitle.sectionAppearance.style,previousStyle);assert.equal(battleTitle.sectionAppearance.crown,false);
  // Missing colors fail atomically without removing a user's layout.
  const beforeFailure=JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value);
  assert.equal(await S.apply(title,{role:'title',style:'clear',left:'v'}),false);
  assert.equal(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value),beforeFailure);
  assert.ok(commits>=5);assert.equal(snapshots[0].frames.length,3,'Undo snapshot includes original separate color layers');
  const saved=JSON.parse(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value));assert.ok(saved.frames.find(frame=>frame.sectionAppearance)?.src.startsWith('data:'));
+ const liveTitle=context.card.frames.find(item=>item.designLayerId===customTitle.designLayerId);const beforeBadCrown=JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value);assert.equal(await S.changeCrown(liveTitle,{left:'v'}),false);assert.equal(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value),beforeBadCrown,'Failed crown updates restore the previous crown and title');
  console.log('PASS: shared section swaps, split composition, geometry/content preservation, pinline/crown removal, preset fields, movement, rollback and serializable assets.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
