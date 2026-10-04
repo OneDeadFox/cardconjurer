@@ -267,7 +267,7 @@
 								<option value='landscape'>Landscape</option>
 							</select>
 							<h5 id='card-orientation-status' class='padding margin-bottom input-description'>Portrait canvas. Changing orientation rotates every editable layout field and frame component together.</h5>
-							<button class='input margin-bottom' onclick='undoDesignChange();'>Undo Last Design Change (Ctrl+Z)</button>
+							<div class='input-grid margin-bottom'><button class='input' onclick='undoDesignChange();'>Undo Design Change (Ctrl+Z)</button><button class='input' onclick='redoDesignChange();'>Redo Design Change (Ctrl+Y)</button></div>
 							<h5 id='design-undo-status' class='padding margin-bottom input-description'>No design changes to undo. Up to 30 changes are retained.</h5>
 							<h5 id='frame-decomposition-status' class='padding input-description'>Newly added unmasked built-in frames will be split into editable components when this tab opens.</h5>
 </div>

@@ -1132,6 +1132,7 @@ function ensureFrameEditorDefaults(frame) {
 
 var DESIGN_UNDO_LIMIT = 30;
 var designUndoHistory = [];
+var designRedoHistory = [];
 var designEditorUndoStart = null;
 var designUndoApplying = false;
 var designLayerSequence = 0;
@@ -1248,18 +1249,38 @@ function createDesignStateSnapshot() {
 		}
 	};
 }
+function designUndoComparableState(snapshot) {
+	const state=cloneDesignValue(snapshot);
+	for (const field of Object.values(state.text||{})) {
+		delete field.text;
+		delete field.rangeFontReduction;
+		delete field.rangeUniformTextSize;
+		delete field.rangeClip;
+	}
+	for (const frame of state.frames||[]) if(frame.definition?.sectionModule) delete frame.definition.sectionModule.uniformSize;
+	return state;
+}
 function designStatesMatch(left, right) {
-	return JSON.stringify(left) === JSON.stringify(right);
+	return JSON.stringify(designUndoComparableState(left)) === JSON.stringify(designUndoComparableState(right));
+}
+function designSnapshotWithCurrentText(snapshot) {
+	const state=cloneDesignValue(snapshot);
+	for (const [key,field] of Object.entries(state.text||{})) {
+		const current=card.text?.[key];
+		if(current&&Object.prototype.hasOwnProperty.call(current,'text'))field.text=current.text;
+	}
+	return state;
 }
 function updateDesignUndoStatus(message) {
 	const status = document.querySelector('#design-undo-status');
 	if (!status) return;
-	status.textContent = message || (designUndoHistory.length
+	status.textContent = (message || (designUndoHistory.length
 		? designUndoHistory.length + ' change' + (designUndoHistory.length == 1 ? '' : 's') + ' available to undo (maximum ' + DESIGN_UNDO_LIMIT + ').'
-		: 'No design changes to undo. Up to ' + DESIGN_UNDO_LIMIT + ' changes are retained.');
+		: 'No design changes to undo. Up to ' + DESIGN_UNDO_LIMIT + ' changes are retained.')) + (designRedoHistory.length ? ' '+designRedoHistory.length+' change'+(designRedoHistory.length===1?'':'s')+' available to redo.' : '');
 }
 function clearDesignUndoHistory() {
 	designUndoHistory = [];
+	designRedoHistory = [];
 	designEditorUndoStart = null;
 	updateDesignUndoStatus();
 }
@@ -1268,6 +1289,7 @@ function commitDesignUndoSnapshot(before, label) {
 	const after = createDesignStateSnapshot();
 	if (designStatesMatch(before, after)) return false;
 	designUndoHistory.push({state:before, label:label || 'Design change'});
+	designRedoHistory=[];
 	if (designUndoHistory.length > DESIGN_UNDO_LIMIT) {
 		designUndoHistory.splice(0, designUndoHistory.length - DESIGN_UNDO_LIMIT);
 	}
@@ -1380,16 +1402,43 @@ async function undoDesignChange() {
 		updateDesignUndoStatus('No design changes are available to undo.');
 		return false;
 	}
-	const entry=designUndoHistory.pop();
+	const entry=designUndoHistory.pop(),current=createDesignStateSnapshot();
+	designEditorUndoStart=null;
 	designUndoApplying=true;
 	try {
-		await applyDesignStateSnapshot(entry.state);
+		await applyDesignStateSnapshot(designSnapshotWithCurrentText(entry.state));
+		designRedoHistory.push({state:current,label:entry.label});
 		updateDesignUndoStatus('Undid: '+entry.label+'. '+designUndoHistory.length+' earlier change'+(designUndoHistory.length==1?'':'s')+' remain.');
 		return true;
+	} catch(error) {
+		designUndoHistory.push(entry);
+		throw error;
 	} finally {
 		designUndoApplying=false;
 	}
 }
+async function redoDesignChange() {
+	if (!designRedoHistory.length || designUndoApplying) {
+		updateDesignUndoStatus('No design changes are available to redo.');
+		return false;
+	}
+	const entry=designRedoHistory.pop(),current=createDesignStateSnapshot();
+	designEditorUndoStart=null;
+	designUndoApplying=true;
+	try {
+		await applyDesignStateSnapshot(designSnapshotWithCurrentText(entry.state));
+		designUndoHistory.push({state:current,label:entry.label});
+		if(designUndoHistory.length>DESIGN_UNDO_LIMIT)designUndoHistory.shift();
+		updateDesignUndoStatus('Redid: '+entry.label+'.');
+		return true;
+	} catch(error) {
+		designRedoHistory.push(entry);
+		throw error;
+	} finally {
+		designUndoApplying=false;
+	}
+}
+
 function getSelectedTextDefault() {
 	const key=Object.keys(card.text||{})[selectedTextIndex];
 	return {key:key,value:key?card.designDefaults?.text?.[key]:null};
@@ -1466,13 +1515,15 @@ function initializeDesignUndoInteractions() {
 	document.addEventListener('wheel',beginDesignEditorUndo,true);
 	document.addEventListener('change',finishDesignEditorUndo);
 	document.addEventListener('keydown',event => {
-		if (!(event.ctrlKey||event.metaKey) || event.key.toLowerCase()!='z' || event.shiftKey) return;
+		if (!(event.ctrlKey||event.metaKey)) return;
+		const key=event.key.toLowerCase(),redo=key==='y'||key==='z'&&event.shiftKey;
+		if(key!=='z'&&key!=='y')return;
 		const moduleName=event.target.matches?.('#rules-range-module-name') &&
 			event.target.value === window.RulesRange?.getSelectedModule()?.name;
-		const editingText=!moduleName && event.target.matches?.('textarea, input[type="text"], input[type="url"], input[type="search"]');
-		if (activeFrameWorkspace!='design' || editingText || !designUndoHistory.length) return;
+		const editingText=!moduleName && (event.target.matches?.('textarea, input[type="text"], input[type="url"], input[type="search"]') || event.target.isContentEditable || event.target.tagName==='INPUT'&&!event.target.getAttribute('type'));
+		if (activeFrameWorkspace!='design' || editingText || !(redo?designRedoHistory.length:designUndoHistory.length)) return;
 		event.preventDefault();
-		undoDesignChange();
+		if(redo)redoDesignChange();else undoDesignChange();
 	});
 	updateDesignUndoStatus();
 }

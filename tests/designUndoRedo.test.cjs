@@ -1,0 +1,26 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync('js/creator-23.js','utf8'),clone=value=>JSON.parse(JSON.stringify(value));
+const section=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
+const status={},listeners={};let fail=false;
+const context={card:{text:{rules:{text:'Original ability',x:.1,size:.0362}},frames:[]},DESIGN_UNDO_LIMIT:30,designUndoHistory:[],designRedoHistory:[],designUndoApplying:false,designEditorUndoStart:null,activeFrameWorkspace:'design',cloneDesignValue:clone,
+ document:{querySelector:()=>status,body:{dataset:{}},addEventListener:(type,callback)=>{listeners[type]=callback;}},window:{RulesRange:{getSelectedModule:()=>({name:'Level 2'})}},
+ createDesignStateSnapshot(){return clone(context.card);},async applyDesignStateSnapshot(state){if(fail)throw Error('restore failed');context.card=clone(state);},beginDesignEditorUndo(){},finishDesignEditorUndo(){}};
+vm.createContext(context);
+vm.runInContext(section('function designUndoComparableState(', 'function setDesignPlacementInputs(')+section('async function undoDesignChange()', 'function getSelectedTextDefault()'),context);
+// The next function after initialization is not needed: take the balanced function.
+function functionSource(name){const start=source.indexOf('function '+name+'('),brace=source.indexOf('{',start);let depth=0;for(let i=brace;i<source.length;i++){if(source[i]==='{')depth++;if(source[i]==='}'&&!--depth)return source.slice(start,i+1);}}
+vm.runInContext(functionSource('initializeDesignUndoInteractions'),context);
+(async()=>{
+ const before=context.createDesignStateSnapshot();context.card.text.rules.x=.2;assert.equal(context.commitDesignUndoSnapshot(before,'Move rules'),true);
+ context.card.text.rules.text='New typed ability';assert.equal(await context.undoDesignChange(),true);assert.equal(context.card.text.rules.x,.1);assert.equal(context.card.text.rules.text,'New typed ability');assert.equal(context.designRedoHistory.length,1);
+ const typing=context.createDesignStateSnapshot();context.card.text.rules.text='';context.card.text.rules.rangeFontReduction=9;assert.equal(context.commitDesignUndoSnapshot(typing,'Edit canvas element'),false,'Typing and derived fitting alone must not create design history');assert.equal(context.designRedoHistory.length,1,'Typing must not discard design redo');
+ assert.equal(await context.redoDesignChange(),true);assert.equal(context.card.text.rules.x,.2);assert.equal(context.card.text.rules.text,'','Redo must preserve intentionally cleared text');
+ const add=context.createDesignStateSnapshot();context.card.text.extra={text:'',x:.3,size:.03};context.commitDesignUndoSnapshot(add,'Add field');context.card.text.extra.text='Typed after creation';await context.undoDesignChange();assert.equal(context.card.text.extra,undefined,'Undoing field creation still removes the field');await context.redoDesignChange();assert.equal(context.card.text.extra.text,'Typed after creation','Redo restores the removed field with its latest content');
+ const deletion=context.createDesignStateSnapshot();delete context.card.text.extra;context.commitDesignUndoSnapshot(deletion,'Remove field');await context.undoDesignChange();assert.equal(context.card.text.extra.text,'Typed after creation');context.card.text.rules.text='Latest rules';await context.redoDesignChange();assert.equal(context.card.text.extra,undefined);assert.equal(context.card.text.rules.text,'Latest rules');
+ await context.undoDesignChange();const style=context.createDesignStateSnapshot();context.card.text.rules.size=.04;context.commitDesignUndoSnapshot(style,'Change font');assert.equal(context.designRedoHistory.length,0,'A new design edit discards the redo branch');context.card.text.rules.text='Keep content with font undo';await context.undoDesignChange();assert.equal(context.card.text.rules.size,.0362);assert.equal(context.card.text.rules.text,'Keep content with font undo');
+ const undoCount=context.designUndoHistory.length,redoCount=context.designRedoHistory.length;fail=true;await assert.rejects(context.redoDesignChange(),/restore failed/);fail=false;assert.equal(context.designUndoHistory.length,undoCount);assert.equal(context.designRedoHistory.length,redoCount,'Failed restores retain the redo entry');
+ context.initializeDesignUndoInteractions();let prevented=0;const button={matches:()=>false,tagName:'BUTTON'};listeners.keydown({ctrlKey:true,key:'y',target:button,preventDefault(){prevented++;}});await new Promise(resolve=>setImmediate(resolve));assert.equal(prevented,1);assert.equal(context.card.text.rules.size,.04,'Ctrl+Y redoes the latest design edit');
+ await context.undoDesignChange();const textarea={matches:selector=>selector.includes('textarea'),tagName:'TEXTAREA'};listeners.keydown({ctrlKey:true,key:'y',target:textarea,preventDefault(){prevented++;}});assert.equal(prevented,1,'Typing controls retain native text redo');
+ context.clearDesignUndoHistory();assert.equal(context.designUndoHistory.length,0);assert.equal(context.designRedoHistory.length,0);
+ console.log('PASS: design-only undo/redo, content preservation, field lifecycle, redo branching, failed restore and keyboard shortcuts.');
+})().catch(error=>{console.error(error);process.exitCode=1;});
