@@ -1224,6 +1224,7 @@ function createDesignStateSnapshot() {
 		},
 		frames:(card.frames || []).map(frame => ({id:ensureDesignLayerId(frame), state:getFrameEditorState(frame), definition:cloneDesignFrameDefinition(frame)})),
 		text:cloneDesignValue(card.text || {}),
+		bossFrameSettings:cloneDesignValue(card.bossFrameSettings || null),
 		rulesRanges:cloneDesignValue(card.rulesRanges || []),
 		dungeonModules:cloneDesignValue(card.dungeonModules || []),
 		dungeonWallTexture:card.dungeonWallTexture||'',
@@ -1322,7 +1323,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	snapshotFrames.forEach(record => {
 		const frame=(card.frames || []).find(item => ensureDesignLayerId(item)==record.id);
 		if (frame) {
-			if (record.definition) window.ClassLevels?.restoreAppearance(frame,record.definition);
+			if (record.definition) {window.ClassLevels?.restoreAppearance(frame,record.definition);window.BossFrameTools?.restoreAppearance(frame,record.definition);}
 			applyFrameEditorState(frame,record.state);
 			syncFrameElementVisibility(frame);
 		}
@@ -1330,6 +1331,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	card.text=cloneDesignValue(snapshot.text||{});
 	if (Object.keys(card.text).length) loadTextOptions(card.text,true);
 	else if (document.querySelector('#text-options')) document.querySelector('#text-options').innerHTML='';
+	card.bossFrameSettings=cloneDesignValue(snapshot.bossFrameSettings||null);
 	card.rulesRanges=cloneDesignValue(snapshot.rulesRanges||[]);
 	if(snapshot.layoutIdentity)Object.assign(card,cloneDesignValue(snapshot.layoutIdentity));
 	card.dungeonLayoutLocked=!!snapshot.dungeonLayoutLocked;
@@ -1586,6 +1588,7 @@ function resetSelectedFrame() {
 }
 
 var frameComponentRecipes = {
+	'Battle': ['Border', 'Defense', 'Title', 'Type', 'Rules', 'Pinline'],
 	'M15Regular-1': ['Border', 'Title', 'Type', 'Rules', 'Pinline', 'Frame'],
 	'Class': ['Border', 'Text Boxes', 'Title', 'Type', 'Rules', 'Pinline', 'Frame'],
 	'ClassUB': ['Border', 'Text Boxes', 'Title', 'Type', 'Rules', 'Pinline', 'Frame']
@@ -1711,6 +1714,7 @@ function drawFrames() {
 	if(window.FrameTextPresets?.sync())drawTextBuffer();
 	frameContext.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
 	var frameToDraw = card.frames.slice().reverse();
+	window.BossFrameTools?.beginRules(frameToDraw);
 	var haveDrawnPrePTCanvas = false;
 	frameToDraw.forEach(item => {
 		if (item.image && !item.hidden) {
@@ -1784,9 +1788,10 @@ function drawFrames() {
 				}
 				//erase mode
 				if (item.erase) {frameContext.globalCompositeOperation = 'destination-out';}
-				frameContext.drawImage(frameMaskingCanvas, 0, 0, frameCanvas.width, frameCanvas.height);
+				if(!window.BossFrameTools?.drawRulesLayer(frameMaskingCanvas,item))frameContext.drawImage(frameMaskingCanvas, 0, 0, frameCanvas.width, frameCanvas.height);
 			}
 		}
+		window.BossFrameTools?.finishRules(frameContext,item);
 	});
 	if (!haveDrawnPrePTCanvas && drawTextBetweenFrames) {
 		haveDrawnPrePTCanvas = true;
@@ -5558,6 +5563,7 @@ initializeDesignUndoInteractions();
 
 //DRAWING THE CARD (putting it all together)
 function drawCard() {
+	window.BossFrameTools?.refresh();
 	// reset
 	cardContext.globalCompositeOperation = 'source-over';
 	cardContext.clearRect(0, 0, cardCanvas.width, cardCanvas.height);
