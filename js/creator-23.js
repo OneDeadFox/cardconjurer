@@ -1323,7 +1323,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	snapshotFrames.forEach(record => {
 		const frame=(card.frames || []).find(item => ensureDesignLayerId(item)==record.id);
 		if (frame) {
-			if (record.definition) {window.ClassLevels?.restoreAppearance(frame,record.definition);window.BossFrameTools?.restoreAppearance(frame,record.definition);}
+			if (record.definition) {window.ClassLevels?.restoreAppearance(frame,record.definition);window.BossFrameTools?.restoreAppearance(frame,record.definition);window.FrameSectionTools?.restoreAppearance(frame,record.definition);}
 			applyFrameEditorState(frame,record.state);
 			syncFrameElementVisibility(frame);
 		}
@@ -1711,6 +1711,7 @@ async function decomposePendingBuiltInFrames() {
 }
 
 function drawFrames() {
+	window.FrameSectionTools?.sync();
 	if(window.FrameTextPresets?.sync())drawTextBuffer();
 	frameContext.clearRect(0, 0, frameCanvas.width, frameCanvas.height);
 	var frameToDraw = card.frames.slice().reverse();
@@ -1786,6 +1787,7 @@ function drawFrames() {
 				if (item.hslHue || item.hslSaturation || item.hslLightness) {
 					hsl(frameMaskingCanvas, item.hslHue || 0, item.hslSaturation || 0, item.hslLightness || 0);
 				}
+				window.FrameSectionTools?.cutouts(frameMaskingContext,item);
 				//erase mode
 				if (item.erase) {frameContext.globalCompositeOperation = 'destination-out';}
 				if(!window.BossFrameTools?.drawRulesLayer(frameMaskingCanvas,item))frameContext.drawImage(frameMaskingCanvas, 0, 0, frameCanvas.width, frameCanvas.height);

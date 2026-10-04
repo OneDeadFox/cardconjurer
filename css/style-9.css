@@ -1421,3 +1421,10 @@ textarea.input {
 .frame-standard-fields { grid-column:1 / -1; width:100%; box-sizing:border-box; padding:12px 0; border-top:1px solid #66816b; }
 .frame-standard-fields label { display:block; margin:8px 0; }
 .frame-standard-fields p { font-size:13px; line-height:1.4; }
+
+.frame-section-tools { display:grid; gap:.6rem; grid-column:1 / -1; width:100%; box-sizing:border-box; padding:12px 0; border-top:1px solid #66816b; }
+.frame-section-tools label { display:grid; gap:.35rem; }
+.frame-section-tools label:has(input[type="checkbox"]) { display:flex; align-items:center; gap:.5rem; }
+.frame-section-tools details label, .frame-section-tools details button { margin-top:.6rem; }
+.frame-section-tools p { margin:0; font-size:13px; line-height:1.4; }
+.frame-section-tools [hidden] { display:none; }

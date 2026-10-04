@@ -1,0 +1,73 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const {createCanvas,Image}=require('@napi-rs/canvas');
+let sequence=0,commits=0;const snapshots=[];
+const palette={w:'#eeeedd',u:'#3366cc',b:'#252525',r:'#cc3333',g:'#229955',m:'#ccbb44',a:'#999999',l:'#996633',c:'#bbbbbb',v:'#777777'};
+function fixture(src){
+ const image=createCanvas(200,280),ctx=image.getContext('2d');const path=src.toLowerCase();
+ if(/mask|\/new\/(title|rules|pinline|border)\.png|book\.svg|pinline\.svg/.test(path)){
+  ctx.fillStyle='black';
+  if(/right.?half/.test(path))ctx.fillRect(100,0,100,280);
+  else if(/title/.test(path))ctx.fillRect(12,13,176,20);
+  else if(/rules|book/.test(path))ctx.fillRect(14,174,172,86);
+  else if(/crown/.test(path))ctx.fillRect(5,5,190,28);
+  else {ctx.strokeStyle='black';ctx.lineWidth=3;ctx.strokeRect(10,10,180,260);}
+ }else {const key=path.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/)?.[1]||'m';ctx.fillStyle=palette[key];ctx.fillRect(0,0,200,280);if(/cleartextbox/.test(path))ctx.clearRect(14,174,172,86);}
+ return image.toBuffer('image/png');
+}
+class BrowserImage extends Image {set src(value){super.src=/^(data:|blob:)/.test(value)?value:fixture(value);}get src(){return super.src;}}
+const context={Image:BrowserImage,card:{version:'battle',width:2814,height:2010,frames:[],text:{rules:{name:'Rules Text',text:'Boss ability',x:.1,y:.64,width:.8,height:.2,size:.04},title:{name:'Title',text:'Boss title',x:.19,y:.052,width:.7,height:.05,size:.04}}},
+ document:{createElement:tag=>{assert.equal(tag,'canvas');return createCanvas(1,1);},querySelector:()=>null},
+ ensureDesignLayerId:frame=>frame.designLayerId ||= 'frame-'+ ++sequence,
+ createDesignStateSnapshot:()=>JSON.parse(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value)),
+ async applyDesignStateSnapshot(snapshot){Object.assign(context.card,JSON.parse(JSON.stringify(snapshot)));},
+ commitDesignUndoSnapshot(before){commits++;snapshots.push(before);},
+ async rebuildFrameLayerList(){},drawFrames(){},drawTextBuffer(){},drawCard(){},resetSetSymbol(){},
+ loadTextOptions(fields){Object.assign(context.card.text,fields);},
+ scaleX:x=>x*context.card.width,scaleY:y=>y*context.card.height,scaleWidth:w=>w*context.card.width,scaleHeight:h=>h*context.card.height,
+ RulesRange:{updateElementRelative(){},removeElementReferences(){}},CanvasDesignTools:{editsFrame:()=>false}
+};context.window=context;
+vm.createContext(context);for(const path of ['js/frameTextPresets.js','js/frameSectionCatalog.js','js/frameSectionTools.js'])vm.runInContext(fs.readFileSync(path,'utf8'),context);
+const S=context.FrameSectionTools;
+function layer(name,color,extra=[]){return{name:color+' Frame — '+name,componentKind:name,src:'/original/'+color+'.png',bounds:{x:.03,y:.02,width:.94,height:.95},rotation:0,opacity:100,masks:[{name,src:'/original/mask'+name+'.png'},...extra]};}
+(async()=>{
+ const left=layer('Rules','w'),right=layer('Rules','g',[{name:'Right Half',src:'/original/maskRightHalf.png'}]),pinline=layer('Pinline','g');context.card.frames=[right,left,pinline];
+ context.ensureDesignLayerId(right);context.ensureDesignLayerId(left);const anchorBefore={...context.card.text.rules};
+ context.card.text.rules.frameAnchor={id:left.designLayerId,last:{...left.bounds,rotation:0}};
+ const base=await S.originalRectangle(right,'rules');
+ assert.equal(await S.apply(right,{role:'rules',style:'regular',left:'w',right:'g',opacity:45,pinlines:true}),true);
+ assert.equal(context.card.frames.length,2,'Split pieces compose into one stable section');assert.equal(right.opacity,45);
+ assert.equal(context.card.text.rules.text,'Boss ability');assert.equal(context.card.text.rules.x,anchorBefore.x);
+ assert.equal(context.card.text.rules.frameAnchor.id,right.designLayerId);
+ assert.equal(pinline.sectionCutouts.length,1);assert.equal(right.sectionAppearance.baseBounds.x,base.x);
+ assert.ok(right.src.startsWith('data:image/png;base64,'));
+ // Two colors are preserved in the resulting PNG before opacity is applied once.
+ const bitmap=createCanvas(right.image.width,right.image.height);bitmap.getContext('2d').drawImage(right.image,0,0);
+ const a=bitmap.getContext('2d').getImageData(10,20,1,1).data,b=bitmap.getContext('2d').getImageData(bitmap.width-10,20,1,1).data;
+ assert.ok(a[0]>b[0]);assert.equal(a[3],b[3]);
+ assert.equal(await S.apply(right,{role:'rules',style:'clear',left:'w',opacity:100,pinlines:false}),true,'Fully transparent sections are valid');const clearPixels=createCanvas(right.image.width,right.image.height);clearPixels.getContext('2d').drawImage(right.image,0,0);assert.equal(clearPixels.getContext('2d').getImageData(20,20,1,1).data[3],0);
+ assert.equal(await S.apply(right,{role:'rules',style:'adventure',left:'u',opacity:60,pinlines:false}),true);
+ assert.equal(pinline.sectionCutouts.length,0,'Disabling matched pinlines restores the original ones');
+ const beforeContent=context.card.text.rules.text;S.insertFields(right);assert.equal(context.card.text.rules.text,beforeContent);
+ for(const key of ['mana2','title2','type2','rules2'])assert.ok(context.card.text[key]);
+ assert.equal(context.card.version,'battle','Section presets never load another card layout');
+ const field=context.card.text.rules2,oldX=field.x;right.bounds.x+=.04;S.sync();context.FrameTextPresets.sync();assert.ok(Math.abs(field.x-oldX-.04)<1e-8,'Preset fields follow movement');
+ const oldBase=right.sectionAppearance.baseBounds.x;
+ assert.equal(await S.apply(right,{role:'rules',style:'prototype',left:'r',opacity:50}),true);assert.ok(Math.abs(right.sectionAppearance.baseBounds.x-oldBase)<1e-8,'Repeated swaps keep the moved layout');
+ S.insertFields(right);assert.ok(context.card.text.prototype);assert.ok(context.card.text.pt2);
+ assert.equal(await S.apply(right,{role:'rules',style:'browse',left:'g',browseResource:{src:'/other/g.png',bounds:{x:0,y:0,width:1,height:1},masks:[{name:'Rules',src:'/other/maskRules.png'}]},pinlines:false}),true);assert.equal(context.card.version,'battle');assert.equal(await S.apply(right,{role:'rules',style:'browse',left:'g',pinlines:false}),true,'Saved Browse appearance can be reapplied without its original asset');
+ // A title's crown can be added, recolored and removed without moving the banner.
+ const title=layer('Title','w'),border=layer('Border','w');context.card.frames.push(title,border);const titleBase=await S.originalRectangle(title,'title');
+ assert.equal(await S.apply(title,{role:'title',style:'transform-front',left:'g',crown:true,pinlines:true}),true);
+ assert.equal(title.sectionAppearance.baseBounds.y,titleBase.y);assert.ok(title.bounds.y<titleBase.y);
+ assert.equal(context.card.text.title.text,'Boss title');assert.equal(border.sectionCutouts.length,1);
+ assert.ok(title.sectionAppearance.iconBounds);
+ assert.equal(await S.apply(title,{role:'title',style:'regular',left:'w',crown:false,pinlines:false}),true);
+ assert.equal(border.sectionCutouts.length,0);assert.equal(title.sectionAppearance.baseBounds.y,titleBase.y);
+ // Missing colors fail atomically without removing a user's layout.
+ const beforeFailure=JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value);
+ assert.equal(await S.apply(title,{role:'title',style:'clear',left:'v'}),false);
+ assert.equal(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value),beforeFailure);
+ assert.ok(commits>=5);assert.equal(snapshots[0].frames.length,3,'Undo snapshot includes original separate color layers');
+ const saved=JSON.parse(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value));assert.ok(saved.frames.find(frame=>frame.sectionAppearance)?.src.startsWith('data:'));
+ console.log('PASS: shared section swaps, split composition, geometry/content preservation, pinline/crown removal, preset fields, movement, rollback and serializable assets.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

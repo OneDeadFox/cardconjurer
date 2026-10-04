@@ -22,7 +22,7 @@
   rulesContext = rulesCanvas.getContext('2d'); rulesContext.clearRect(0, 0, rulesCanvas.width, rulesCanvas.height);
  }
  function drawRulesLayer(image, frame) {
-  if (!battle() || settings().rulesOpacity === undefined || !isRules(frame)) return false;
+  if (!battle() || settings().rulesOpacity === undefined || !isRules(frame) || frame.sectionAppearance) return false;
   rulesContext.globalAlpha = Math.max(0, Math.min(100, Number(frame.opacity ?? 100))) / 100;
   rulesContext.globalCompositeOperation = frame.erase ? 'destination-out' : (frame.mode || 'source-over');
   rulesContext.drawImage(image, 0, 0, rulesCanvas.width, rulesCanvas.height);
@@ -60,6 +60,7 @@
    if (!layers.length) throw Error('No Rules component was found. Add a rules-box layer using the Rules mask first.');
    if (layers.some(layer => layer.preserveAlpha)) throw Error('Turn off Preserve alpha on the Rules layers before adjusting group opacity.');
    card.bossFrameSettings = {...settings(), rulesOpacity: Math.max(0, Math.min(100, Number(value)))};
+   for(const layer of layers)if(layer.sectionAppearance){layer.opacity=card.bossFrameSettings.rulesOpacity;layer.sectionAppearance.opacity=layer.opacity;}
    drawFrames(); commitDesignUndoSnapshot(before, 'Change Boss rules background opacity');
    status('Rules backgrounds blend as one group. Text remains fully opaque.');
   } catch (error) { await applyDesignStateSnapshot(before); status(error.message); }
@@ -70,6 +71,7 @@
   return 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="black"/><polygon points="'+points+'" fill="white" stroke="white" stroke-width="5" stroke-linejoin="round"/></svg>');
  }
  function iconBounds(owner) {
+  if(owner?.sectionAppearance?.iconBounds)return {...owner.sectionAppearance.iconBounds};
   const native = battle() ? {x: .116, y: .056, width: .047, height: .066} : {x: .061, y: .052, width: .070, height: .050};
   const bounds = owner?.bounds || {x: 0, y: 0, width: 1, height: 1};
   const icon = {...native, rotation: 0};
