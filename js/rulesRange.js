@@ -186,7 +186,7 @@
 			if(range.uniformTextSize){while(minimums.reduce(function(a,b){return a+b;},0)>axisPixels&&reductions[0]<25){reductions=reductions.map(function(n){return n+1;});minimums=needs();}}
 			else {for(var pass=0;pass<25*range.modules.length&&minimums.reduce(function(a,b){return a+b;},0)>axisPixels;pass++){var largest=minimums.reduce(function(best,value,i){return reductions[i]<25&&value>minimums[best]||reductions[best]>=25&&reductions[i]<25?i:best;},0);if(reductions[largest]>=25)break;reductions[largest]++;minimums=needs();}}
 		}
-		range.modules.forEach(function(module,i){module.elements.forEach(function(entry){if(entry.kind==='text'){var field=elementTarget(entry);if(field){field.rangeFontReduction=reductions[i]+(uniformAdjustments.get(field)||0);field.rangeUniformTextSize=range.uniformTextSize;}}});});
+		range.modules.forEach(function(module,i){module.elements.forEach(function(entry){if(entry.kind==='text'){var field=elementTarget(entry);if(field&&range.kind!=='rules-section'){field.rangeFontReduction=reductions[i]+(uniformAdjustments.get(field)||0);field.rangeUniformTextSize=range.uniformTextSize;}}});});
 		var minimumTotal=minimums.reduce(function(a,b){return a+b;},0),surplus=Math.max(0,axisPixels-minimumTotal),lastFlex=range.modules.map(function(module,i){return module.sizing==='flex'?i:-1;}).filter(function(i){return i>=0;}).pop();
 		return range.modules.map(function(module,i){var pixels;
 			if(range.autoSizeModules&&vertical){pixels=minimums[i]||10;if(i===lastFlex||lastFlex===undefined&&i===range.modules.length-1)pixels+=surplus;}

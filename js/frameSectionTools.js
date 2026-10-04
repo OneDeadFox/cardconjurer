@@ -179,14 +179,22 @@
  function moduleId(prefix){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);}
  function relative(rect,container){return{x:(rect.x-container.x)/container.width,y:(rect.y-container.y)/container.height,width:rect.width/container.width,height:rect.height/container.height};}
  const prototypeCache=new Map();
- function renderPrototype(left,right){const key=left+":"+(right||"");if(!prototypeCache.has(key))prototypeCache.set(key,renderPrototypeArtwork(left,right).catch(error=>{prototypeCache.delete(key);throw error;}));return prototypeCache.get(key);}
- async function renderPrototypeArtwork(left,right){
+ function renderPrototype(left,right,pinlines=true){const key=left+":"+(right||"")+":"+pinlines;if(!prototypeCache.has(key))prototypeCache.set(key,renderPrototypeArtwork(left,right,pinlines).catch(error=>{prototypeCache.delete(key);throw error;}));return prototypeCache.get(key);}
+ async function renderPrototypeArtwork(left,right,pinlines){
   const style=FrameSectionCatalog.styles.find(style=>style.id==='prototype'),variant=style.variants[left];
   if(!variant)throw Error('Prototype boxes support white, blue, black, red, green and multicolor.');
   // Prototype rules artwork is already a cropped section on a full-card canvas.
   // Its Pinline mask is only a border, not a mask for the complete rules interior.
   const layer=await drawResource(variant,[]),size={width:layer.width,height:layer.height},primary=alphaBounds(layer);
   if(right){const other=style.variants[right];if(!other)throw Error('This Prototype color is not available.');await blendColors(layer,await drawResource(other,[],size),primary);}
+  if(!pinlines){
+   // The stock Prototype outline is baked into the rules PNG. Use its inner
+   // texture at the same outer bounds so toggling it never changes the layout.
+   const x=primary.x*size.width,y=primary.y*size.height,w=primary.width*size.width,h=primary.height*size.height;
+   const insetX=Math.min(w*.08,size.width*11/1500),insetY=Math.min(h*.08,size.height*11/2100),bottom=Math.min(h*.12,size.height*18/2100),interior=canvas(w,h);
+   interior.getContext('2d').drawImage(layer,x+insetX,y+insetY,w-2*insetX,h-insetY-bottom,0,0,interior.width,interior.height);
+   layer.getContext('2d').clearRect(0,0,size.width,size.height);layer.getContext('2d').drawImage(interior,x,y,w,h);
+  }
   const crop=source=>{const rect=alphaBounds(source),out=canvas(rect.width*source.width,rect.height*source.height);out.getContext('2d').drawImage(source,rect.x*source.width,rect.y*source.height,rect.width*source.width,rect.height*source.height,0,0,out.width,out.height);return{src:out.toDataURL('image/png'),rect};};
   const result={...crop(layer),primary,extras:{}};
   for(const [index,kind] of ['mana','pt'].entries()){
@@ -199,11 +207,11 @@
  async function configurePrototypeParts(frame,options={}){
   const group=frame.sectionModule,range=card.rulesRanges.find(item=>item.id===group.rangeId),part=card.frames.find(item=>item.designLayerId===group.partId);
   const module=range.modules.find(item=>item.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId));
-  const rendered=await renderPrototype(options.left||group.left,options.right??group.right),base=group.baseBounds;
+  const rendered=await renderPrototype(options.left||group.left,options.right??group.right,options.pinlines??group.pinlines??true),base=group.baseBounds;
   const destination={...base,height:base.height*group.fraction,y:group.position==='bottom'?base.y+base.height*(1-group.fraction):base.y};
   part.src=rendered.src;part.image=await image(part.src);const primaryEntry=module.elements.find(entry=>entry.kind==='frame'&&entry.key===group.partId);primaryEntry.relative=clone(unit);delete primaryEntry.offset;
   part.bounds={x:destination.x,y:destination.y,width:destination.width,height:destination.height};part.rotation=frame.rotation||0;group.lastPartBounds=bounds(part);
-  group.left=options.left||group.left;group.right=options.right??group.right;group.partsVersion=2;
+  group.left=options.left||group.left;group.right=options.right??group.right;group.partsVersion=2;group.pinlines=options.pinlines??group.pinlines??true;
   group.pieces={manaFrame:options.manaFrame??group.pieces?.manaFrame??true,manaText:options.manaText??group.pieces?.manaText??true,ptFrame:options.ptFrame??group.pieces?.ptFrame??false,ptText:options.ptText??group.pieces?.ptText??false};
   const fields={};
   for(const kind of ['mana','pt']){
@@ -241,7 +249,7 @@
    const [mainKey,main]=candidates.find(([key,field])=>field.frameAnchor?.id===owner)||candidates[0];
    if((card.rulesRanges||[]).some(range=>range.modules.some(module=>module.elements.some(entry=>entry.kind==='text'&&entry.key===mainKey))))throw Error('This rules field already belongs to a range. Detach it before creating this rules module.');
    const style=FrameSectionCatalog.styles.find(style=>style.id==='prototype'),left=options.left||frame.sectionAppearance?.left||colorOf(frame),right=options.right||'';
-   const rendered=await renderPrototype(left,right),fraction=.38;
+   const rendered=await renderPrototype(left,right,options.pinlines!==false),fraction=.38;
    const destination={...base,height:base.height*fraction,y:options.position==='bottom'?base.y+base.height*(1-fraction):base.y};
    const placed=mapRect(rendered.rect,rendered.primary,destination);
    const part={name:'Prototype box',componentKind:'Prototype Box',src:rendered.src,bounds:{x:placed.x,y:placed.y,width:placed.width,height:placed.height},rotation:placed.rotation||0,masks:[],opacity:100,noThumb:true,imageFit:'stretch',fixedAppearance:true};
@@ -287,9 +295,30 @@
   }catch(error){await applyDesignStateSnapshot(before);status(panel,error.message);return false;}
  }
  function restoreMainField(frame,group){
-  const field=card.text?.[group.mainKey];if(!field)return;
+  const field=card.text?.[group.mainKey];if(!field)return;field.rangeFontReduction=0;field.rangeUniformTextSize=false;uniformRulesCache.delete(group.rangeId);
   const restored=mapRect(group.mainRelative,unit,{...group.baseBounds,rotation:frame.rotation||0});Object.assign(field,{x:restored.x,y:restored.y,width:restored.width,height:restored.height,rotation:restored.rotation});
   if(group.savedAnchor)field.frameAnchor={...group.savedAnchor,last:bounds(frame)};
+ }
+ function uniformRulesFields(frame){const group=frame.sectionModule;if(!group)return[];return [group.mainKey,'prototype-'+group.partId].map(key=>({key,field:card.text?.[key]})).filter(item=>item.field&&!item.field.hidden);}
+ function defaultPixelSize(field){return Math.max(1,(Number(field.size)||.038)*card.height+(parseInt(field.fontSize||'0',10)||0));}
+ function setUniformRulesSize(frame,size,enabled){for(const {field} of uniformRulesFields(frame)){field.rangeUniformTextSize=enabled;field.rangeFontReduction=enabled?Math.max(0,defaultPixelSize(field)-size):0;}}
+ const uniformRulesCache=new Map();
+ async function fitUniformText(fits){
+  syncRuleModules();
+  for(const frame of card.frames||[]){
+   const group=frame.sectionModule;if(!group)continue;
+   const range=(card.rulesRanges||[]).find(item=>item.id===group.rangeId),fields=uniformRulesFields(frame);
+   if(!range?.uniformTextSize||fields.length<2){setUniformRulesSize(frame,0,false);uniformRulesCache.delete(group.rangeId);continue;}
+   const max=Math.max(1,Math.floor(Math.min(...fields.map(({field})=>defaultPixelSize(field)))));
+   const signature=JSON.stringify({height:card.height,width:card.width,fields:fields.map(({key,field})=>({key,...Object.fromEntries(Object.entries(field).filter(([name])=>!['rangeFontReduction','rangeUniformTextSize','rangeClip'].includes(name)))})),obstacles:card.frames.filter(item=>/power|toughness/i.test(item.componentKind||item.name||'')).map(item=>({bounds:item.bounds,rotation:item.rotation,hidden:item.hidden}))});
+   const cached=uniformRulesCache.get(group.rangeId);
+   if(cached?.signature===signature){group.uniformSize=cached.size;setUniformRulesSize(frame,cached.size,true);continue;}
+   let low=1,high=max,best=1;
+   // Ask the normal renderer, including mana tokens, wrapping and P/T obstacles.
+   // Both fields stay at the candidate size during each fit check.
+   while(low<=high){const candidate=Math.floor((low+high)/2);setUniformRulesSize(frame,candidate,true);let success=true;for(const {key,field} of fields)if(!await fits(field,key))success=false;if(success){best=candidate;low=candidate+1;}else high=candidate-1;}
+   group.uniformSize=best;setUniformRulesSize(frame,best,true);uniformRulesCache.set(group.rangeId,{signature,size:best});
+  }
  }
  function syncRuleModules(){
   for(const frame of card.frames||[]){
@@ -332,6 +361,7 @@
     Object.assign(entry.kind==='frame'?target.bounds:target,{x:fitted.x,y:fitted.y,width:fitted.width,height:fitted.height});target.rotation=fitted.rotation;
     if(target.frameAnchor)delete target.frameAnchor;
    }
+   if(range.uniformTextSize&&uniformRulesFields(frame).length>=2){const sizes=uniformRulesFields(frame).map(({field})=>defaultPixelSize(field));const size=Math.min(group.uniformSize||Infinity,...sizes);setUniformRulesSize(frame,Number.isFinite(size)?size:1,true);}else setUniformRulesSize(frame,0,false);
    group.fieldBounds={};for(const entry of prototype.elements)if(entry.kind==='text'&&card.text?.[entry.key]){const field=card.text[entry.key];group.fieldBounds[entry.key]={x:field.x,y:field.y,width:field.width,height:field.height};}
    group.lastProtoBox=clone(protoBox);group.lastPartBounds=bounds(part);group.lastMainBox=clone(mainBox);
    if(mainField)group.lastMainBounds={x:mainField.x,y:mainField.y,width:mainField.width,height:mainField.height};
@@ -359,9 +389,9 @@
   }
   if(sectionRole==='rules'){
    const attachment=document.createElement('details');attachment.open=true;
-   attachment.innerHTML='<summary>Attached rules boxes</summary><label>Prototype placement<select class="input" data-prototype-position><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label>Prototype color<select class="input" data-prototype-color></select></label><label><input type="checkbox" data-prototype-split> Split Prototype colors</label><label data-prototype-right-row hidden>Right Prototype color<select class="input" data-prototype-right></select></label><details><summary>Optional pieces</summary><label><input type="checkbox" data-prototype-mana-frame> Mana cost artwork</label><label><input type="checkbox" data-prototype-mana-text> Mana cost text</label><label><input type="checkbox" data-prototype-pt-frame> Power/toughness artwork</label><label><input type="checkbox" data-prototype-pt-text> Power/toughness text</label></details><button class="input" type="button" data-prototype-add>'+ (frame.sectionModule?'Update Prototype box':'Attach Prototype box') +'</button><button class="input" type="button" data-prototype-remove>Remove Prototype box</button><p>Keeps this background. Drag the Prototype box to adjust the space available to the main rules text. Optional pieces can also be selected and removed individually on the canvas.</p>';
+   attachment.innerHTML='<summary>Attached rules boxes</summary><label>Prototype placement<select class="input" data-prototype-position><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label>Prototype color<select class="input" data-prototype-color></select></label><label><input type="checkbox" data-prototype-split> Split Prototype colors</label><label data-prototype-right-row hidden>Right Prototype color<select class="input" data-prototype-right></select></label><label><input type="checkbox" data-prototype-pinlines checked> Prototype pinlines</label><details><summary>Optional pieces</summary><label><input type="checkbox" data-prototype-mana-frame> Mana cost artwork</label><label><input type="checkbox" data-prototype-mana-text> Mana cost text</label><label><input type="checkbox" data-prototype-pt-frame> Power/toughness artwork</label><label><input type="checkbox" data-prototype-pt-text> Power/toughness text</label></details><button class="input" type="button" data-prototype-add>'+ (frame.sectionModule?'Update Prototype box':'Attach Prototype box') +'</button><button class="input" type="button" data-prototype-remove>Remove Prototype box</button><p>Keeps this background. Drag the Prototype box to adjust the space available to the main rules text. Optional pieces can also be selected and removed individually on the canvas.</p>';
    const group=frame.sectionModule;
-   attachment.querySelector('[data-prototype-position]').value=group?.position||'top';
+   attachment.querySelector('[data-prototype-position]').value=group?.position||'top';attachment.querySelector('[data-prototype-pinlines]').checked=group?.pinlines!==false;
    for(const selector of ['[data-prototype-color]','[data-prototype-right]'])for(const key of Object.keys(FrameSectionCatalog.styles.find(style=>style.id==='prototype').variants)){const option=document.createElement('option');option.value=key;option.textContent=colors[key];attachment.querySelector(selector).appendChild(option);}
    const initialColor=group?.left||frame.sectionAppearance?.left||colorOf(frame);attachment.querySelector('[data-prototype-color]').value=['w','u','b','r','g','m'].includes(initialColor)?initialColor:'m';
    attachment.querySelector('[data-prototype-right]').value=group?.right||'u';attachment.querySelector('[data-prototype-split]').checked=!!group?.right;attachment.querySelector('[data-prototype-right-row]').hidden=!group?.right;
@@ -372,7 +402,7 @@
     attachment.querySelector('[data-prototype-'+selector+']').checked=checked;
    }
    attachment.querySelector('[data-prototype-remove]').hidden=!group;
-   attachment.querySelector('[data-prototype-add]').onclick=async()=>{if(await attachPrototype(frame,{position:attachment.querySelector('[data-prototype-position]').value,left:attachment.querySelector('[data-prototype-color]').value,right:attachment.querySelector('[data-prototype-split]').checked?attachment.querySelector('[data-prototype-right]').value:'',manaFrame:attachment.querySelector('[data-prototype-mana-frame]').checked,manaText:attachment.querySelector('[data-prototype-mana-text]').checked,ptFrame:attachment.querySelector('[data-prototype-pt-frame]').checked,ptText:attachment.querySelector('[data-prototype-pt-text]').checked},panel))mount(container,frame);};
+   attachment.querySelector('[data-prototype-add]').onclick=async()=>{if(await attachPrototype(frame,{position:attachment.querySelector('[data-prototype-position]').value,left:attachment.querySelector('[data-prototype-color]').value,right:attachment.querySelector('[data-prototype-split]').checked?attachment.querySelector('[data-prototype-right]').value:'',pinlines:attachment.querySelector('[data-prototype-pinlines]').checked,manaFrame:attachment.querySelector('[data-prototype-mana-frame]').checked,manaText:attachment.querySelector('[data-prototype-mana-text]').checked,ptFrame:attachment.querySelector('[data-prototype-pt-frame]').checked,ptText:attachment.querySelector('[data-prototype-pt-text]').checked},panel))mount(container,frame);};
    attachment.querySelector('[data-prototype-remove]').onclick=async()=>{if(await updatePrototype(frame,{remove:true},panel))mount(container,frame);};
    panel.insertBefore(attachment,panel.querySelector('[data-section-status]'));
   }
@@ -386,5 +416,5 @@
   panel.querySelector('[data-section-browse]').onclick=async()=>{if(typeof availableFrames==='undefined'||typeof selectedFrameIndex==='undefined'||!availableFrames[selectedFrameIndex]){status(panel,'Choose a frame asset in Browse Frames first.');return;}const resource=availableFrames[selectedFrameIndex],ok=await apply(frame,{role:sectionRole,style:'browse',browseResource:clone(resource),left:colorOf(resource),right:'',crown:false,pinlines:panel.querySelector('[data-section-pinlines]').checked,opacity:panel.querySelector('[data-section-opacity]').value,fitTitleText:false},panel);if(ok)mount(container,frame);};
   insertAppearance(container,panel);
  }
- window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
+ window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,fitUniformText,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
 })();

@@ -12,7 +12,7 @@ function fixture(src){
   else if(/rules|book/.test(path))ctx.fillRect(14,174,172,86);
   else if(/crown/.test(path))ctx.fillRect(5,5,190,28);
   else {ctx.strokeStyle='black';ctx.lineWidth=3;ctx.strokeRect(10,10,180,260);}
- }else if(/prototype/.test(path)){ctx.fillStyle='#3366cc';ctx.fillRect(12,175,176,31);}else {const key=path.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/)?.[1]||'m';ctx.fillStyle=palette[key];ctx.fillRect(0,0,200,280);if(/cleartextbox/.test(path))ctx.clearRect(14,174,172,86);if(/(?:borderless|genericshowcase)\/m15genericshowcaseframe/.test(path)){ctx.clearRect(14,174,172,86);ctx.fillStyle=/genericshowcase\/m15genericshowcaseframe/.test(path)?palette[key]+'80':'rgba(0,0,0,0.5)';ctx.fillRect(14,174,172,86);ctx.strokeStyle=palette[key];ctx.lineWidth=2;ctx.strokeRect(14,174,172,86);}}
+ }else if(/prototype/.test(path)){ctx.fillStyle='#3366cc';ctx.fillRect(12,175,176,31);ctx.fillStyle='#ccddee';ctx.fillRect(14,177,172,27);}else {const key=path.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/)?.[1]||'m';ctx.fillStyle=palette[key];ctx.fillRect(0,0,200,280);if(/cleartextbox/.test(path))ctx.clearRect(14,174,172,86);if(/(?:borderless|genericshowcase)\/m15genericshowcaseframe/.test(path)){ctx.clearRect(14,174,172,86);ctx.fillStyle=/genericshowcase\/m15genericshowcaseframe/.test(path)?palette[key]+'80':'rgba(0,0,0,0.5)';ctx.fillRect(14,174,172,86);ctx.strokeStyle=palette[key];ctx.lineWidth=2;ctx.strokeRect(14,174,172,86);}}
  return image.toBuffer('image/png');
 }
 class BrowserImage extends Image {set src(value){loadedAssets.push(value);super.src=/^(data:|blob:)/.test(value)?value:fixture(value);}get src(){return super.src;}}
@@ -149,5 +149,20 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.equal(await S.attachPrototype(rules,{position:'bottom',left:'u'}),true);const attachedRange=context.card.rulesRanges[0];const attachedModule=attachedRange.modules.find(module=>module.name==='Prototype');attachedRange.modules=attachedRange.modules.filter(module=>module!==attachedModule);context.RulesRange.removeOwnedElements([attachedModule]);S.sync();assert.equal(rules.sectionModule,undefined);assert.equal(context.card.rulesRanges.length,0);assert.equal(Object.keys(context.card.text).length,1);
  // Repair an attachment saved by the earlier renderer without losing its ability text.
  const repairedOwner=context.card.frames[0];assert.equal(await S.attachPrototype(repairedOwner,{position:'top',left:'u'}),true);delete repairedOwner.sectionModule.partsVersion;delete repairedOwner.sectionModule.nativePrimary;assert.equal(await S.updatePrototype(repairedOwner,{position:'top',left:'r',ptFrame:false,ptText:false}),true);assert.equal(repairedOwner.sectionModule.partsVersion,2);assert.equal(context.card.text.rules.text,originalField.text);
+ // Pinline toggles must change pixels without changing the box or text geometry.
+ const fixedGroup=repairedOwner.sectionModule,fixedPart=context.card.frames.find(frame=>frame.designLayerId===fixedGroup.partId),outlinedSource=fixedPart.src,outlineBounds=JSON.stringify(fixedPart.bounds),outlineFieldBounds=JSON.stringify(context.card.text.rules);
+ assert.equal(await S.updatePrototype(repairedOwner,{position:'top',pinlines:false}),true);assert.notEqual(fixedPart.src,outlinedSource);assert.equal(JSON.stringify(fixedPart.bounds),outlineBounds);assert.equal(JSON.stringify(context.card.text.rules),outlineFieldBounds);assert.equal(fixedGroup.pinlines,false);
+ assert.equal(await S.updatePrototype(repairedOwner,{position:'top',pinlines:true}),true);assert.equal(fixedPart.src,outlinedSource,'Restoring pinlines reuses the original artwork');
+ // Different defaults and modifiers still produce exactly one shared final size.
+ const uniformRange=context.card.rulesRanges[0],body=context.card.text.rules,prototypeField=context.card.text['prototype-'+fixedGroup.partId];uniformRange.uniformTextSize=true;
+ body.size=.04;body.fontSize=-3;prototypeField.size=.031;prototypeField.fontSize=2;
+ const mana=context.card.text['mana2-'+fixedGroup.partId];mana.size=.027;mana.fontSize=4;const manaSize=mana.size*context.card.height+mana.fontSize;let measured=0;
+ const effective=field=>field.size*context.card.height+Number(field.fontSize||0)-Number(field.rangeFontReduction||0);
+ await S.fitUniformText(async(field,key)=>{measured++;return effective(field)<=(key===fixedGroup.mainKey?47:39);});
+ assert.ok(Math.abs(effective(body)-39)<1e-8);assert.ok(Math.abs(effective(prototypeField)-39)<1e-8);assert.equal(effective(mana),manaSize,'Uniform rules sizing excludes mana text');
+ assert.equal(body.rangeUniformTextSize,true);assert.equal(prototypeField.rangeUniformTextSize,true);
+ const beforeCached=measured;await S.fitUniformText(async()=>{measured++;return false;});assert.equal(measured,beforeCached,'Repeated renders reuse a verified shared fit');
+ body.text+=' A changed ability';await S.fitUniformText(async field=>{measured++;return effective(field)<=31;});assert.ok(Math.abs(effective(body)-31)<1e-8);assert.ok(Math.abs(effective(prototypeField)-31)<1e-8,'Content changes recalculate both fields together');
+ uniformRange.uniformTextSize=false;await S.fitUniformText(async()=>{throw Error('Independent fields should use their normal renderer fit');});assert.equal(body.rangeFontReduction,0);assert.equal(prototypeField.rangeFontReduction,0);assert.equal(body.size,.04);assert.equal(prototypeField.size,.031,'Turning off matching preserves original defaults');
  console.log('PASS: shared section swaps, split composition, geometry/content preservation, pinline/crown removal, preset fields, movement, rollback and serializable assets.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

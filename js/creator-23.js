@@ -3025,6 +3025,11 @@ async function drawText() {
 		if (typeof dungeonEdited==='function') dungeonEdited(true);
 		DungeonModules.refresh();
 	}
+	await window.FrameSectionTools?.fitUniformText(async function (field, key) {
+		resetCardTextFitState();
+		await writeText(field, textContext);
+		return !cardTextFitResults.find(function (fit) { return fit.key === key; })?.failed;
+	});
 	textContext.clearRect(0, 0, textCanvas.width, textCanvas.height);
 	prePTContext.clearRect(0, 0, prePTCanvas.width, prePTCanvas.height);
 	drawTextBetweenFrames = false;
