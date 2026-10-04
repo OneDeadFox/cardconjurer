@@ -365,6 +365,265 @@ window.FrameSectionCatalog = {
     {
       "id": "borderless",
       "label": "Showcase — Borderless (transparent)",
+      "sourcePack": "GenericShowcase",
+      "roles": [
+        "title",
+        "rules"
+      ],
+      "variants": {
+        "w": {
+          "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseFrameW.png",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "masks": [
+            {
+              "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseMaskPinline.png",
+              "name": "Pinline"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskTitle.png",
+              "name": "Title"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskType.png",
+              "name": "Type"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskRules.png",
+              "name": "Rules"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskBorder.png",
+              "name": "Border"
+            }
+          ]
+        },
+        "u": {
+          "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseFrameU.png",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "masks": [
+            {
+              "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseMaskPinline.png",
+              "name": "Pinline"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskTitle.png",
+              "name": "Title"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskType.png",
+              "name": "Type"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskRules.png",
+              "name": "Rules"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskBorder.png",
+              "name": "Border"
+            }
+          ]
+        },
+        "b": {
+          "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseFrameB.png",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "masks": [
+            {
+              "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseMaskPinline.png",
+              "name": "Pinline"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskTitle.png",
+              "name": "Title"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskType.png",
+              "name": "Type"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskRules.png",
+              "name": "Rules"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskBorder.png",
+              "name": "Border"
+            }
+          ]
+        },
+        "r": {
+          "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseFrameR.png",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "masks": [
+            {
+              "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseMaskPinline.png",
+              "name": "Pinline"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskTitle.png",
+              "name": "Title"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskType.png",
+              "name": "Type"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskRules.png",
+              "name": "Rules"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskBorder.png",
+              "name": "Border"
+            }
+          ]
+        },
+        "g": {
+          "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseFrameG.png",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "masks": [
+            {
+              "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseMaskPinline.png",
+              "name": "Pinline"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskTitle.png",
+              "name": "Title"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskType.png",
+              "name": "Type"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskRules.png",
+              "name": "Rules"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskBorder.png",
+              "name": "Border"
+            }
+          ]
+        },
+        "m": {
+          "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseFrameM.png",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "masks": [
+            {
+              "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseMaskPinline.png",
+              "name": "Pinline"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskTitle.png",
+              "name": "Title"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskType.png",
+              "name": "Type"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskRules.png",
+              "name": "Rules"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskBorder.png",
+              "name": "Border"
+            }
+          ]
+        },
+        "a": {
+          "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseFrameA.png",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "masks": [
+            {
+              "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseMaskPinline.png",
+              "name": "Pinline"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskTitle.png",
+              "name": "Title"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskType.png",
+              "name": "Type"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskRules.png",
+              "name": "Rules"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskBorder.png",
+              "name": "Border"
+            }
+          ]
+        },
+        "l": {
+          "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseFrameL.png",
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          },
+          "masks": [
+            {
+              "src": "/img/frames/m15/genericShowcase/m15GenericShowcaseMaskPinline.png",
+              "name": "Pinline"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskTitle.png",
+              "name": "Title"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskType.png",
+              "name": "Type"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskRules.png",
+              "name": "Rules"
+            },
+            {
+              "src": "/img/frames/m15/regular/m15MaskBorder.png",
+              "name": "Border"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "borderless-alt",
+      "label": "Showcase — Borderless (Alt)",
       "sourcePack": "Borderless",
       "roles": [
         "title",
