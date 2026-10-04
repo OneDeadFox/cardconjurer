@@ -6,7 +6,7 @@ function fixture(src){
  const image=createCanvas(200,280),ctx=image.getContext('2d');const path=src.toLowerCase();
  if(/mask|\/new\/(title|rules|pinline|border)\.png|book\.svg|pinline\.svg/.test(path)){
   ctx.fillStyle='black';
-  if(/right.?half/.test(path))ctx.fillRect(100,0,100,280);
+  if(/right.?half/.test(path)){const gradient=ctx.createLinearGradient(90,0,110,0);gradient.addColorStop(0,'rgba(0,0,0,0)');gradient.addColorStop(1,'black');ctx.fillStyle=gradient;ctx.fillRect(0,0,200,280);}
   else if(/title/.test(path))ctx.fillRect(12,13,176,20);
   else if(/rules|book/.test(path))ctx.fillRect(14,174,172,86);
   else if(/crown/.test(path))ctx.fillRect(5,5,190,28);
@@ -49,6 +49,9 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  const transparent=await S.renderStyle(borderless,'rules','u','r',true,false),transparentImage=await loadImage(transparent.src);const transparentPixels=createCanvas(transparentImage.width,transparentImage.height),tc=transparentPixels.getContext('2d');tc.drawImage(transparentImage,0,0);
  const interior=tc.getImageData(transparentImage.width/4,transparentImage.height/2,1,1).data;assert.equal(interior[3],128,'Original translucent interior must remain translucent');assert.ok(interior[2]>interior[0],'Borderless interior must be colored blue, not black');const redInterior=tc.getImageData(transparentImage.width*3/4,transparentImage.height/2,1,1).data;assert.ok(redInterior[0]>redInterior[2],'Split interior must retain its red tint');const edge=tc.getImageData(0,transparentImage.height/2,1,1).data;assert.ok(edge[2]>edge[0],'Blue edge survives section extraction');const redEdge=tc.getImageData(transparentImage.width-1,transparentImage.height/2,1,1).data;assert.ok(redEdge[0]>redEdge[2],'Split red edge survives section extraction');
  assert.equal(await S.apply(right,{role:'rules',style:'borderless',left:'u',right:'r',opacity:100,pinlines:true}),true);assert.equal(context.card.text.rules.text,'Boss ability');assert.equal(right.sectionAppearance.baseBounds.x,base.x);
+ const midpoint=tc.getImageData(transparentImage.width/2,transparentImage.height/2,1,1).data;
+ assert.equal(midpoint[3],128,'Blending must not stack opacity or create a transparent seam');assert.ok(midpoint[0]>interior[0]&&midpoint[0]<redInterior[0],'Center transitions between both colors');assert.ok(midpoint[2]<interior[2]&&midpoint[2]>redInterior[2],'Center retains both colors');
+ const sameColor=await S.renderStyle(borderless,'rules','u','u',true,false),sameImage=await loadImage(sameColor.src),sameCanvas=createCanvas(sameImage.width,sameImage.height);sameCanvas.getContext('2d').drawImage(sameImage,0,0);assert.deepEqual(Array.from(sameCanvas.getContext('2d').getImageData(sameImage.width/2,sameImage.height/2,1,1).data),Array.from(interior),'Identical colors must blend invisibly');
  assert.equal(await S.apply(right,{role:'rules',style:'adventure',left:'u',opacity:60,pinlines:false}),true);
  assert.equal(pinline.sectionCutouts.length,0,'Disabling matched pinlines restores the original ones');
  const beforeContent=context.card.text.rules.text;S.insertFields(right);assert.equal(context.card.text.rules.text,beforeContent);

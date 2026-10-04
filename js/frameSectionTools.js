@@ -32,6 +32,22 @@
  function family(src){return /^data:|^blob:|^asset:/.test(src||'')?null:String(src||'').slice(0,String(src||'').lastIndexOf('/'));}
  function colorOf(frame){const name=frame.name||'';for(const[key,label]of Object.entries(colors))if(name.toLowerCase().includes(label.toLowerCase()))return key;const tail=(frame.src||'').split('/').at(-1);const match=tail?.match(/(?:front|back|rules)?([wubrgmalcv])\.png$/i);return match?match[1].toLowerCase():'m';}
  function members(frame,sectionRole){if(frame.sectionAppearance)return[frame];const original=family(frame.src),b=bounds(frame);return card.frames.filter(item=>item===frame||(original&&family(item.src)===original&&role(item)===sectionRole&&JSON.stringify(bounds(item))===JSON.stringify(b)));}
+ async function blendColors(target,second,rect){
+  const maskImage=await image('/img/frames/maskRightHalf.png'),mask=canvas(maskImage.naturalWidth||maskImage.width,maskImage.naturalHeight||maskImage.height),maskCtx=mask.getContext('2d');maskCtx.drawImage(maskImage,0,0);
+  const weights=maskCtx.getImageData(0,0,mask.width,mask.height).data,ctx=target.getContext('2d'),first=ctx.getImageData(0,0,target.width,target.height),other=second.getContext('2d').getImageData(0,0,second.width,second.height).data;
+  // Complementary, premultiplied weights preserve the original transparency.
+  // Ordinary source-over would darken the translucent seam by stacking both colors.
+  for(let y=0;y<target.height;y++){
+   const my=Math.max(0,Math.min(mask.height-1,Math.floor((y/target.height-rect.y)/rect.height*mask.height)));
+   for(let x=0;x<target.width;x++){
+    const mx=Math.max(0,Math.min(mask.width-1,Math.floor((x/target.width-rect.x)/rect.width*mask.width))),i=(y*target.width+x)*4,w=weights[(my*mask.width+mx)*4+3]/255;
+    const a=first.data[i+3]*(1-w),b=other[i+3]*w,total=a+b;
+    for(let channel=0;channel<3;channel++)first.data[i+channel]=total?(first.data[i+channel]*a+other[i+channel]*b)/total:0;
+    first.data[i+3]=total;
+   }
+  }
+  ctx.putImageData(first,0,0);
+ }
  async function renderStyle(style,sectionRole,left,right,pinlines,crown){
   const resource=style.variants[left];if(!resource)throw Error(style.label+' does not have a '+colors[left]+' appearance.');
   const primaryMask=resource.masks.find(mask=>mask.name.toLowerCase()===sectionRole);
@@ -53,7 +69,7 @@
    return layer;
   };
   const merged=canvas(size.width,size.height),ctx=merged.getContext('2d');ctx.drawImage(await renderColor(left),0,0);
-  if(right){const second=await renderColor(right);ctx.save();ctx.beginPath();ctx.rect((rect.x+rect.width/2)*size.width,0,size.width,size.height);ctx.clip();ctx.clearRect(0,0,size.width,size.height);ctx.drawImage(second,0,0);ctx.restore();}
+  if(right)await blendColors(merged,await renderColor(right),rect);
   let outer;try{outer=alphaBounds(merged);}catch(error){outer=rect;}const cropped=canvas(outer.width*size.width,outer.height*size.height);cropped.getContext('2d').drawImage(merged,outer.x*size.width,outer.y*size.height,outer.width*size.width,outer.height*size.height,0,0,cropped.width,cropped.height);
   return{src:cropped.toDataURL('image/png'),primary:rect,outer};
  }
