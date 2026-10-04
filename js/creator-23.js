@@ -2118,7 +2118,7 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	// Individual masks are additions to the current design and must not reset it.
 	const sourceFrame = !loadingFrame ? availableFrames[selectedFrameIndex] : null;
 	const completeDesignFrame = activeFrameWorkspace === 'design' && sourceFrame &&
-		!sourceFrame.noDefaultMask && selectedMaskIndex === 0 && !additionalMasks.length;
+		!sourceFrame.noDefaultMask && !sourceFrame.designResourceComponent && selectedMaskIndex === 0 && !additionalMasks.length;
 	if (!loadingFrame && (activeFrameWorkspace === 'browse' || completeDesignFrame)) {
 		await applyCurrentFrameLayout({source:'element'});
 	}

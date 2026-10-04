@@ -963,6 +963,24 @@
 		}
 	}
 
+	function placeComponentResource(frame, texture) {
+		// These built-ins are cropped badge images, not full-card textures.
+		if (!texture.builtIn || texture.component !== 'Power / Toughness') return;
+		const regular = {x:0.7573, y:0.8848, width:0.188, height:0.0733};
+		const isBattle = card.version === 'battle';
+		const existing = isBattle && card.frames.find(item => item.bossStats);
+		frame.bounds = existing ? JSON.parse(JSON.stringify(existing.bounds)) : isBattle ?
+			{x:0.891, y:0.874, width:0.093, height:0.093 * card.width / card.height * 206 / 377} : regular;
+		frame.componentKind = 'Power/Toughness';
+		frame.designTextLayout = {text:{pt:{x:0.08,y:0.18,width:0.84,height:0.64,size:0.6}}};
+		// Half masks apply within the cropped component's own rectangle.
+		frame.maskCanvasBounds = JSON.parse(JSON.stringify(frame.bounds));
+		if (isBattle) {
+			frame.rotation = 0;
+			frame.orientationPrepared = card.orientation || 'landscape';
+		}
+	}
+
 	async function createLayer() {
 		var texture = selectedTexture();
 		var mask = selectedMask();
@@ -989,8 +1007,10 @@
 				masks: [],
 				bounds: {x: 0, y: 0, width: 1, height: 1},
 				designCreated: true,
+				designResourceComponent: true,
 				opacity: 100
 			};
+			placeComponentResource(frame, texture);
 			if (!texture.builtIn) {
 				frame.assetId = texture.id;
 			}
@@ -1002,12 +1022,15 @@
 				}
 			}
 			var previousFrameIndex = selectedFrameIndex;
+			var previousMaskIndex = selectedMaskIndex;
 			availableFrames.push(frame);
 			selectedFrameIndex = availableFrames.length - 1;
+			selectedMaskIndex = 0;
 			try {
 				await addFrame(maskDefinition ? [maskDefinition] : []);
 			} finally {
 				selectedFrameIndex = previousFrameIndex;
+				selectedMaskIndex = previousMaskIndex;
 			}
 			setStatus('Created layer "' + frame.name + '". Click it under Current Frame Layers to edit it.', false);
 		} catch (error) {
