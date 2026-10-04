@@ -463,6 +463,11 @@
 							</div>
 							<input id='custom-symbol-file' type='file' accept='.png,.svg,.jpg,.jpeg,.webp,image/*' class='input margin-bottom' aria-label='Choose a custom mana symbol image'>
 							<select id='custom-symbol-list' class='input margin-bottom' onchange='FrameProjectStore.previewSelectedCustomSymbol();' aria-label='Saved custom mana symbols'></select>
+							<details class='padding margin-bottom'><summary>Symbol size and alignment</summary>
+								<label>Size (%)<input id='custom-symbol-scale' class='input' type='number' min='10' max='300' value='100'></label>
+								<label>Vertical offset (% of font size; positive moves down)<input id='custom-symbol-offset' class='input' type='number' min='-100' max='100' value='0'></label>
+								<button class='input' type='button' onclick='FrameProjectStore.saveCustomSymbolSettings();'>Save symbol adjustments</button>
+							</details>
 							<div class='input-grid margin-bottom'>
 								<button class='input' onclick='FrameProjectStore.insertSelectedCustomSymbol();'>Insert Code</button>
 								<button class='input' onclick='FrameProjectStore.renameSelectedCustomSymbol(document.querySelector("#custom-symbol-token").value);'>Rename Selected</button>
@@ -1313,6 +1318,7 @@
 	<script defer src='/js/frameTextPresets.js'></script>
 	<script defer src='/js/canvasDesignTools.js'></script>
 	<script defer src='/js/rulesTextStyles.js'></script>
+	<script defer src='/js/classLevels.js'></script>
 	<script defer src='/js/frameProjectStore.js'></script>
 	<script defer src='/js/frameResourceLibrary.js'></script>
 	<script defer src='/js/csvImport.js'></script>

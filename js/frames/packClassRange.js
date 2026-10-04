@@ -52,10 +52,7 @@ document.querySelector('#loadFrameVersion').onclick = async function() {
 		level1c: {name:'2 - Text', text:'', x:0.5093, y:0, width:0.404, height:0.2091, size:0.0305},
 		level2a: {name:'3 - Cost', text:'{3}:', x:0.5093, y:0, width:0.3967, height:0.0277, size:0.0277},
 		level2b: {name:'3 - Name', text:'Level 3', x:0.5093, y:0, width:0.3967, height:0.0281, size:0.0281, align:'right'},
-		level2c: {name:'3 - Text', text:'', x:0.5093, y:0, width:0.404, height:0.2091, size:0.0305},
-		level3a: {name:'4 - Cost', text:'{4}:', x:0.5093, y:0, width:0.3967, height:0.0277, size:0.0277},
-		level3b: {name:'4 - Name', text:'Level 4', x:0.5093, y:0, width:0.3967, height:0.0281, size:0.0281, align:'right'},
-		level3c: {name:'4 - Text', text:'', x:0.5093, y:0, width:0.404, height:0, size:0.0305}
+		level2c: {name:'3 - Text', text:'', x:0.5093, y:0, width:0.404, height:0.2091, size:0.0305}
 	});
 	await initializeClassRulesRange();
 }

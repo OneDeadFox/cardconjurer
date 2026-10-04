@@ -8,11 +8,12 @@ async function initializeClassRulesRange() {
 	const range = {
 		id: 'class-rules-' + Date.now().toString(36),
 		name: 'Class Levels', direction: 'vertical', rotation: 0,
+		kind: 'class',
 		bounds: {x: 0.5093, y: 0.1129, width: 0.404, height: 0.7239},
 		modules: []
 	};
 	const headerHeight = 0.0481 * card.height;
-	for (let i = 0; i < 4; i++) {
+	for (let i = 0; i < 3; i++) {
 		const module = {
 			id: range.id + '-level-' + i, name: 'Level ' + (i + 1),
 			sizing: 'flex', size: i === 0 ? 210 : 171, elements: []
@@ -48,6 +49,7 @@ async function initializeClassRulesRange() {
 	}
 	card.rulesRanges = card.rulesRanges || [];
 	card.rulesRanges.push(range);
+	window.ClassLevels?.initialize(range);
 	window.RulesRange.syncElements();
 	window.RulesRange.refresh();
 }

@@ -309,6 +309,9 @@
 		}
 		var tokenInput = document.querySelector('#custom-symbol-token');
 		if (tokenInput) { tokenInput.value = asset.token || ''; }
+		var scaleInput=document.querySelector('#custom-symbol-scale'),offsetInput=document.querySelector('#custom-symbol-offset');
+		if(scaleInput)scaleInput.value=Math.round((Number(asset.scale)||1)*100);
+		if(offsetInput)offsetInput.value=Math.round((Number(asset.verticalOffset)||0)*100);
 		if (preview) {
 			try {
 				preview.src = await getAssetSource(asset.id);
@@ -328,7 +331,7 @@
 		var failures = [];
 		for (var asset of getCustomSymbolAssets()) {
 			try {
-				await window.CardConjurerManaSymbols.register(asset.token, await getAssetSource(asset.id));
+				await window.CardConjurerManaSymbols.register(asset.token, await getAssetSource(asset.id),asset);
 			} catch (error) {
 				failures.push('{' + asset.token + '}');
 			}
@@ -364,6 +367,8 @@
 				id: existing ? existing.id : makeId('asset'),
 				name: extensionlessName(file.name),
 				kind: 'custom-symbol',
+				scale: existing?.scale || 1,
+				verticalOffset: existing?.verticalOffset || 0,
 				token: token,
 				mimeType: file.type,
 				blob: file,
@@ -382,6 +387,18 @@
 		} catch (error) {
 			setStatus('#custom-symbol-status', error.message, true);
 		}
+	}
+
+	async function saveCustomSymbolSettings() {
+		var asset=getCustomSymbolAssets().find(item=>item.id===document.querySelector('#custom-symbol-list')?.value);
+		if(!asset)return;
+		var scale=Number(document.querySelector('#custom-symbol-scale').value),offset=Number(document.querySelector('#custom-symbol-offset').value);
+		if(!Number.isFinite(scale)||!Number.isFinite(offset))return;
+		try{
+			asset.scale=Math.max(.1,Math.min(3,scale/100));asset.verticalOffset=Math.max(-1,Math.min(1,offset/100));asset.updatedAt=new Date().toISOString();
+			await putOne(ASSET_STORE,asset);await refreshAssets(null,asset.id);
+			setStatus('#custom-symbol-status','Saved alignment for {'+asset.token+'}.',false);
+		}catch(error){setStatus('#custom-symbol-status',error.message,true);}
 	}
 
 	async function renameSelectedCustomSymbol(token) {
@@ -836,6 +853,17 @@
 		}
 	}
 
+	function classLayoutImageRecords(value) {
+		var records=[];
+		(value.rulesRanges||[]).filter(range=>range.kind==='class'||range.id?.startsWith('class-rules-')).forEach(range=>{
+			Object.values(range.visualFamilies||{}).forEach(family=>records.push(...Object.values(family.variants||{})));
+			(range.laterLevelDesign?.elements||[]).filter(item=>item.entry?.kind==='frame').forEach(item=>{
+				if(!item.definition)return;records.push(item.definition,...(item.definition.masks||[]));
+			});
+		});
+		return records;
+	}
+
 	async function createProjectSnapshot() {
 		var snapshot = JSON.parse(JSON.stringify(card, stripRuntimeImages));
 		snapshot.frames = snapshot.frames || [];
@@ -851,6 +879,7 @@
 				await externalizeLayerImage(mask, 'mask');
 			}
 		}
+		for(var appearance of classLayoutImageRecords(snapshot))await externalizeLayerImage(appearance,'frame');
 		if (String(snapshot.artSource || '').indexOf('data:') === 0 || String(snapshot.artSource || '').indexOf('blob:') === 0) {
 			snapshot.artSource = '/img/blank.png';
 		}
@@ -912,6 +941,7 @@
 				await hydrateLayerImage(mask);
 			}
 		}
+		for(var appearance of classLayoutImageRecords(hydrated))await hydrateLayerImage(appearance);
 		var setSymbolMatch = String(hydrated.setSymbolSource || '').match(/^asset:\/\/(.+)$/);
 		if (setSymbolMatch) {
 			hydrated.setSymbolAssetId = setSymbolMatch[1];
@@ -1444,6 +1474,8 @@
 				};
 				if (asset.kind === 'custom-symbol') {
 					metadata.token = asset.token;
+					metadata.scale = asset.scale || 1;
+					metadata.verticalOffset = asset.verticalOffset || 0;
 				} else if (asset.kind === 'custom-set-symbol') {
 					metadata.family = asset.family;
 					metadata.familyName = asset.familyName || asset.family;
@@ -1504,6 +1536,8 @@
 		};
 		if (asset.kind === 'custom-symbol') {
 			metadata.token = asset.token;
+			metadata.scale = asset.scale || 1;
+			metadata.verticalOffset = asset.verticalOffset || 0;
 		} else if (asset.kind === 'custom-set-symbol') {
 			metadata.family = asset.family;
 			metadata.familyName = asset.familyName || asset.family;
@@ -1621,6 +1655,8 @@
 					var oldToken = normalizeCustomSymbolToken(metadata.token);
 					if (!oldToken) { throw new Error('A custom mana symbol is missing its code.'); }
 					record.token = uniqueImportedSymbolToken(oldToken, claimedTokens);
+					record.scale = Math.max(.1,Math.min(3,Number(metadata.scale)||1));
+					record.verticalOffset = Math.max(-1,Math.min(1,Number(metadata.verticalOffset)||0));
 					tokenMap[oldToken] = record.token;
 				} else if (record.kind === 'custom-set-symbol') {
 					var oldFamily = normalizeSetSymbolFamily(metadata.family);
@@ -1855,6 +1891,8 @@
 						throw new Error('The project backup contains a custom symbol without a code.');
 					}
 					record.token = uniqueImportedSymbolToken(oldToken, claimedTokens);
+					record.scale = Math.max(.1,Math.min(3,Number(metadata.scale)||1));
+					record.verticalOffset = Math.max(-1,Math.min(1,Number(metadata.verticalOffset)||0));
 					tokenMap[oldToken] = record.token;
 				} else if (record.kind === 'custom-set-symbol') {
 					var oldFamily = normalizeSetSymbolFamily(metadata.family);
@@ -1972,6 +2010,7 @@
 		exportProjectLibrary: exportProjectLibrary,
 		importProjectLibrary: importProjectLibrary,
 		saveCustomSymbol: saveCustomSymbol,
+		saveCustomSymbolSettings: saveCustomSymbolSettings,
 		renameSelectedCustomSymbol: renameSelectedCustomSymbol,
 		deleteSelectedCustomSymbol: deleteSelectedCustomSymbol,
 		insertSelectedCustomSymbol: insertSelectedCustomSymbol,

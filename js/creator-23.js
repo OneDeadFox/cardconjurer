@@ -1060,7 +1060,7 @@ function isReservedCustomManaSymbolName(value) {
 		reservedCustomSymbolPrefixes.some(prefix => name.startsWith(prefix));
 }
 
-function registerCustomManaSymbol(name, source) {
+function registerCustomManaSymbol(name, source, settings = {}) {
 	name = normalizeCustomManaSymbolName(name);
 	if (isReservedCustomManaSymbolName(name)) {
 		return Promise.reject(new Error('The custom symbol code {' + name + '} is reserved.'));
@@ -1073,8 +1073,9 @@ function registerCustomManaSymbol(name, source) {
 				name: name,
 				path: source,
 				matchColor: false,
-				width: 1,
-				height: 1,
+				width: ((symbolImage.naturalWidth||symbolImage.width||1) / (symbolImage.naturalHeight||symbolImage.height||1)) * Math.max(.1,Number(settings.scale)||1),
+				height: Math.max(.1,Number(settings.scale)||1),
+				verticalOffset: Number(settings.verticalOffset)||0,
 				image: symbolImage,
 				custom: true
 			});
@@ -1321,6 +1322,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	snapshotFrames.forEach(record => {
 		const frame=(card.frames || []).find(item => ensureDesignLayerId(item)==record.id);
 		if (frame) {
+			if (record.definition) window.ClassLevels?.restoreAppearance(frame,record.definition);
 			applyFrameEditorState(frame,record.state);
 			syncFrameElementVisibility(frame);
 		}
@@ -1474,6 +1476,17 @@ function initializeDesignUndoInteractions() {
 }
 
 function drawFrameLayerImage(context, image, x, y, width, height, frame) {
+	if (frame.imageFit === 'fit' || frame.imageFit === 'fill') {
+		const sourceWidth=image.naturalWidth||image.width,sourceHeight=image.naturalHeight||image.height;
+		if(sourceWidth&&sourceHeight){
+			context.save();context.translate(x+width/2,y+height/2);
+			context.rotate((Number(frame.rotation)||0)*Math.PI/180);context.scale(frame.flipX?-1:1,frame.flipY?-1:1);
+			context.beginPath();context.rect(-width/2,-height/2,width,height);context.clip();
+			const factor=frame.imageFit==='fit'?Math.min(width/sourceWidth,height/sourceHeight):Math.max(width/sourceWidth,height/sourceHeight);
+			context.drawImage(image,-sourceWidth*factor/2,-sourceHeight*factor/2,sourceWidth*factor,sourceHeight*factor);
+			context.restore();return;
+		}
+	}
 	const rotation = Number(frame.rotation) || 0;
 	const scaleHorizontal = frame.flipX ? -1 : 1;
 	const scaleVertical = frame.flipY ? -1 : 1;
@@ -2251,6 +2264,7 @@ async function addFrame(additionalMasks = [], loadingFrame = false) {
 	frameElementClose.onclick = removeFrame;
 	frameElement.appendChild(frameElementClose);
 	document.querySelector('#frame-list').prepend(frameElement);
+	if(!loadingFrame)window.ClassLevels?.frameAdded(frameToAdd);
 	syncFrameElementVisibility(frameToAdd);
 	bottomInfoEdited();
 }
@@ -3758,6 +3772,13 @@ function writeText(textObject, targetContext) {
 					var manaSymbolHeight = manaSymbol.height * textSize * 0.78;
 					var manaSymbolX = currentX + canvasMargin + manaSymbolSpacing;
 					var manaSymbolY = canvasMargin + textSize * 0.34 - manaSymbolHeight / 2;
+					if(manaSymbol.custom && !textManaCost){
+						const metrics=lineContext.measureText('0');
+						const ascent=Number.isFinite(metrics.actualBoundingBoxAscent)?metrics.actualBoundingBoxAscent:textSize*.7;
+						const descent=Number.isFinite(metrics.actualBoundingBoxDescent)?metrics.actualBoundingBoxDescent:0;
+						manaSymbolY=canvasMargin+textSize*textFontHeightRatio+(descent-ascent)/2-manaSymbolHeight/2;
+					}
+					if(manaSymbol.custom)manaSymbolY+=(manaSymbol.verticalOffset||0)*textSize;
 					if (textObject.manaPlacement) {
 						manaSymbolX = scaleWidth(textObject.manaPlacement.x[manaPlacementCounter] || 0) + canvasMargin;
 						manaSymbolY = canvasMargin;
@@ -5123,6 +5144,7 @@ function drawLayoutHighlightBox(bounds, color, label, options = {}) {
 }
 function drawRulesRangeModules(range) {
 	if (!window.RulesRange || !range.modules?.length) return;
+	if (window.ClassLevels?.isRange(range)) {ClassLevels.drawHighlights(range);return;}
 	var outer = previewLayoutBounds(range.bounds);
 	var layouts = RulesRange.getModuleLayouts(range);
 	var centerX = outer.x + outer.width / 2;
@@ -5171,7 +5193,7 @@ function drawLayoutHighlights() {
 			if (!range || !range.bounds) return;
 			drawRulesRangeModules(range);
 			drawLayoutHighlightBox(range.bounds, '#b784ff', range.name || 'Rules Range', {
-				kind:'rulesRange', key:range.id || '', target:range.bounds, rotation:range.rotation, deletable:true
+				kind:'rulesRange', key:range.id || '', target:range.bounds, rotation:range.rotation, deletable:!window.ClassLevels?.isRange(range)
 			});
 		});
 	}
@@ -5184,6 +5206,7 @@ function drawLayoutHighlights() {
 	}
 	if (layoutHighlightEnabled('layout-highlight-text')) {
 		Object.entries(card.text || {}).forEach(item => {
+			if(window.ClassLevels?.contains('text',item[0]))return;
 			drawLayoutHighlightBox(item[1], '#43d9ff', item[1].name || item[0], {
 				kind:'text', key:item[0], target:item[1], rotation:item[1].rotation, deletable:true
 			});
@@ -5194,6 +5217,7 @@ function drawLayoutHighlights() {
 	}
 	if (layoutHighlightEnabled('layout-highlight-images')) {
 		(card.frames || []).filter(frame => frame.csvImageFieldKey).forEach(frame => {
+			if(window.ClassLevels?.contains('frame',frame.designLayerId))return;
 			frame.bounds = frame.bounds || {x:0, y:0, width:1, height:1};
 			drawLayoutHighlightBox(frame.bounds, '#ff59d6', frame.csvFieldLabel || frame.name || 'Custom Image', {
 				kind:'frame', key:frame.csvImageFieldKey, target:frame, rotation:frame.rotation, deletable:true
@@ -5243,6 +5267,8 @@ function pointInLayoutAreaCoordinates(point, area) {
 	};
 }
 function layoutHighlightHit(point, includeInterior = false) {
+	const classHit=window.ClassLevels?.hit(point,includeInterior);
+	if(classHit)return classHit;
 	for (var closeIndex = layoutHighlightHitAreas.length - 1; closeIndex >= 0; closeIndex--) {
 		if (layoutHighlightHitAreas[closeIndex].closeRectangle && pointInsideLayoutRectangle(point, layoutHighlightHitAreas[closeIndex].closeRectangle)) {
 			return {area:layoutHighlightHitAreas[closeIndex],action:'delete'};
@@ -5277,6 +5303,7 @@ function layoutHighlightHit(point, includeInterior = false) {
 	return null;
 }
 function layoutHighlightCursor(action, area) {
+	if(area?.kind==='classLevel')return 'pointer';
 	if (action == 'delete') return 'pointer';
 	if (action == 'move') return 'move';
 	var quarterTurn = Math.round(normalizeRotationDegrees(area && area.rotation) / 90) % 2;
@@ -5288,6 +5315,7 @@ function layoutHighlightCursor(action, area) {
 }
 function deleteLayoutHighlightArea(area) {
 	if (!area) return false;
+	if(area.kind==='classLevel'){ClassLevels.remove(area.key);return true;}
 	var before=createDesignStateSnapshot();
 	if (area.kind == 'text') {
 		if (window.RulesRange) RulesRange.removeElementReferences('text', area.key);
@@ -5394,6 +5422,7 @@ function openLayoutHighlightEditor(area) {
 	if (!area) {
 		return;
 	}
+	if(area.kind==='classLevel'){ClassLevels.open(area.key);return;}
 	if (window.CanvasDesignTools && CanvasDesignTools.openEditor(area)) return;
 	if (area.kind == 'text') {
 		const textIndex = Object.keys(card.text || {}).indexOf(area.key);
@@ -5482,6 +5511,7 @@ function initializeLayoutHighlightInteractions() {
 			event.preventDefault();
 			return;
 		}
+		if(hit.area.kind==='classLevel'){ClassLevels.select(hit.area.key);event.preventDefault();return;}
 		const bounds = hit.area.kind == 'frame' ? hit.area.target.bounds : hit.area.target;
 		layoutHighlightDrag = {
 			area:hit.area,
@@ -5516,8 +5546,8 @@ function initializeLayoutHighlightInteractions() {
 		}
 		const corner=window.DungeonCorners?.hit(layoutHighlightPoint(event));
 		if(corner){DungeonCorners.open(corner);event.preventDefault();return;}
-		const hit = layoutHighlightHit(layoutHighlightPoint(event), activeFrameDesignMode == 'frames');
-		if (hit && (hit.action == 'move' || (activeFrameDesignMode == 'frames' && hit.action == 'open'))) {
+		const hit = layoutHighlightHit(layoutHighlightPoint(event), true);
+		if (hit && (hit.action == 'move' || hit.action == 'select' || hit.action == 'open')) {
 			openLayoutHighlightEditor(hit.area);
 			event.preventDefault();
 		}
@@ -5554,7 +5584,9 @@ function drawCard() {
 		card.frames.slice().reverse().forEach(function(frame) {
 			if ((frame.classRangeBanner || (frame.name?.includes('Header') && frame.src === '/img/frames/class/header.png')) && !frame.hidden && frame.image?.complete && frame.image.naturalWidth) {
 				var bounds = frame.bounds || {};
-				cardContext.drawImage(frame.image, scaleX(bounds.x), scaleY(bounds.y), scaleWidth(bounds.width), scaleHeight(bounds.height));
+				cardContext.save();cardContext.globalAlpha=(frame.opacity??100)/100;
+				drawFrameLayerImage(cardContext,frame.image,scaleX(bounds.x),scaleY(bounds.y),scaleWidth(bounds.width),scaleHeight(bounds.height),frame);
+				cardContext.restore();
 			}
 		});
 	}
@@ -5660,6 +5692,7 @@ function drawCard() {
 	previewContext.drawImage(cardCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
 	drawLayoutHighlights();
 	drawCardTextFitIndicators();
+	window.RulesTextStyles?.paintModulePreview?.();
 
 	if (window.cardDrawingPromiseResolver) {
         window.cardDrawingPromiseResolver();
