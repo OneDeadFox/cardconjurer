@@ -75,3 +75,12 @@ multiple columns mapped to one label are joined with a newline.
 This mechanism is layout-independent. Class and Dungeon templates can use the
 same families and CSV label mappings; specialized room/level content and count
 columns remain separate future work.
+
+## Existing split pipeline layers
+
+A linked full/blended pipeline layer replaces its matching old half-layer in CSV
+output. Matching uses the same pipeline name (ignoring color and half suffix),
+region bounds, and rotation. A different explicit family is never merged. The old
+half-layer is hidden after all requested artwork succeeds; it is not deleted, so
+range/container references remain valid. Other regions and unrelated artwork
+are untouched. Saved source templates are cloned before generation.
