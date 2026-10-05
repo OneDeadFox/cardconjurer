@@ -2913,6 +2913,16 @@ function cardPowerToughnessCollisionRects() {
 		return cardTextPixelRect(entry[1]);
 	});
 }
+function cardRulesTagCollisionRects(textObject) {
+ const key=cardTextObjectKey(textObject),owners=(card.frames||[]).filter(frame=>frame.sectionModule?.mainKey===key);
+ const ids=new Set(owners.map(frame=>frame.designLayerId)),tags=new Set();
+ for(const owner of owners){const range=(card.rulesRanges||[]).find(range=>range.id===owner.sectionModule.rangeId);for(const module of range?.modules||[])for(const entry of module.elements||[])if(entry.kind==='frame'&&entry.anchor?.x==='right'&&entry.anchor?.y==='top')tags.add(entry.key);}
+ return (card.frames||[]).filter(frame=>!frame.hidden&&Number(frame.opacity)!==0&&(ids.has(frame.rulesTextObstacle?.ownerId)||tags.has(frame.designLayerId)&&frame.name==='Module tag')).map(frame=>{
+  const b=frame.bounds,ink=cardPowerToughnessImageBounds(frame.image),width=scaleWidth(b.width),height=scaleHeight(b.height),x=scaleX(b.x),y=scaleY(b.y);
+  const ix=frame.flipX?1-ink.x-ink.width:ink.x,iy=frame.flipY?1-ink.y-ink.height:ink.y;
+  return{label:frame.rulesTextObstacle?.label||'Loot Box',rect:{x:x+ix*width,y:y+iy*height,width:ink.width*width,height:ink.height*height,pivotX:x+width/2,pivotY:y+height/2,rotation:Number(frame.rotation)||0}};
+ });
+}
 function cardTextCollisionObstacles(textObject, role) {
 	var obstacles = [];
 	if (role === 'title') {
@@ -2930,6 +2940,7 @@ function cardTextCollisionObstacles(textObject, role) {
 			}
 		});
 	} else if (role === 'rules') {
+		obstacles.push(...cardRulesTagCollisionRects(textObject));
 		cardPowerToughnessCollisionRects().forEach(function (rect) {
 			obstacles.push({label:'Power/Toughness Box', rect:rect});
 		});

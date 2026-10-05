@@ -146,7 +146,7 @@
     else if(style.id==='battle')for(const icon of icons){icon.bossTitleOwner=owner;icon.bounds=clone(appearance.iconBounds);icon.rotation=icon.bounds.rotation||0;icon.bossTitleOwnerBounds=bounds(frame);}
     else {card.frames=card.frames.filter(item=>!icons.includes(item));for(const icon of icons)window.RulesRange?.removeElementReferences('frame',ensureDesignLayerId(icon));}
    }
-   frame.image=await image(frame.src);window.RulesRange?.updateElementRelative('frame',owner,{resizeVertical:true});await rebuildFrameLayerList();refreshGeometry(frame);drawFrames();drawTextBuffer();
+   frame.image=await image(frame.src);await window.ContainerResizeTools?.fitSections?.(card,true,frame);window.RulesRange?.updateElementRelative('frame',owner,{resizeVertical:true});await rebuildFrameLayerList();refreshGeometry(frame);drawFrames();drawTextBuffer();
    if(!options.suppressUndo&&!window.CanvasDesignTools?.editsFrame(frame))commitDesignUndoSnapshot(before,'Change '+sectionRole+' section appearance');
    status(panel,'Appearance replaced. The card layout and text content were preserved.');return true;
   }catch(error){await applyDesignStateSnapshot(before);status(panel,error.message);return false;}
@@ -353,7 +353,7 @@
    const range=(card.rulesRanges||[]).find(item=>item.id===group.rangeId),fields=uniformRulesFields(frame);
    if(!range||(fields.length<2)||(!range.uniformTextSize&&!range.autoSizeModules)){setUniformRulesSize(frame,0,false);uniformRulesCache.delete(group.rangeId);continue;}
    const max=Math.max(1,Math.floor(Math.min(...fields.map(({field})=>defaultPixelSize(field))))),limit=Number.isFinite(range.maxFontReduction)?Math.max(0,range.maxFontReduction):Infinity,min=Math.max(1,Math.ceil(Math.max(...fields.filter(({field})=>!/\{fontoverride(?:[+-]?\d+)?\}/i.test(field.text||'')).map(({field})=>defaultPixelSize(field)-limit),max-limit)));
-   const signature=()=>JSON.stringify({height:card.height,width:card.width,auto:range.autoSizeModules,uniform:range.uniformTextSize,limit:range.maxFontReduction,modules:range.modules.map(module=>({id:module.id,min:module.minSize,max:module.maxSize})),fields:fields.map(({key,field})=>({key,...Object.fromEntries(Object.entries(field).filter(([name])=>!['rangeFontReduction','rangeUniformTextSize','rangeClip'].includes(name)))})),obstacles:card.frames.filter(item=>/power|toughness/i.test(item.componentKind||item.name||'')).map(item=>({bounds:item.bounds,rotation:item.rotation,hidden:item.hidden}))});
+   const signature=()=>JSON.stringify({height:card.height,width:card.width,auto:range.autoSizeModules,uniform:range.uniformTextSize,limit:range.maxFontReduction,modules:range.modules.map(module=>({id:module.id,min:module.minSize,max:module.maxSize})),fields:fields.map(({key,field})=>({key,...Object.fromEntries(Object.entries(field).filter(([name])=>!['rangeFontReduction','rangeUniformTextSize','rangeClip'].includes(name)))})),obstacles:card.frames.filter(item=>(/power|toughness|module tag/i.test(item.componentKind||item.name||'')||item.rulesTextObstacle)).map(item=>({bounds:item.bounds,rotation:item.rotation,hidden:item.hidden}))});
    const cached=uniformRulesCache.get(group.rangeId);
    if(cached?.signature===signature()){
     group.uniformSize=cached.size;setUniformRulesSize(frame,cached.size,range.uniformTextSize);
@@ -397,7 +397,7 @@
    if(!module)throw Error('The Prototype module was not found.');
    syncRuleModules();
    const box=group.lastProtoBox,width=box.width*.3,height=width*card.width/card.height*(bitmap.naturalHeight||bitmap.height)/(bitmap.naturalWidth||bitmap.width);
-   const tag={name:'Module tag',src,image:bitmap,bounds:{x:box.x+box.width-width,y:box.y-height,width,height},masks:[],opacity:100,designCreated:true,customField:true,fixedAppearance:true};ensureDesignLayerId(tag);
+   const tag={name:'Module tag',rulesTextObstacle:{ownerId:frame.designLayerId,label:'Loot Box'},src,image:bitmap,bounds:{x:box.x+box.width-width,y:box.y-height,width,height},masks:[],opacity:100,designCreated:true,customField:true,fixedAppearance:true};ensureDesignLayerId(tag);
    tag.csvImageFieldKey='module-tag-'+tag.designLayerId;
    card.frames.unshift(tag);
    module.elements.push({kind:'frame',key:tag.designLayerId,owned:true,anchor:{x:'right',y:'top'},offset:{x:-width*card.width,y:-height*card.height,width:width*card.width,height:height*card.height}});

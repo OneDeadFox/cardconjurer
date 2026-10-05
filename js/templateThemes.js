@@ -62,7 +62,7 @@
   if(role&&style)return{kind:'section',style:style.id,role};
   return null;
  }
- // Only the frame body and its pipeline split; other multicolor components use gold.
+ // Frame bodies, pipelines and main rules backgrounds split; other multicolor components use gold.
  function elementChoice(frame,data,choice,recipe){
   if(!choice.right)return choice;
   const role=frame.sectionAppearance?.role||String(frame.componentKind||'').toLowerCase();
@@ -70,7 +70,9 @@
   const pipeline=/pinline|pipeline/i.test(role+' '+name);
   const body=recipe?.kind==='native'&&!/title|type|rules|power|toughness/i.test(role)&&!(frame.masks||[]).some(mask=>/title|type|rules|power|toughness/i.test(mask.name||''));
   const customBody=!recipe&&/\bframe\b/i.test(role+' '+name)&&!/title|type|rules|power|toughness/i.test(role+' '+name)&&!(frame.masks||[]).some(mask=>/title|type|rules|power|toughness/i.test(mask.name||''));
-  return pipeline||body||customBody?choice:{...choice,left:'m',right:''};
+  const prototype=recipe?.kind==='prototype'||/prototype/i.test(role+' '+name);
+  const rules=!prototype&&(role==='rules'||/\brules(?: text| box| background)?\b/i.test(name)||recipe?.kind==='section'&&recipe.role==='rules');
+  return pipeline||body||customBody||rules?choice:{...choice,left:'m',right:''};
  }
  function unlink(frame){delete frame.templateTheme;}
  async function stockArtwork(frame,data,choice,recipe){
@@ -124,7 +126,7 @@
    if(autoStock&&recipe)changes.push({frame,...await stockArtwork(frame,data,localChoice,recipe),recipe,choice:localChoice});
   }
   if(!changes.length){if(settings.enabled)warnings.push('No linked custom layers or recognized stock elements were found for color switching.');return data;}
-  for(const {frame,src,masks,recipe,choice} of changes){frame.src=src;delete frame.image;delete frame.assetId;frame.masks=masks;if(recipe)frame.stockThemeRecipe=recipe;if(frame.sectionAppearance){frame.sectionAppearance.left=choice.left;frame.sectionAppearance.right=choice.right;}if(frame.sectionCrown){frame.sectionCrown.left=choice.left;frame.sectionCrown.right=choice.right;}if(frame.sectionModule){frame.sectionModule.left=choice.left;frame.sectionModule.right=choice.right;}}
+  for(const {frame,src,masks,recipe,choice} of changes){frame.src=src;delete frame.image;delete frame.assetId;frame.masks=masks;if(recipe)frame.stockThemeRecipe=recipe;if(frame.sectionAppearance){frame.sectionAppearance.left=choice.left;frame.sectionAppearance.right=choice.right;}if(frame.sectionCrown){frame.sectionCrown.left=choice.left;frame.sectionCrown.right=choice.right;}if(recipe?.kind==='prototype'){const owner=data.frames.find(item=>item.designLayerId===recipe.owner);if(owner?.sectionModule){owner.sectionModule.left=choice.left;owner.sectionModule.right=choice.right;}}}
   for(const [companion,owner] of duplicates){companion.templateThemeDuplicate=companion.templateThemeDuplicate||{owner:owner.designLayerId,originalHidden:!!companion.hidden};companion.hidden=true;}
   data.csvImport=data.csvImport||{};data.csvImport.templateColors=[choice.left,choice.right].filter(Boolean);return data;
  }

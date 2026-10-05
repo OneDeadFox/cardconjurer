@@ -142,6 +142,29 @@
    }
    owner.typePipelineAlignmentVersion=1;changed=true;
   }
+  return await fitSections(data)||changed;
+ }
+ // Fill through the middle of the outline strokes, so transparent artwork
+ // meets the pipeline instead of exposing a strip of art between the layers.
+ async function fitSections(data,force=false,onlyFrame=null){
+  let changed=false;const frames=data.frames||[],prototypeIds=new Set(frames.map(frame=>frame.sectionModule?.partId));
+  for(const owner of frames)for(const kind of ['title','type']){
+   const saved=kind==='title'?owner.titleResizeContainer:owner.resizeContainer;if(!saved||(!force&&owner[kind+'PipelineFillVersion']===1))continue;
+   const ids=kind==='title'?saved.titleIds:saved.typeIds;
+   const targets=(ids||[]).map(id=>frames.find(frame=>frame.designLayerId===id)).filter(frame=>frame&&frame.src&&!prototypeIds.has(frame.designLayerId)&&(!onlyFrame||frame===onlyFrame));if(!targets.length)continue;
+   const pipe=frames.find(frame=>saved.pinlineIds?.includes(frame.designLayerId)&&!frame.hidden&&!/Right Half/.test(frame.name||''));if(!pipe)continue;
+   const bitmap=await load(pipe.src),raster=canvas(bitmap.width,bitmap.height);raster.getContext('2d').drawImage(bitmap,0,0);const pixels=raster.getContext('2d').getImageData(0,0,raster.width,raster.height).data,runs=[],middle=Math.floor(raster.width/2);let left=raster.width,right=0;
+   for(let y=0;y<raster.height;y++)for(let x=0;x<raster.width;x++)if(pixels[(y*raster.width+x)*4+3]>16){left=Math.min(left,x);right=Math.max(right,x+1);}
+   for(let y=0;y<raster.height;y++)if(pixels[(y*raster.width+middle)*4+3]>16){const last=runs[runs.length-1];if(last&&last[1]===y)last[1]++;else runs.push([y,y+1]);}if(runs.length<2||right<=left)continue;
+   const top=(runs[0][0]+runs[0][1])/2,bottom=(runs[1][0]+runs[1][1])/2,b=pipe.bounds,target={x:b.x+left/raster.width*b.width,y:b.y+top/raster.height*b.height,width:(right-left)/raster.width*b.width,height:(bottom-top)/raster.height*b.height};
+   for(const frame of targets){
+    // Keep foreground text and symbols exactly where the user placed them.
+    frame.bounds={...frame.bounds,...target};frame.src=slices(await load(frame.src),target.width*data.width,target.height*data.height).toDataURL();delete frame.assetId;frame.image=await load(frame.src);
+    if(frame.sectionAppearance){frame.sectionAppearance.baseBounds={...target,rotation:frame.rotation||0};frame.sectionAppearance.lastBounds={...target,rotation:frame.rotation||0};}
+    for(const field of Object.values(data.text||{}))if(field.frameAnchor?.id===frame.designLayerId)field.frameAnchor.last={...target,rotation:frame.rotation||0};
+   }
+   owner[kind+'PipelineFillVersion']=1;changed=true;
+  }
   return changed;
  }
  async function rendered(frame){
@@ -215,6 +238,6 @@
   window.addEventListener('creatortabchanged',cancel);window.addEventListener('frameworkspacechanged',cancel);
  }
  function restore(frame,definition){if(!frame.resizeContainerRaster&&!definition.resizeContainerRaster&&!frame.resizeContainer&&!definition.resizeContainer&&!frame.titleResizeContainer&&!definition.titleResizeContainer)return;for(const key of ['componentKind','resizeContainer','titleResizeContainer','resizeContainerRaster','fixedAppearance','ogBounds','maskCanvasBounds','assetId','flipX','flipY','colorOverlayCheck','hslHue','hslSaturation','hslLightness']){if(definition[key]===undefined)delete frame[key];else frame[key]=copy(definition[key]);}frame.src=definition.src;frame.masks=copy(definition.masks||[]);load(frame.src).then(image=>{frame.image=image;return Promise.all(frame.masks.map(async mask=>{mask.image=await load(mask.src);}));}).then(drawFrames);}
- window.ContainerResizeTools={migrate,connectedBounds,open,openTitle:()=>open('title'),cancel,draw,isOpen:()=>!!session,restore,resized,map,slices,cursor,flushPreview:()=>runPreview(session)};
+ window.ContainerResizeTools={fitSections,migrate,connectedBounds,open,openTitle:()=>open('title'),cancel,draw,isOpen:()=>!!session,restore,resized,map,slices,cursor,flushPreview:()=>runPreview(session)};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
