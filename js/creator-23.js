@@ -1227,6 +1227,7 @@ function createDesignStateSnapshot() {
 		text:cloneDesignValue(card.text || {}),
 		bossFrameSettings:cloneDesignValue(card.bossFrameSettings || null),
 		rulesRanges:cloneDesignValue(card.rulesRanges || []),
+		templateThemes:cloneDesignValue(card.templateThemes || null),
 		dungeonModules:cloneDesignValue(card.dungeonModules || []),
 		dungeonWallTexture:card.dungeonWallTexture||'',
 		dungeonWallColor:card.dungeonWallColor||'B',
@@ -1345,7 +1346,7 @@ async function applyDesignStateSnapshot(snapshot) {
 	snapshotFrames.forEach(record => {
 		const frame=(card.frames || []).find(item => ensureDesignLayerId(item)==record.id);
 		if (frame) {
-			if (record.definition) {window.ClassLevels?.restoreAppearance(frame,record.definition);window.BossFrameTools?.restoreAppearance(frame,record.definition);window.FrameSectionTools?.restoreAppearance(frame,record.definition);window.ContainerResizeTools?.restore(frame,record.definition);}
+			if (record.definition) {window.ClassLevels?.restoreAppearance(frame,record.definition);window.BossFrameTools?.restoreAppearance(frame,record.definition);window.FrameSectionTools?.restoreAppearance(frame,record.definition);window.ContainerResizeTools?.restore(frame,record.definition);window.TemplateThemes?.restore(frame,record.definition);}
 			applyFrameEditorState(frame,record.state);
 			syncFrameElementVisibility(frame);
 		}
@@ -1355,6 +1356,8 @@ async function applyDesignStateSnapshot(snapshot) {
 	else if (document.querySelector('#text-options')) document.querySelector('#text-options').innerHTML='';
 	card.bossFrameSettings=cloneDesignValue(snapshot.bossFrameSettings||null);
 	card.rulesRanges=cloneDesignValue(snapshot.rulesRanges||[]);
+	card.templateThemes=cloneDesignValue(snapshot.templateThemes||null);
+	window.TemplateThemes?.refresh();
 	if(snapshot.layoutIdentity)Object.assign(card,cloneDesignValue(snapshot.layoutIdentity));
 	card.dungeonLayoutLocked=!!snapshot.dungeonLayoutLocked;
 	card.dungeonModules=cloneDesignValue(snapshot.dungeonModules||[]);
@@ -7248,6 +7251,7 @@ async function loadCardData(cardData, failureLabel) {
 		DungeonModules.mount();
 		DungeonModules.render();
 	}
+	window.TemplateThemes?.refresh();
 	return true;
 }
 async function loadCard(selectedCardKey) {

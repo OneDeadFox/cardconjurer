@@ -424,6 +424,7 @@
 		var fields = {};
 		var metadata = {};
 		var textboxes = {};
+		var templateFields = {};
 		var imageFields = {};
 		var features = {};
 
@@ -450,6 +451,11 @@
 				imageFields[target.substring('imagefield:'.length)] = value;
 				return;
 			}
+			if (target.indexOf('templatefield:') === 0) {
+				var label=target.substring(14);
+				(templateFields[label] ||= []).push(value.trim());
+				return;
+			}
 			if (target.indexOf('textbox:') === 0) {
 				var textboxKey = target.substring(8);
 				if (!textboxes[textboxKey]) {
@@ -465,6 +471,7 @@
 			fields: fields,
 			metadata: metadata,
 			textboxes: textboxes,
+			templateFields: templateFields,
 			imageFields: imageFields,
 			features: features,
 			sourceRow: rowIndex + 2
@@ -791,6 +798,7 @@
 			fields: primaryFields,
 			alternateFields: alternateFields,
 			textboxes: JSON.parse(JSON.stringify(mapped.textboxes)),
+			templateFields: mapped.templateFields,
 			imageFields: usesTemplateFields ? Object.assign({}, mapped.imageFields) : {},
 			features: Object.assign({}, mapped.features),
 			warnings: warnings,
@@ -808,6 +816,7 @@
 				card: cloneSerializableCard(result.alternateCard),
 				fields: Object.assign({}, result.alternateFields),
 				textboxes: JSON.parse(JSON.stringify(result.textboxes || {})),
+			templateFields: result.templateFields || {},
 				imageFields: Object.assign({}, result.imageFields),
 				features: Object.assign({}, result.features),
 				warnings: result.warnings.slice(),
@@ -820,6 +829,7 @@
 			card: cloneSerializableCard(result.card),
 			fields: Object.assign({}, result.fields),
 			textboxes: JSON.parse(JSON.stringify(result.textboxes || {})),
+			templateFields: result.templateFields || {},
 			imageFields: Object.assign({}, result.imageFields),
 			features: Object.assign({}, result.features),
 			warnings: result.warnings.slice(),
@@ -856,6 +866,8 @@
 		applyCustomTextboxes(selectedTemplate, mapped, result.warnings);
 		applyCollectorFields(selectedTemplate, result.fields);
 		selectedTemplate.csvImport = JSON.parse(JSON.stringify(result.card.csvImport || {}));
+		window.TemplateThemes?.mapFields(selectedTemplate,result.templateFields,result.warnings);
+		if(window.TemplateThemes)await TemplateThemes.apply(selectedTemplate,result.fields,result.warnings);
 		result.card = selectedTemplate;
 		result.appliedTemplateName = templateName;
 		return templateName;
@@ -1443,11 +1455,15 @@
 	async function applyPreviewToCurrentCard(result) {
 		await applyNamedProjectTemplate(result);
 		await applyBuiltInFrameTemplate(result);
-		if ((result.appliedTemplateName || result.appliedBuiltInLayout) && typeof loadCardData === 'function') {
+		if(!result.appliedTemplateName){
+			window.TemplateThemes?.mapFields(result.card,result.templateFields,result.warnings);
+			if(window.TemplateThemes)await TemplateThemes.apply(result.card,result.fields,result.warnings);
+		}
+		if ((result.appliedTemplateName || result.appliedBuiltInLayout || result.card.csvImport?.templateColors) && typeof loadCardData === 'function') {
 			// A cached built-in layout includes canvas dimensions, version, art,
 			// symbols and layout defaults too. Restoring only its text leaves the
 			// previous preview's frame settings active.
-			var layoutName = result.appliedTemplateName || result.appliedBuiltInLayout;
+			var layoutName = result.appliedTemplateName || result.appliedBuiltInLayout || 'Captured template';
 			var restored = await loadCardData(result.card, layoutName);
 			if (restored === false) {
 				throw new Error('The frame layout "' + layoutName + '" could not be restored.');

@@ -879,6 +879,7 @@
 				await externalizeLayerImage(mask, 'mask');
 			}
 		}
+		for(var record of window.TemplateThemes?.records(snapshot)||[])await externalizeLayerImage(record,'frame');
 		for(var appearance of classLayoutImageRecords(snapshot))await externalizeLayerImage(appearance,'frame');
 		if (String(snapshot.artSource || '').indexOf('data:') === 0 || String(snapshot.artSource || '').indexOf('blob:') === 0) {
 			snapshot.artSource = '/img/blank.png';
@@ -941,6 +942,7 @@
 				await hydrateLayerImage(mask);
 			}
 		}
+		for(var record of window.TemplateThemes?.records(hydrated)||[])await hydrateLayerImage(record);
 		for(var appearance of classLayoutImageRecords(hydrated))await hydrateLayerImage(appearance);
 		var setSymbolMatch = String(hydrated.setSymbolSource || '').match(/^asset:\/\/(.+)$/);
 		if (setSymbolMatch) {

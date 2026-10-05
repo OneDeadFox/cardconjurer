@@ -25,6 +25,8 @@
 			fields: [
 				['field:color', 'Color'],
 				['field:colorIdentity', 'Color Identity'],
+				['field:frameLeftColor', 'Frame Left Color'],
+				['field:frameRightColor', 'Frame Right Color'],
 				['field:manaCost', 'Mana Cost'],
 				['field:manaValue', 'Mana Value']
 			]
@@ -134,6 +136,8 @@
 		color: 'field:color',
 		colour: 'field:color',
 		coloridentity: 'field:colorIdentity',
+		frameleftcolor: 'field:frameLeftColor',
+		framerightcolor: 'field:frameRightColor',
 		colouridentity: 'field:colorIdentity',
 		identity: 'field:colorIdentity',
 		cost: 'field:manaCost',
@@ -375,6 +379,9 @@
 			};
 		});
 
+		var labels=new Map();
+		[window.card,...savedFrameProjects().map(project=>project.card)].filter(Boolean).forEach(data=>Object.values(data.text||{}).forEach(field=>{var label=String(field.csvFieldLabel||field.name||'').trim();if(label)labels.set(label.toLowerCase().replace(/\s+/g,' '),label);}));
+		if(labels.size)groups.push({label:'Template fields by label',fields:[...labels].map(([key,label])=>['templatefield:'+key,label])});
 		var textFields = [];
 		var seenTextFields = {};
 		if (window.card && card.text) {
@@ -482,7 +489,7 @@
 		function textTarget(text, key) {
 			return text && text.customField &&
 				normalizeHeader(text.csvFieldLabel || text.name || key) === normalized ?
-				'textbox:' + key : '';
+				'templatefield:' + String(text.csvFieldLabel || text.name || key).trim().toLowerCase().replace(/\s+/g,' ') : '';
 		}
 		if (window.card && card.text) {
 			for (var textKey of Object.keys(card.text)) {
@@ -700,7 +707,7 @@
 
 		var mappedSingles = {};
 		state.mappings.forEach(function (target, index) {
-			if (!target || target === 'ignore' || target === 'metadata' || target.indexOf('textbox:') === 0) {
+			if (!target || target === 'ignore' || target === 'metadata' || target.indexOf('textbox:') === 0 || target.indexOf('templatefield:') === 0) {
 				return;
 			}
 			if (mappedSingles[target] !== undefined) {
