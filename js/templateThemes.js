@@ -42,7 +42,7 @@
   if(frame.resizeContainerRaster&&/pinline|pipeline/i.test(frame.componentKind||frame.name||'')){const reference=await raster(frame);source=fitPipeline(source,reference);if(second)second=fitPipeline(second,reference);}
   if(!b)return source.toDataURL();
   const normalized=canvas(source.width,source.height);normalized.getContext('2d').drawImage(second,0,0,source.width,source.height);
-  const ctx=source.getContext('2d'),first=ctx.getImageData(0,0,source.width,source.height),other=normalized.getContext('2d').getImageData(0,0,source.width,source.height),mask=await image('/img/frames/maskRightHalf.png'),weights=canvas(source.width,source.height);const bounds=frame.bounds||{x:0,y:0,width:1,height:1};weights.getContext('2d').drawImage(mask,bounds.x*mask.width,bounds.y*mask.height,bounds.width*mask.width,bounds.height*mask.height,0,0,source.width,source.height);const alpha=weights.getContext('2d').getImageData(0,0,source.width,source.height).data;
+  const ctx=source.getContext('2d'),first=ctx.getImageData(0,0,source.width,source.height),other=normalized.getContext('2d').getImageData(0,0,source.width,source.height),mask=await image('/img/frames/maskRightHalf.png'),weights=canvas(source.width,source.height);const bounds=frame.bounds||{x:0,y:0,width:1,height:1};const blend=link.blendRegion;if(blend){const ctx=weights.getContext('2d'),end=(blend.x+blend.width)*source.width;ctx.fillRect(end,0,source.width-end,source.height);ctx.drawImage(mask,blend.x*source.width,0,blend.width*source.width,source.height);}else weights.getContext('2d').drawImage(mask,bounds.x*mask.width,bounds.y*mask.height,bounds.width*mask.width,bounds.height*mask.height,0,0,source.width,source.height);const alpha=weights.getContext('2d').getImageData(0,0,source.width,source.height).data;
   for(let i=0;i<first.data.length;i+=4){const t=alpha[i+3]/255,aa=first.data[i+3]/255*(1-t),ba=other.data[i+3]/255*t,total=aa+ba;for(let j=0;j<3;j++)first.data[i+j]=total?(first.data[i+j]*aa+other.data[i+j]*ba)/total:0;first.data[i+3]=total*255;}ctx.putImageData(first,0,0);return source.toDataURL();
  }
  // Explicit custom links take precedence; otherwise known stock recipes need no family setup.
@@ -95,7 +95,7 @@
   let variants,available;
   if(recipe.kind==='class'){
    variants=Object.fromEntries(Object.keys(palette).map(key=>[key,{src:recipe.source.replace(/[wubrgmalc]\.png$/i,key+'.png')} ]));
-   available=[['pinline','maskPinlines'],['rules','maskRules'],['rules','maskTextBoxes'],['title','maskTitle'],['type','maskType']].map(([role,file])=>({role,src:'/img/frames/class/masks/'+file+'.png'}));
+   available=[['pinline','maskPinlines'],['rules','maskRules'],['title','maskTitle'],['type','maskType']].map(([role,file])=>({role,src:'/img/frames/class/masks/'+file+'.png'}));
   }else if(recipe.kind==='legacyRegular'){
    variants=Object.fromEntries(Object.keys(palette).map(key=>[key,{src:recipe.source.replace(/[WUBRGMALC]\.png$/,key.toUpperCase()+'.png')}]));
    available=['Pinline','Rules','Title','Type'].map(role=>({role:role.toLowerCase(),src:'/img/frames/m15/regular/m15Mask'+role+'.png'}));
@@ -104,13 +104,17 @@
    available=(variants[choice.left]?.masks||Object.values(variants)[0].masks||[]).map(mask=>({role:elementRole({name:mask.name}),src:mask.src})).filter(mask=>['pinline','rules','title','type'].includes(mask.role));
   }
   const family={name:'Stock '+recipe.kind,variants};
-  if((frame.masks||[]).some(mask=>!/^(left|right) half$/i.test(mask.name||'')))return{src:await compose(family,{side:'full'},elementChoice(frame,data,choice,recipe),data,frame),masks:copy(frame.masks||[])};
+  let ruleBlend;
+  if(recipe.kind==='class'&&choice.right){const coverage=await raster({src:'/img/frames/class/masks/maskRules.png'}),shape=pipelineShape(coverage);if(shape)ruleBlend={x:shape.x[0]/coverage.width,width:(shape.x[shape.x.length-1]-shape.x[0])/coverage.width};}
+  const blendLink=role=>({side:'full',...(role==='rules'&&ruleBlend?{blendRegion:ruleBlend}:{})});
+  const combinedTextboxes=recipe.kind==='class'&&(frame.componentKind==='Text Boxes'||(frame.masks||[]).some(mask=>/text boxes/i.test(mask.name||'')));
+  if(!combinedTextboxes&&(frame.masks||[]).some(mask=>!/^(left|right) half$/i.test(mask.name||'')))return{src:await compose(family,blendLink(elementRole(frame,recipe)),elementChoice(frame,data,choice,recipe),data,frame),masks:copy(frame.masks||[])};
   const base=elementChoice({componentKind:'Frame'},data,choice,recipe);
   const output=await raster({src:await compose(family,{side:'full'},base,data,frame)}),ctx=output.getContext('2d');
   if(choice.right||coloredArtifact(data,choice))for(const mask of available){
    const local=elementChoice({componentKind:mask.role},data,choice,recipe);
    if(local.left===base.left&&local.right===base.right)continue;
-   const layer=await raster({src:await compose(family,{side:'full'},local,data,frame)});
+   const layer=await raster({src:await compose(family,blendLink(mask.role),local,data,frame)});
    const weights=canvas(output.width,output.height);weights.getContext('2d').drawImage(await image(mask.src),0,0,output.width,output.height);
    const before=ctx.getImageData(0,0,output.width,output.height),after=layer.getContext('2d').getImageData(0,0,output.width,output.height).data,alpha=weights.getContext('2d').getImageData(0,0,output.width,output.height).data;
    for(let i=0;i<before.data.length;i+=4){const t=alpha[i+3]/255,a=before.data[i+3]*(1-t),b=after[i+3]*t,total=a+b;for(let channel=0;channel<3;channel++)before.data[i+channel]=total?(before.data[i+channel]*a+after[i+channel]*b)/total:0;before.data[i+3]=total;}ctx.putImageData(before,0,0);
