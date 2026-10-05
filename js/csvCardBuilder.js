@@ -91,7 +91,7 @@
 	}
 
 	function parseFrameColors(colorValue, identityValue, manaCost) {
-		var colorText = String(colorValue || '').trim();
+		var colorText = String(identityValue || colorValue || '').trim();
 		var normalizedColor = normalizeFrameValue(colorText);
 		if (['multi', 'multicolor', 'multicolored', 'multicolour', 'multicoloured'].includes(normalizedColor)) {
 			colorText = String(identityValue || manaCost || '');
@@ -249,7 +249,7 @@
 			}
 			return colors.length > 2 ? 'ML' : colors[0] + 'L';
 		}
-		if (typeLine.toLowerCase().includes('vehicle')) {
+		if (!colors.length && typeLine.toLowerCase().includes('vehicle')) {
 			return 'V';
 		}
 		if (typeLine.toLowerCase().includes('artifact')) {
@@ -265,10 +265,10 @@
 		var colors = parseFrameColors(fields.color, fields.colorIdentity,
 			(card.text.mana && card.text.mana.text) || '');
 		var typeLine = String((card.text.type && card.text.type.text) || '').toLowerCase();
-		if (typeLine.includes('vehicle')) {
+		if (!colors.length && typeLine.includes('vehicle')) {
 			return 'V';
 		}
-		if (typeLine.includes('artifact')) {
+		if (!colors.length && typeLine.includes('artifact')) {
 			return 'A';
 		}
 		if (colors.length >= 2) {
@@ -397,6 +397,7 @@
 			masks: []
 		});
 
+		if(window.TemplateThemes)await TemplateThemes.apply({...card,frames},result.fields,result.warnings);
 		await waitForFrameImages(async function () {
 			card.frames = frames;
 			var frameList = document.querySelector('#frame-list');

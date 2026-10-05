@@ -6,7 +6,7 @@
  function config(data){return data.templateThemes||{enabled:false,families:[]};}
  function records(data){return [...(config(data).families||[]).flatMap(family=>Object.values(family.variants||{})),...(data.frames||[]).flatMap(frame=>frame.templateTheme?.masks||[])];}
  function colors(value){const text=String(value||'').trim().toLowerCase();if(!text)return[];if(/^(multi|multicolor|multicolored)$/.test(text))return['m'];const names=Object.fromEntries(Object.entries(palette).map(([key,name])=>[name.toLowerCase(),key]));const found=[];for(const token of text.split(/[^a-z]+/).filter(Boolean)){if(names[token])found.push(names[token]);else if(/^[wubrgcmal]+$/.test(token))found.push(...token);else throw Error('Unknown frame color: '+token);}return [...new Set(found)];}
- function selection(fields){const specified=String(fields.color||'').trim();const leftColors=colors(fields.frameLeftColor||''),rightColors=colors(fields.frameRightColor||'');if(leftColors.length>1||rightColors.length>1)throw Error('Frame Left/Right Color each require one color.');const left=leftColors[0],right=rightColors[0];if(left)return{left,right:right||'',requested:true};if(right)throw Error('Frame Right Color requires Frame Left Color.');const base=colors(specified||fields.colorIdentity||'');if(!base.length)return{requested:false};return{left:base.length>2?'m':base[0],right:base.length===2?base[1]:'',requested:true};}
+ function selection(fields){const specified=String(fields.color||'').trim();const leftColors=colors(fields.frameLeftColor||''),rightColors=colors(fields.frameRightColor||'');if(leftColors.length>1||rightColors.length>1)throw Error('Frame Left/Right Color each require one color.');const left=leftColors[0],right=rightColors[0];if(left)return{left,right:right||'',requested:true};if(right)throw Error('Frame Right Color requires Frame Left Color.');const identity=String(fields.colorIdentity||'').trim();const base=colors(identity||specified);if(!base.length)return{requested:false};return{left:base.length>2?'m':base[0],right:base.length===2?base[1]:'',requested:true};}
  function image(src){return new Promise((resolve,reject)=>{const value=new Image();value.crossOrigin='anonymous';value.onload=()=>resolve(value);value.onerror=()=>reject(Error('Could not load a theme asset.'));value.src=typeof fixUri==='function'?fixUri(src):src;});}
  function canvas(w,h){const value=document.createElement('canvas');value.width=Math.max(1,Math.round(w));value.height=Math.max(1,Math.round(h));return value;}
  async function raster(record,region){const src=await image(record.src),w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,b=region||{x:0,y:0,width:1,height:1},result=canvas(w*b.width,h*b.height);result.getContext('2d').drawImage(src,w*b.x,h*b.y,w*b.width,h*b.height,0,0,result.width,result.height);return result;}
@@ -52,6 +52,9 @@
   const prototypeOwner=(data.frames||[]).find(owner=>(frame.designLayerId&&owner.sectionModule?.partId===frame.designLayerId)||(frame.prototypePiece?.owner&&owner.designLayerId===frame.prototypePiece.owner));
   if(prototypeOwner)return{kind:'prototype',owner:prototypeOwner.designLayerId,piece:frame.prototypePiece?.kind};
   if(frame.sectionCrown)return{kind:'crown'};
+  if(/^\/img\/frames\/m15\/regular\/m15Frame[WUBRGMALC]\.png$/.test(frame.src||''))return{kind:'legacyRegular',source:frame.src};
+  if(/^\/img\/frames\/.*\/crowns\/.*[WUBRGMALC]\.png$/i.test(frame.src||''))return{kind:'colorAsset',source:frame.src};
+  if(/^\/img\/frames\/class\/(?:ub\/)?(?:nyx\/)?[wubrgmalc]\.png$/i.test(frame.src||''))return{kind:'class',source:frame.src};
   const catalog=window.FrameSectionCatalog?.styles||[],appearance=frame.sectionAppearance;
   if(appearance&&appearance.style!=='browse'&&catalog.some(style=>style.id===appearance.style))return{kind:'section',style:appearance.style,role:appearance.role};
   const native=catalog.find(style=>Object.values(style.variants).some(variant=>variant.src===(frame.bossSymbolOriginalSource||frame.src)));
@@ -62,22 +65,64 @@
   if(role&&style)return{kind:'section',style:style.id,role};
   return null;
  }
- // Frame bodies, pipelines and main rules backgrounds split; other multicolor components use gold.
+ // Shared identity rules apply to stock sections and linked custom artwork alike.
+ function elementRole(frame,recipe){
+  if(recipe?.kind==='prototype')return 'prototype';
+  if(recipe?.kind==='pt')return 'pt';
+  if(frame.sectionCrown||recipe?.kind==='crown')return 'crown';
+  const explicit=frame.sectionAppearance?.role||recipe?.role||frame.componentKind;
+  const masks=(frame.masks||[]).filter(mask=>!/^(left|right) half$/i.test(mask.name||''));
+  const value=String(explicit||masks[0]?.name||frame.name||'').toLowerCase();
+  if(/prototype/.test(value))return 'prototype';
+  if(/power|toughness|^pt$/.test(value))return 'pt';
+  if(/crown/.test(value))return 'crown';
+  if(/pinline|pipeline/.test(value))return 'pinline';
+  if(/rules|text boxes/.test(value))return 'rules';
+  if(/title/.test(value))return 'title';
+  if(/type/.test(value))return 'type';
+  return 'frame';
+ }
+ function coloredArtifact(data,choice){return /\bartifact\b/i.test(data.text?.type?.text||'')&&/[wubrgm]/.test(choice.left||'');}
  function elementChoice(frame,data,choice,recipe){
+  const role=elementRole(frame,recipe);
+  if(role==='frame'&&coloredArtifact(data,choice))return{...choice,left:'a',right:''};
   if(!choice.right)return choice;
-  const role=frame.sectionAppearance?.role||String(frame.componentKind||'').toLowerCase();
-  const name=String(frame.name||'');
-  const pipeline=/pinline|pipeline/i.test(role+' '+name);
-  const body=recipe?.kind==='native'&&!/title|type|rules|power|toughness/i.test(role)&&!(frame.masks||[]).some(mask=>/title|type|rules|power|toughness/i.test(mask.name||''));
-  const customBody=!recipe&&/\bframe\b/i.test(role+' '+name)&&!/title|type|rules|power|toughness/i.test(role+' '+name)&&!(frame.masks||[]).some(mask=>/title|type|rules|power|toughness/i.test(mask.name||''));
-  const prototype=recipe?.kind==='prototype'||/prototype/i.test(role+' '+name);
-  const rules=!prototype&&(role==='rules'||/\brules(?: text| box| background)?\b/i.test(name)||recipe?.kind==='section'&&recipe.role==='rules');
-  return pipeline||body||customBody||rules?choice:{...choice,left:'m',right:''};
+  return ['pinline','rules','crown'].includes(role)?choice:{...choice,left:'m',right:''};
+ }
+ // Whole stock frames contain several roles. Recolor their masked regions in
+ // place so a saved full-frame/right-half layer cannot cover the split accents.
+ async function wholeStockArtwork(frame,data,choice,recipe){
+  let variants,available;
+  if(recipe.kind==='class'){
+   variants=Object.fromEntries(Object.keys(palette).map(key=>[key,{src:recipe.source.replace(/[wubrgmalc]\.png$/i,key+'.png')} ]));
+   available=[['pinline','maskPinlines'],['rules','maskRules'],['rules','maskTextBoxes'],['title','maskTitle'],['type','maskType']].map(([role,file])=>({role,src:'/img/frames/class/masks/'+file+'.png'}));
+  }else if(recipe.kind==='legacyRegular'){
+   variants=Object.fromEntries(Object.keys(palette).map(key=>[key,{src:recipe.source.replace(/[WUBRGMALC]\.png$/,key.toUpperCase()+'.png')}]));
+   available=['Pinline','Rules','Title','Type'].map(role=>({role:role.toLowerCase(),src:'/img/frames/m15/regular/m15Mask'+role+'.png'}));
+  }else{
+   const style=window.FrameSectionCatalog.styles.find(item=>item.id===recipe.style);variants=style.variants;
+   available=(variants[choice.left]?.masks||Object.values(variants)[0].masks||[]).map(mask=>({role:elementRole({name:mask.name}),src:mask.src})).filter(mask=>['pinline','rules','title','type'].includes(mask.role));
+  }
+  const family={name:'Stock '+recipe.kind,variants};
+  if((frame.masks||[]).some(mask=>!/^(left|right) half$/i.test(mask.name||'')))return{src:await compose(family,{side:'full'},elementChoice(frame,data,choice,recipe),data,frame),masks:copy(frame.masks||[])};
+  const base=elementChoice({componentKind:'Frame'},data,choice,recipe);
+  const output=await raster({src:await compose(family,{side:'full'},base,data,frame)}),ctx=output.getContext('2d');
+  if(choice.right||coloredArtifact(data,choice))for(const mask of available){
+   const local=elementChoice({componentKind:mask.role},data,choice,recipe);
+   if(local.left===base.left&&local.right===base.right)continue;
+   const layer=await raster({src:await compose(family,{side:'full'},local,data,frame)});
+   const weights=canvas(output.width,output.height);weights.getContext('2d').drawImage(await image(mask.src),0,0,output.width,output.height);
+   const before=ctx.getImageData(0,0,output.width,output.height),after=layer.getContext('2d').getImageData(0,0,output.width,output.height).data,alpha=weights.getContext('2d').getImageData(0,0,output.width,output.height).data;
+   for(let i=0;i<before.data.length;i+=4){const t=alpha[i+3]/255,a=before.data[i+3]*(1-t),b=after[i+3]*t,total=a+b;for(let channel=0;channel<3;channel++)before.data[i+channel]=total?(before.data[i+channel]*a+after[i+channel]*b)/total:0;before.data[i+3]=total;}ctx.putImageData(before,0,0);
+  }
+  return{src:output.toDataURL(),masks:copy(frame.masks||[])};
  }
  function unlink(frame){delete frame.templateTheme;}
  async function stockArtwork(frame,data,choice,recipe){
+  if(['native','class','legacyRegular'].includes(recipe.kind))return wholeStockArtwork(frame,data,choice,recipe);
+  if(recipe.kind==='colorAsset'){const suffix=recipe.source.match(/([WUBRGMALC])\.png$/i)[1];const variants=Object.fromEntries([choice.left,choice.right].filter(Boolean).map(color=>[color,{src:recipe.source.replace(/[WUBRGMALC]\.png$/i,(suffix===suffix.toUpperCase()?color.toUpperCase():color)+'.png')} ]));return{src:await compose({name:frame.name,variants},{side:'full'},choice,data,frame),masks:copy(frame.masks||[])};}
   if(recipe.kind==='pt'){
-   const type=String(data.text?.type?.text||'').toLowerCase(),key=choice.left==='m'||choice.right?'m':/vehicle/.test(type)?'v':/artifact/.test(type)?'a':choice.left==='l'?'c':choice.left;
+   const type=String(data.text?.type?.text||'').toLowerCase(),key=choice.left==='m'||choice.right?'m':/[wubrg]/.test(choice.left)?choice.left:/vehicle/.test(type)?'v':/artifact/.test(type)?'a':choice.left==='l'?'c':choice.left;
    const src=recipe.source.replace(/[WUBRGMALCV]\.png$/i,key.toUpperCase()+'.png');await image(src);return{src,masks:copy(frame.masks||[])};
   }
   const catalog=window.FrameSectionCatalog?.styles||[];let variants={},masks=[];
@@ -122,12 +167,15 @@
   for(const frame of data.frames||[]){
    if(duplicates.has(frame))continue;
    const link=settings.enabled&&frame.templateTheme,recipe=stockRecipe(frame,data),localChoice=elementChoice(frame,data,choice,recipe);
+   const classRange=(data.rulesRanges||[]).find(range=>frame.visualFamilyId&&range.visualFamilies?.[frame.visualFamilyId]);
+   if(!link&&classRange&&!frame.fixedAppearance){const family=classRange.visualFamilies[frame.visualFamilyId];if(family.variants?.[localChoice.left]&&(!localChoice.right||family.variants?.[localChoice.right]))changes.push({frame,src:await compose({...family,name:frame.name},{side:'full'},localChoice,data,frame),masks:copy(frame.masks||[]),choice:localChoice});else warnings.push('Class appearance for '+frame.name+' is missing '+palette[localChoice.left]+(localChoice.right?' / '+palette[localChoice.right]:'')+'; its saved image was retained.');continue;}
    if(link){const family=settings.families.find(family=>family.id===link.familyId);if(!family)throw Error('Missing asset family for '+frame.name+'.');changes.push({frame,src:await compose(family,link,localChoice,data,frame),masks:copy(link.masks||[]),recipe,choice:localChoice});continue;}
-   if(autoStock&&recipe)changes.push({frame,...await stockArtwork(frame,data,localChoice,recipe),recipe,choice:localChoice});
+   if(autoStock&&recipe)changes.push({frame,...await stockArtwork(frame,data,['native','class','legacyRegular'].includes(recipe.kind)?choice:localChoice,recipe),recipe,choice:localChoice});
   }
   if(!changes.length){if(settings.enabled)warnings.push('No linked custom layers or recognized stock elements were found for color switching.');return data;}
   for(const {frame,src,masks,recipe,choice} of changes){frame.src=src;delete frame.image;delete frame.assetId;frame.masks=masks;if(recipe)frame.stockThemeRecipe=recipe;if(frame.sectionAppearance){frame.sectionAppearance.left=choice.left;frame.sectionAppearance.right=choice.right;}if(frame.sectionCrown){frame.sectionCrown.left=choice.left;frame.sectionCrown.right=choice.right;}if(recipe?.kind==='prototype'){const owner=data.frames.find(item=>item.designLayerId===recipe.owner);if(owner?.sectionModule){owner.sectionModule.left=choice.left;owner.sectionModule.right=choice.right;}}}
   for(const [companion,owner] of duplicates){companion.templateThemeDuplicate=companion.templateThemeDuplicate||{owner:owner.designLayerId,originalHidden:!!companion.hidden};companion.hidden=true;}
+  for(const range of data.rulesRanges||[])if(range.kind==='class')range.visualVariant=choice.right?'m':choice.left;
   data.csvImport=data.csvImport||{};data.csvImport.templateColors=[choice.left,choice.right].filter(Boolean);return data;
  }
  const fieldLabel=value=>String(value||'').trim().toLowerCase().replace(/\s+/g,' ');

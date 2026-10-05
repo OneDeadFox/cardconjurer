@@ -1280,26 +1280,22 @@ function buildAutoFrames(frameType, colors, mana_cost, type_line, power, mana2Te
 		frameType === 'Etched' ? 'Etched' :
 		frameType === 'Seventh' ? 'Seventh' : undefined);
 
-	// ----------------------------------------------------------------
-	// VAULT SPECIAL HANDLING FOR TWO-COLOR CARDS
-	// ----------------------------------------------------------------
-	// Vault frames use split colors (first color base + second color right half) for 2-color cards
-	if (frameType === 'Vault' && colors.length === 2) {
-		// Override frame to use split colors instead of multicolor
-		properties.frame = colors[0];
-		properties.frameRight = colors[1];
-		// Rules should also be split
-		properties.rules = colors[0];
-		properties.rulesRight = colors[1];
+	// All two-color layouts share the same roles, including hybrid and artifact cards.
+	if (colors.length === 2) {
+		properties.frame = /artifact/i.test(type_line) ? 'A' : 'M';
+		properties.frameRight = undefined;
+		properties.typeTitle = 'M';
+		if (power) properties.pt = 'M';
+		const accents = cardFrameProperties(colors, mana_cost, type_line, power);
+		properties.rules = properties.pinline = accents.pinline.replace(/L$/i, '');
+		properties.rulesRight = properties.pinlineRight = accents.pinlineRight.replace(/L$/i, '');
 	}
 
-	// ----------------------------------------------------------------
-	// JAPAN SHOWCASE SPECIAL HANDLING FOR TWO-COLOR CARDS
-	// ----------------------------------------------------------------
-	// Japan Showcase PT boxes use the second color instead of multicolor for 2-color cards
-	if (frameType === 'JapanShowcase' && colors.length === 2) {
-		// Use second color for PT box
-		properties.pt = colors[1];
+	if (colors.length && /artifact/i.test(type_line)) {
+		properties.frame = 'A';
+		properties.typeTitle = colors.length > 1 ? 'M' : colors[0];
+		if (power) properties.pt = properties.typeTitle;
+		if (colors.length !== 2) properties.rules = properties.pinline = properties.typeTitle;
 	}
 
 	// ----------------------------------------------------------------
@@ -1573,7 +1569,7 @@ function buildAutoFrames(frameType, colors, mana_cost, type_line, power, mana2Te
 			if (preparePinline) frames.push(preparePinline);
 		}
 
-		if (properties.pinlineRight) {
+		if (properties.rulesRight) {
 			frames.push(config.makeFrameFunction(properties.rulesRight, 'Rules', true, style));
 		}
 		frames.push(config.makeFrameFunction(properties.rules, 'Rules', false, style));
