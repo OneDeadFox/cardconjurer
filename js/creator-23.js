@@ -2676,6 +2676,13 @@ function cardTextObjectKey(textObject) {
 	}) || '';
 }
 function cardTextSemanticRole(textObject, key) {
+	var explicitRole = normalizeCardTextSemantic(textObject && textObject.standardRole);
+	if (['mana', 'title', 'type', 'rules', 'pt', 'rarity'].includes(explicitRole)) return explicitRole;
+	// Attached Prototype fields use generated keys and may have a CSV label
+	// such as Loot Box. Keep their rules behavior independent of that label.
+	if (textObject && textObject.sectionField === 'prototype') return 'rules';
+	if (/^(prototype|prototyperules|prototyperulestext)$/.test(normalizeCardTextSemantic(key || cardTextObjectKey(textObject))) ||
+		/^prototype(rules|rulestext)$/.test(normalizeCardTextSemantic(textObject && textObject.name))) return 'rules';
 	var keyName = normalizeCardTextSemantic(key || cardTextObjectKey(textObject));
 	var label = normalizeCardTextSemantic(textObject && (textObject.csvFieldLabel || textObject.name));
 	if ((textObject && textObject.manaCost) || /^mana\d*$/.test(keyName) || /^manacost\d*$/.test(label)) return 'mana';
