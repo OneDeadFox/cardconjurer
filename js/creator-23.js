@@ -3877,14 +3877,15 @@ function writeText(textObject, targetContext) {
 						manaSymbolColor = textColor;
 					}
 
-					var manaSymbolSpacing = textSize * 0.04 + textManaSpacing;
+					var customSymbolInProse=manaSymbol.custom&&!textManaCost&&(cardTextSemanticRole(textObject)==='rules'||!textOneLine);
+					var manaSymbolSpacing = (customSymbolInProse?0:textSize*0.04) + textManaSpacing;
 					var manaSymbolWidth = manaSymbol.width * textSize * 0.78;
 					var manaSymbolHeight = manaSymbol.height * textSize * 0.78;
 					var manaSymbolX = currentX + canvasMargin + manaSymbolSpacing;
 					var manaSymbolY = canvasMargin + textSize * 0.34 - manaSymbolHeight / 2;
 					if(manaSymbol.custom && !textManaCost){
-						const metrics=lineContext.measureText('0');
-						const ascent=Number.isFinite(metrics.actualBoundingBoxAscent)?metrics.actualBoundingBoxAscent:textSize*.7;
+						const metrics=lineContext.measureText(customSymbolInProse?'x':'0');
+						const ascent=Number.isFinite(metrics.actualBoundingBoxAscent)?metrics.actualBoundingBoxAscent:textSize*(customSymbolInProse?.5:.7);
 						const descent=Number.isFinite(metrics.actualBoundingBoxDescent)?metrics.actualBoundingBoxDescent:0;
 						manaSymbolY=canvasMargin+textSize*textFontHeightRatio+(descent-ascent)/2-manaSymbolHeight/2;
 					}

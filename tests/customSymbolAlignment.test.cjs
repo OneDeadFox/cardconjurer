@@ -3,8 +3,8 @@ const vm=require('node:vm');
 const assert=require('node:assert/strict');
 const creator=fs.readFileSync('js/creator-23.js','utf8');
 const section=(from,to)=>creator.slice(creator.indexOf(from),creator.indexOf(to,creator.indexOf(from)));
-const images=[];
-function context2d(){return {font:'58px mplantin',clearRect(){},fillText(){},strokeText(){},drawImage(image,x,y,width,height){images.push({image,x,y,width,height,font:this.font});},measureText(text){const size=parseFloat(this.font);return {width:String(text).length*size*.45,actualBoundingBoxAscent:size*.65,actualBoundingBoxDescent:0};}};}
+const images=[],texts=[];
+function context2d(){return {font:'58px mplantin',clearRect(){},fillText(text,x,y){texts.push({text,x,y,font:this.font});},strokeText(){},drawImage(image,x,y,width,height){images.push({image,x,y,width,height,font:this.font});},measureText(text){const size=parseFloat(this.font);return {width:String(text).length*size*.45,actualBoundingBoxAscent:size*(text==='x'?.45:.65),actualBoundingBoxDescent:0};}};}
 const inputs=new Map();
 const ctx={console,Map,Set,savedFont:null,params:new URLSearchParams(),mana:new Map(),builtInManaSymbolNames:new Set(['w']),
   Image:class{constructor(){this.naturalWidth=512;this.naturalHeight=585;}set src(value){this.source=value;this.onload();}},
@@ -34,6 +34,13 @@ vm.runInContext(section('var justifyWidth =','CanvasRenderingContext2D.prototype
   rendered=images.filter(item=>item.image===ctx.mana.get('stage').image).at(-1);
   assert.ok(Math.abs(rendered.height-size*.78*1.2)<.001,'saved symbol scale is applied');
   assert.ok(Math.abs(rendered.y+rendered.height/2-(canvasMargin+size*.7-size*.65/2+size*.1))<.001,'saved vertical adjustment is relative to font size');
+  await ctx.registerCustomManaSymbol('stage','data:image/png;base64,test');images.length=0;
+  texts.length=0;const prose={name:'Rules Text',text:'put a {stage} counter on this enchantment.',x:0,y:0,width:.9,height:.2,size:.0277,font:'mplantin'};ctx.card.text.rules=prose;await ctx.writeText(prose,context2d());
+  rendered=images.filter(item=>item.image===ctx.mana.get('stage').image).at(-1);const proseSize=parseFloat(rendered.font);
+  assert.ok(Math.abs(rendered.y+rendered.height/2-(canvasMargin+proseSize*.7-proseSize*.45/2))<.001,'Ability symbols align with lowercase text rather than the higher numeral center');
+  assert.ok(Math.abs(rendered.x-(canvasMargin+'put a '.length*proseSize*.45))<.001,'Existing prose spaces are not enlarged by extra default symbol padding');
+  const nextWord=texts.find(item=>item.text==='counter');assert.ok(nextWord);assert.ok(Math.abs(nextWord.x-rendered.x-rendered.width-proseSize*.45)<.001,'The space after the symbol also stays the normal word-space width');
+  await ctx.registerCustomManaSymbol('stage','data:image/png;base64,test',{verticalOffset:.1});images.length=0;await ctx.writeText(prose,context2d());rendered=images.filter(item=>item.image===ctx.mana.get('stage').image).at(-1);assert.ok(Math.abs(rendered.y+rendered.height/2-(canvasMargin+proseSize*.7-proseSize*.45/2+proseSize*.1))<.001,'Explicit vertical offsets still work in prose');
   const drawCtx=vm.createContext({});vm.runInContext(section('function drawFrameLayerImage(','function drawFrameLayerMask('),drawCtx);
   const calls=[],canvasContext={save(){},restore(){},translate(){},rotate(){},scale(){},beginPath(){},rect(){},clip(){},drawImage(...args){calls.push(args);}};
   const image={naturalWidth:200,naturalHeight:100};
