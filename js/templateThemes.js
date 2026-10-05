@@ -10,12 +10,33 @@
  function image(src){return new Promise((resolve,reject)=>{const value=new Image();value.crossOrigin='anonymous';value.onload=()=>resolve(value);value.onerror=()=>reject(Error('Could not load a theme asset.'));value.src=typeof fixUri==='function'?fixUri(src):src;});}
  function canvas(w,h){const value=document.createElement('canvas');value.width=Math.max(1,Math.round(w));value.height=Math.max(1,Math.round(h));return value;}
  async function raster(record,region){const src=await image(record.src),w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,b=region||{x:0,y:0,width:1,height:1},result=canvas(w*b.width,h*b.height);result.getContext('2d').drawImage(src,w*b.x,h*b.y,w*b.width,h*b.height,0,0,result.width,result.height);return result;}
+ // Color uploads may still contain the unexpanded pipeline. Match its strokes
+ // to the saved raster, rather than treating the layer bounds as the artwork shape.
+ function pipelineShape(source){
+  const pixels=source.getContext('2d').getImageData(0,0,source.width,source.height).data;
+  let left=source.width,top=source.height,right=0,bottom=0;
+  for(let y=0;y<source.height;y++)for(let x=0;x<source.width;x++)if(pixels[(y*source.width+x)*4+3]>16){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);}
+  if(right<=left||bottom<=top)return null;
+  const runs=[],middle=Math.floor((left+right)/2);
+  for(let y=top;y<bottom;y++)if(pixels[(y*source.width+middle)*4+3]>16){const last=runs[runs.length-1];if(last&&last[1]===y)last[1]=y+1;else runs.push([y,y+1]);}
+  const edge=Math.min(24,(right-left)/4);
+  return{x:[left,left+edge,right-edge,right],y:runs.length>=2?[top,...runs.slice(0,-1).flatMap(run=>run).filter(y=>y>top&&y<runs[runs.length-1][0]),runs[runs.length-1][0],bottom]:[top,bottom]};
+ }
+ function fitPipeline(source,reference){
+  const from=pipelineShape(source),to=pipelineShape(reference);if(!from||!to)return source;
+  if(from.y.length!==to.y.length){from.y=[from.y[0],from.y[from.y.length-1]];to.y=[to.y[0],to.y[to.y.length-1]];}
+  const output=canvas(reference.width,reference.height),ctx=output.getContext('2d');
+  for(let x=0;x<from.x.length-1;x++)for(let y=0;y<from.y.length-1;y++)ctx.drawImage(source,from.x[x],from.y[y],from.x[x+1]-from.x[x],from.y[y+1]-from.y[y],to.x[x],to.y[y],to.x[x+1]-to.x[x],to.y[y+1]-to.y[y]);
+  ctx.globalCompositeOperation='destination-in';ctx.drawImage(reference,0,0);return output;
+ }
  async function compose(family,link,choice,data,frame){
   const left=link.side==='right'?(choice.right||choice.left):choice.left,right=link.side==='full'?choice.right:'';
   const a=family.variants?.[left],b=right?family.variants?.[right]:null;
   if(!a||right&&!b)throw Error('Asset family “'+family.name+'” is missing '+(!a?palette[left]:palette[right])+'.');
-  const source=await raster(a,link.sourceRegion);if(!b)return source.toDataURL();
-  const second=await raster(b,link.sourceRegion),normalized=canvas(source.width,source.height);normalized.getContext('2d').drawImage(second,0,0,source.width,source.height);
+  let source=await raster(a,link.sourceRegion),second=b?await raster(b,link.sourceRegion):null;
+  if(frame.resizeContainerRaster&&/pinline|pipeline/i.test(frame.componentKind||frame.name||'')){const reference=await raster(frame);source=fitPipeline(source,reference);if(second)second=fitPipeline(second,reference);}
+  if(!b)return source.toDataURL();
+  const normalized=canvas(source.width,source.height);normalized.getContext('2d').drawImage(second,0,0,source.width,source.height);
   const ctx=source.getContext('2d'),first=ctx.getImageData(0,0,source.width,source.height),other=normalized.getContext('2d').getImageData(0,0,source.width,source.height),mask=await image('/img/frames/maskRightHalf.png'),weights=canvas(source.width,source.height);const bounds=frame.bounds||{x:0,y:0,width:1,height:1};weights.getContext('2d').drawImage(mask,bounds.x*mask.width,bounds.y*mask.height,bounds.width*mask.width,bounds.height*mask.height,0,0,source.width,source.height);const alpha=weights.getContext('2d').getImageData(0,0,source.width,source.height).data;
   for(let i=0;i<first.data.length;i+=4){const t=alpha[i+3]/255,aa=first.data[i+3]/255*(1-t),ba=other.data[i+3]/255*t,total=aa+ba;for(let j=0;j<3;j++)first.data[i+j]=total?(first.data[i+j]*aa+other.data[i+j]*ba)/total:0;first.data[i+3]=total*255;}ctx.putImageData(first,0,0);return source.toDataURL();
  }
@@ -112,6 +133,6 @@
   panel.querySelector('[data-unlink]').onclick=()=>{const frame=card.frames.find(frame=>frame.designLayerId===panel.querySelector('[data-layer]').value);if(frame)save(()=>unlink(frame),'Remove family from layer');};refresh();
  }
  function restore(frame,definition){if((frame.templateTheme||definition.templateTheme)&&frame.src!==definition.src){frame.src=definition.src;frame.masks=copy(definition.masks||[]);if(definition.assetId)frame.assetId=definition.assetId;else delete frame.assetId;Promise.all([image(frame.src).then(asset=>frame.image=asset),...frame.masks.map(async mask=>mask.image=await image(mask.src))]).then(()=>{if(typeof drawFrames==='function')drawFrames();}).catch(error=>console.error(error));}if(definition.templateTheme)frame.templateTheme=copy(definition.templateTheme);else delete frame.templateTheme;if(definition.stockThemeRecipe)frame.stockThemeRecipe=copy(definition.stockThemeRecipe);else delete frame.stockThemeRecipe;}
- window.TemplateThemes={apply,records,colors,selection,fieldLabel,mapFields,refresh,restore,stockRecipe,stockArtwork,unlink,pipelineDuplicates};window.addEventListener('frameprojectschanged',refresh);window.addEventListener('frameworkspacechanged',refresh);window.addEventListener('creatortabchanged',refresh);
+ window.TemplateThemes={apply,records,colors,selection,fieldLabel,mapFields,refresh,restore,stockRecipe,stockArtwork,unlink,pipelineDuplicates,fitPipeline};window.addEventListener('frameprojectschanged',refresh);window.addEventListener('frameworkspacechanged',refresh);window.addEventListener('creatortabchanged',refresh);
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
