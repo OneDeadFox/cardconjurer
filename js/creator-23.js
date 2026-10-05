@@ -3268,16 +3268,19 @@ function cardTextFontOverrideSize(code, defaultSize) {
 function writeText(textObject, targetContext) {
 	manaSymbolsToRender = [];
 	//Most bits of info about text loaded, with defaults when needed
-	var textX = scaleX(textObject.x) || scaleX(0);
-	var textY = scaleY(textObject.y) || scaleY(0);
-	var textWidth = scaleWidth(textObject.width) || scaleWidth(1);
-	var textHeight = scaleHeight(textObject.height) || scaleHeight(1);
+	// Range lanes are layout areas as well as safety clips. Fit and align
+	// inside the lane so a title is never cut off beside its level-up cost.
+	var textLayoutBounds = textObject.clipToBounds && textObject.rangeClip || textObject;
+	var textX = scaleX(textLayoutBounds.x) || scaleX(0);
+	var textY = scaleY(textLayoutBounds.y) || scaleY(0);
+	var textWidth = scaleWidth(textLayoutBounds.width) || scaleWidth(1);
+	var textHeight = scaleHeight(textLayoutBounds.height) || scaleHeight(1);
 	var startingTextSize = scaleHeight(textObject.size) || scaleHeight(0.038);
 	var originalStartingTextSize = startingTextSize;
 	var fontSizeModifier = (parseInt(textObject.fontSize || '0') || 0) - (Number(textObject.rangeFontReduction)||0);
 	// Measure the size actually needed. CSV export enforces its separate production limit.
 	var collisionMinimumTextSize = Math.min(startingTextSize, Math.max(1, 1 - fontSizeModifier));
-	if (textObject.rangeUniformTextSize) collisionMinimumTextSize = startingTextSize;
+	if (textObject.rangeUniformTextSize && !textObject.rangeClip) collisionMinimumTextSize = startingTextSize;
 	var collisionFit = getCardTextCollisionFit(textObject, textWidth, textHeight);
 	var collisionFitFailed = false;
 	// Empty fields need no line height and must not constrain shared font fitting.
@@ -3289,7 +3292,7 @@ function writeText(textObject, targetContext) {
 	textHeight = collisionFit.height;
 	var textFontHeightRatio = 0.7;
 	var textBounded = textObject.bounded || true;
-	var textOneLine = textObject.oneLine || false;
+	var textOneLine = textObject.oneLine || !!textObject.rangeClip;
 	var textManaCost = textObject.manaCost || false;
 	var textAllCaps = textObject.allCaps || false;
 	var textManaSpacing = scaleWidth(textObject.manaSpacing) || 0;
