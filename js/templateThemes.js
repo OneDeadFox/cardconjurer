@@ -22,11 +22,13 @@
   const edge=Math.min(24,(right-left)/4);
   return{x:[left,left+edge,right-edge,right],y:runs.length>=2?[top,...runs.slice(0,-1).flatMap(run=>run).filter(y=>y>top&&y<runs[runs.length-1][0]),runs[runs.length-1][0],bottom]:[top,bottom]};
  }
- function fitPipeline(source,reference){
+ function fitPipeline(source,reference,repairTop=0){
   const from=pipelineShape(source),to=pipelineShape(reference);if(!from||!to)return source;
   if(from.y.length!==to.y.length){from.y=[from.y[0],from.y[from.y.length-1]];to.y=[to.y[0],to.y[to.y.length-1]];}
-  const output=canvas(reference.width,reference.height),ctx=output.getContext('2d');
+  if(repairTop){to.y=to.y.map((value,index)=>index?value+repairTop:value);}
+  const output=canvas(reference.width,reference.height+repairTop),ctx=output.getContext('2d');
   for(let x=0;x<from.x.length-1;x++)for(let y=0;y<from.y.length-1;y++)ctx.drawImage(source,from.x[x],from.y[y],from.x[x+1]-from.x[x],from.y[y+1]-from.y[y],to.x[x],to.y[y],to.x[x+1]-to.x[x],to.y[y+1]-to.y[y]);
+  if(repairTop)return output;
   // The reference supplies coverage once; multiplying two antialiased edges
   // would darken/thin the saved stroke every time a template is recolored.
   const pixels=ctx.getImageData(0,0,output.width,output.height),coverage=reference.getContext('2d').getImageData(0,0,reference.width,reference.height).data;

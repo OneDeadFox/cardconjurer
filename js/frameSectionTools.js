@@ -441,6 +441,7 @@
     entry.relative=clone(effective);
     const fitted=mapRect(effective,unit,{...box,rotation:frame.rotation||0});
     Object.assign(entry.kind==='frame'?target.bounds:target,{x:fitted.x,y:fitted.y,width:fitted.width,height:fitted.height});target.rotation=fitted.rotation;
+    if(entry.kind==='text'&&target.sectionField==='prototype')target.clipToBounds=true;
     if(target.frameAnchor)delete target.frameAnchor;
    }
    if(range.uniformTextSize&&uniformRulesFields(frame).length>=2){const sizes=uniformRulesFields(frame).map(({field})=>defaultPixelSize(field));const size=Math.min(group.uniformSize||Infinity,...sizes);setUniformRulesSize(frame,Number.isFinite(size)?size:1,true);}else setUniformRulesSize(frame,0,false);

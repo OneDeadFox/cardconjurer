@@ -131,6 +131,7 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.equal(rules.src,originalSource);assert.equal(JSON.stringify(rules.bounds),originalBounds);assert.equal(commits,startCommits+1,'Attachment is one undoable action');
  const group=rules.sectionModule,range=context.card.rulesRanges[0],prototype=context.card.frames.find(frame=>frame.designLayerId===group.partId);
  assert.equal(range.modules.length,2);assert.equal(range.modules[0].name,'Prototype');assert.equal(range.modules[0].elements.length,4,'Prototype background, mana artwork and their fitted text fields belong to one module');
+ assert.equal(context.card.text['prototype-'+group.partId].clipToBounds,true,'Prototype text stays inside its fitted text box even when limits prevent fitting');
  assert.equal(context.card.text['prototype-'+group.partId].size,originalField.size,'A fitted Prototype box inherits the main rules default font instead of scaling it with box height');
  assert.equal(context.card.text['pt2-'+group.partId],undefined,'P/T is optional and is not inserted by default');
  assert.ok(!context.card.frames.some(frame=>frame.prototypePiece?.kind==='pt'));

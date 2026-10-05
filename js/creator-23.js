@@ -7188,6 +7188,7 @@ async function loadCardData(cardData, failureLabel) {
 	card.text = card.text || {};
 	card.rulesRanges = card.rulesRanges || [];
 	card.manaSymbols = card.manaSymbols || [];
+	await window.ContainerResizeTools?.migrate(card);
 	card.orientation = currentCardOrientation();
 	card.landscape = card.orientation === 'landscape';
 	card.orientationRotation = Number(card.orientationRotation) || 0;
@@ -7271,6 +7272,10 @@ async function loadCardData(cardData, failureLabel) {
 		DungeonModules.mount();
 		DungeonModules.render();
 	}
+	// Loading at an unchanged canvas size still needs to recompute module
+	// heights and fitted text sizes; saved reductions are derived values.
+	clearTimeout(writingText);
+	await drawText();
 	window.TemplateThemes?.refresh();
 	return true;
 }

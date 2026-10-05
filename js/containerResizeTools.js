@@ -85,6 +85,65 @@
   for(const frame of card.frames.filter(frame=>/pinline|pipeline/i.test(frame.componentKind||frame.name||'')&&!frame.name.includes(excluded))){if(frame.rotation)continue;bounds=union(bounds,connectedBounds(await rendered(frame),bounds));}
   return bounds;
  }
+ // Old container extraction could strand part of a connected stroke in the
+ // original full-card layer. Repair that saved raster before it is displayed.
+ async function migrate(data){
+  if(!window.TemplateThemes)return false;let changed=false;
+  const frames=data.frames||[],families=data.templateThemes?.families||[];
+  for(const owner of frames){
+   const saved=owner.resizeContainer;if(!saved)continue;
+   for(const id of saved.pinlineIds||[]){
+    const piece=frames.find(frame=>frame.designLayerId===id);
+    if(!piece||piece.pipelineRepairVersion===1||piece.templateTheme?.side!=='full')continue;
+    const family=families.find(item=>item.id===piece.templateTheme.familyId);
+    const residual=frames.find(frame=>frame!==piece&&frame.name===piece.name.replace(/ — Rules container$/,'')&&frame.resizeContainerRaster&&frame.bounds?.width===1&&frame.bounds?.height===1);
+    if(!family||!residual)continue;
+    const reference=canvas(piece.bounds.width*data.width,piece.bounds.height*data.height);reference.getContext('2d').drawImage(await load(piece.src),0,0,reference.width,reference.height);
+    const leftover=await load(residual.src),full=canvas(leftover.width,leftover.height);full.getContext('2d').drawImage(leftover,0,0);
+    const a=full.getContext('2d').getImageData(0,0,full.width,full.height).data;if(!a.some((value,index)=>index%4===3&&value))continue;
+    const sourceRecord=family.variants.b||family.variants[Object.keys(family.variants)[0]],sourceImage=await load(sourceRecord.src),source=canvas(sourceImage.width,sourceImage.height);source.getContext('2d').drawImage(sourceImage,0,0);
+    const region=piece.templateTheme.sourceRegion||piece.bounds,connected=connectedBounds(source,region),section=canvas(source.width,Math.ceil((connected.y+connected.height)*source.height)-Math.floor(connected.y*source.height));section.getContext('2d').drawImage(source,0,-Math.floor(connected.y*source.height));
+    const strokeRuns=value=>{const p=value.getContext('2d').getImageData(0,0,value.width,value.height).data,x=Math.floor(value.width/2),runs=[];for(let y=0;y<value.height;y++)if(p[(y*value.width+x)*4+3]>16){const last=runs[runs.length-1];if(last&&last[1]===y)last[1]++;else runs.push([y,y+1]);}return runs;};
+    const originalRuns=strokeRuns(section),savedRuns=strokeRuns(reference);
+    if(originalRuns.length!==3||savedRuns.length!==3)continue;
+    const missing=originalRuns[0][1]-originalRuns[0][0]-(savedRuns[0][1]-savedRuns[0][0]);if(missing<=0||missing>32)continue;
+    // Do not consume unrelated artwork from the original layer.
+    const sectionTop=Math.floor(connected.y*source.height);let safe=true;for(let i=3;i<a.length;i+=4)if(a[i]&&Math.floor((i-3)/4/full.width)<sectionTop){safe=false;break;}if(!safe)continue;
+    const oldBounds=copy(piece.bounds),repaired=TemplateThemes.fitPipeline(section,reference,missing),newBounds={...piece.bounds,y:piece.bounds.y-missing/data.height,height:piece.bounds.height+missing/data.height};
+    piece.src=repaired.toDataURL();piece.bounds=newBounds;piece.pipelineRepairVersion=1;delete piece.assetId;delete piece.image;
+    const aligned=(a,b)=>['x','y','width','height'].every(key=>Math.abs(a[key]-b[key])<.000001);
+    // Preserve the existing right-half appearance when opening the template.
+    for(const other of frames){
+     if(other===piece||!other.name?.includes('Right Half')||!other.name.endsWith(' — Rules container')||!aligned(other.bounds,oldBounds))continue;
+     const oldHalf=canvas(reference.width,reference.height);oldHalf.getContext('2d').drawImage(await load(other.src),0,0,oldHalf.width,oldHalf.height);
+     const color=Object.entries({w:'White',u:'Blue',b:'Black',r:'Red',g:'Green',m:'Multicolored'}).find(([,name])=>other.name.startsWith(name))?.[0],variant=family.variants[color];if(!variant)continue;
+     const bitmap=await load(variant.src),paint=canvas(section.width,section.height);paint.getContext('2d').drawImage(bitmap,0,-Math.floor(connected.y*source.height));
+     const fullHalf=TemplateThemes.fitPipeline(paint,reference,missing),pixels=fullHalf.getContext('2d').getImageData(0,0,fullHalf.width,fullHalf.height),base=reference.getContext('2d').getImageData(0,0,reference.width,reference.height).data,half=oldHalf.getContext('2d').getImageData(0,0,oldHalf.width,oldHalf.height).data;
+     const ratios=[];for(let x=0;x<reference.width;x++){let ba=0,ha=0;for(let y=savedRuns[1][0];y<savedRuns[1][1];y++){ba=Math.max(ba,base[(y*reference.width+x)*4+3]);ha=Math.max(ha,half[(y*reference.width+x)*4+3]);}ratios.push(ba?Math.min(1,ha/ba):0);}
+     for(let i=3;i<pixels.data.length;i+=4)pixels.data[i]*=ratios[((i-3)/4)%reference.width];fullHalf.getContext('2d').putImageData(pixels,0,0);
+     other.src=fullHalf.toDataURL();other.bounds=copy(newBounds);other.pipelineRepairVersion=1;delete other.assetId;delete other.image;
+    }
+    const stem=name=>String(name).replace(/^(White|Blue|Black|Red|Green|Multicolored) /,'').replace(/ — Right Half/,'').replace(/Completed/,'Complete');
+    for(const other of frames){if(stem(other.name)!==stem(residual.name)||other.bounds?.width!==1||other.bounds?.height!==1)continue;other.src=canvas(data.width,data.height).toDataURL();other.hidden=true;delete other.assetId;delete other.image;}
+    const regionTop=Math.floor(connected.y*source.height);piece.templateTheme.sourceRegion={x:0,y:regionTop/source.height,width:1,height:section.height/source.height};
+    if(Math.abs(saved.bounds.y-(newBounds.y+missing/data.height))<.00001){saved.bounds.y=newBounds.y;saved.bounds.height=newBounds.height;}
+    changed=true;
+   }
+  }
+  for(const owner of frames){const saved=owner.resizeContainer;if(!saved||owner.typePipelineAlignmentVersion===1)continue;
+   const pipe=frames.find(frame=>saved.pinlineIds?.includes(frame.designLayerId)&&frame.templateTheme?.side==='full');if(!pipe)continue;
+   const image=await load(pipe.src),raster=canvas(image.width,image.height);raster.getContext('2d').drawImage(image,0,0);const p=raster.getContext('2d').getImageData(0,0,raster.width,raster.height).data,middle=Math.floor(raster.width/2),runs=[];
+   let left=raster.width,right=0;for(let y=0;y<raster.height;y++)for(let x=0;x<raster.width;x++)if(p[(y*raster.width+x)*4+3]>16){left=Math.min(left,x);right=Math.max(right,x+1);}
+   for(let y=0;y<raster.height;y++)if(p[(y*raster.width+middle)*4+3]>16){const last=runs[runs.length-1];if(last&&last[1]===y)last[1]++;else runs.push([y,y+1]);}if(runs.length<2)continue;
+   const cx=pipe.bounds.x+(left+right)/2/raster.width*pipe.bounds.width,cy=pipe.bounds.y+(runs[0][1]+runs[1][0])/2/raster.height*pipe.bounds.height;
+   const prototypes=new Set(frames.map(frame=>frame.sectionModule?.partId));
+   for(const id of saved.typeIds||[]){const frame=frames.find(frame=>frame.designLayerId===id);if(!frame||prototypes.has(id))continue;const old=copy(frame.bounds),dx=cx-old.x-old.width/2,dy=cy-old.y-old.height/2;frame.bounds.x+=dx;frame.bounds.y+=dy;
+    for(const [key,field] of Object.entries(data.text||{}))if(key==='type'||field.standardRole==='type'||field.frameAnchor?.id===id){field.x+=dx;field.y+=dy;if(field.frameAnchor)field.frameAnchor.last={...frame.bounds,rotation:frame.rotation||0};}
+   }
+   owner.typePipelineAlignmentVersion=1;changed=true;
+  }
+  return changed;
+ }
  async function rendered(frame){
   const output=canvas(card.width,card.height),ctx=output.getContext('2d'),b=frame.bounds,og=frame.ogBounds||b;
   ctx.fillRect(0,0,output.width,output.height);ctx.globalCompositeOperation='source-in';
@@ -156,6 +215,6 @@
   window.addEventListener('creatortabchanged',cancel);window.addEventListener('frameworkspacechanged',cancel);
  }
  function restore(frame,definition){if(!frame.resizeContainerRaster&&!definition.resizeContainerRaster&&!frame.resizeContainer&&!definition.resizeContainer&&!frame.titleResizeContainer&&!definition.titleResizeContainer)return;for(const key of ['componentKind','resizeContainer','titleResizeContainer','resizeContainerRaster','fixedAppearance','ogBounds','maskCanvasBounds','assetId','flipX','flipY','colorOverlayCheck','hslHue','hslSaturation','hslLightness']){if(definition[key]===undefined)delete frame[key];else frame[key]=copy(definition[key]);}frame.src=definition.src;frame.masks=copy(definition.masks||[]);load(frame.src).then(image=>{frame.image=image;return Promise.all(frame.masks.map(async mask=>{mask.image=await load(mask.src);}));}).then(drawFrames);}
- window.ContainerResizeTools={connectedBounds,open,openTitle:()=>open('title'),cancel,draw,isOpen:()=>!!session,restore,resized,map,slices,cursor,flushPreview:()=>runPreview(session)};
+ window.ContainerResizeTools={migrate,connectedBounds,open,openTitle:()=>open('title'),cancel,draw,isOpen:()=>!!session,restore,resized,map,slices,cursor,flushPreview:()=>runPreview(session)};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();

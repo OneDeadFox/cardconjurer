@@ -949,6 +949,7 @@
 			hydrated.setSymbolAssetId = setSymbolMatch[1];
 			hydrated.setSymbolSource = await getAssetSource(setSymbolMatch[1]);
 		}
+		await window.ContainerResizeTools?.migrate(hydrated);
 		return hydrated;
 	}
 
