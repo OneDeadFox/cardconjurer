@@ -381,6 +381,21 @@
    if(!document.activeElement||!/^rules-range-/.test(document.activeElement.id||''))window.RulesRange?.refreshInputs?.();
   }
  }
+ async function attachModuleTag(frame,src,panel){
+  if(!frame.sectionModule)return false;
+  const before=createDesignStateSnapshot();
+  try{
+   const bitmap=await image(src),group=frame.sectionModule,range=card.rulesRanges.find(item=>item.id===group.rangeId),module=range?.modules.find(item=>item.elements.some(entry=>entry.key===group.partId));
+   if(!module)throw Error('The Prototype module was not found.');
+   syncRuleModules();
+   const box=group.lastProtoBox,width=box.width*.3,height=width*card.width/card.height*(bitmap.naturalHeight||bitmap.height)/(bitmap.naturalWidth||bitmap.width);
+   const tag={name:'Module tag',src,image:bitmap,bounds:{x:box.x+box.width-width,y:box.y-height,width,height},masks:[],opacity:100,designCreated:true,customField:true,fixedAppearance:true};ensureDesignLayerId(tag);
+   tag.csvImageFieldKey='module-tag-'+tag.designLayerId;
+   card.frames.unshift(tag);
+   module.elements.push({kind:'frame',key:tag.designLayerId,owned:true,anchor:{x:'right',y:'top'},offset:{x:-width*card.width,y:-height*card.height,width:width*card.width,height:height*card.height}});
+   syncRuleModules();await rebuildFrameLayerList();window.RulesRange?.refresh();drawFrames();drawTextBuffer();commitDesignUndoSnapshot(before,'Attach module tag');status(panel,'Tag attached above the Prototype box. Its size stays fixed as the box resizes.');return true;
+  }catch(error){await applyDesignStateSnapshot(before);status(panel,error.message);return false;}
+ }
  function syncRuleModules(){
   for(const frame of card.frames||[]){
    const group=frame.sectionModule;if(!group)continue;repairPrototypeRulesDefault(frame);
@@ -415,6 +430,7 @@
    for(const [module,box] of [[prototype,protoBox],[main,mainBox]])for(const entry of module.elements){
     const target=entry.kind==='frame'?card.frames.find(item=>item.designLayerId===entry.key):card.text?.[entry.key];if(!target)continue;
     if(entry.kind==='text'&&entry.key!==group.mainKey&&group.fieldBounds?.[entry.key]&&!rangeChanged){const fieldBounds={x:target.x,y:target.y,width:target.width,height:target.height};if(JSON.stringify(fieldBounds)!==JSON.stringify(group.fieldBounds[entry.key]))entry.relative=relative(target,group.lastProtoBox);}
+    if(entry.anchor&&entry.offset){const fitted=window.RulesRange.attachedBounds(entry,box);Object.assign(entry.kind==='frame'?target.bounds:target,fitted);continue;}
     const local=entry.relative||relative(entry.kind==='frame'?target.bounds:target,box);entry.relative=local;delete entry.offset;
     // The main rules field preserves its original top/bottom inset, rather than compressing its padding.
     const effective=entry.kind==='text'&&entry.key===group.mainKey?{...group.mainRelative,y:group.mainRelative.y/(1-group.fraction),height:Math.max(.01,(group.mainRelative.height-group.fraction)/(1-group.fraction))}:local;
@@ -452,6 +468,8 @@
   if(sectionRole==='rules'){
    const attachment=document.createElement('details');attachment.open=true;
    attachment.innerHTML='<summary>Attached rules boxes</summary><label>Prototype placement<select class="input" data-prototype-position><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label>Prototype color<select class="input" data-prototype-color></select></label><label><input type="checkbox" data-prototype-split> Split Prototype colors</label><label data-prototype-right-row hidden>Right Prototype color<select class="input" data-prototype-right></select></label><label><input type="checkbox" data-prototype-pinlines checked> Prototype pinlines</label><details><summary>Optional pieces</summary><label><input type="checkbox" data-prototype-mana-frame> Mana cost artwork</label><label><input type="checkbox" data-prototype-mana-text> Mana cost text</label><label><input type="checkbox" data-prototype-pt-frame> Power/toughness artwork</label><label><input type="checkbox" data-prototype-pt-text> Power/toughness text</label></details><button class="input" type="button" data-prototype-add>'+ (frame.sectionModule?'Update Prototype box':'Attach Prototype box') +'</button><button class="input" type="button" data-prototype-remove>Remove Prototype box</button><p>Keeps this background. Drag the Prototype box to adjust the space available to the main rules text. Optional pieces can also be selected and removed individually on the canvas.</p>';
+   const tagUpload=document.createElement('label');tagUpload.className='input';tagUpload.textContent='Add module tag above Prototype (right edge)';const tagInput=document.createElement('input');tagInput.type='file';tagInput.accept='image/*';tagInput.disabled=!frame.sectionModule;tagUpload.appendChild(tagInput);attachment.appendChild(tagUpload);
+   tagInput.onchange=async event=>{const file=event.target.files[0];if(!file)return;try{const src=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});await attachModuleTag(frame,src,panel);}catch(error){status(panel,error.message||'Could not load the tag image.');}event.target.value='';};
    const group=frame.sectionModule;
    attachment.querySelector('[data-prototype-position]').value=group?.position||'top';attachment.querySelector('[data-prototype-pinlines]').checked=group?.pinlines!==false;
    for(const selector of ['[data-prototype-color]','[data-prototype-right]'])for(const key of Object.keys(FrameSectionCatalog.styles.find(style=>style.id==='prototype').variants)){const option=document.createElement('option');option.value=key;option.textContent=colors[key];attachment.querySelector(selector).appendChild(option);}
@@ -478,5 +496,5 @@
   panel.querySelector('[data-section-browse]').onclick=async()=>{if(typeof availableFrames==='undefined'||typeof selectedFrameIndex==='undefined'||!availableFrames[selectedFrameIndex]){status(panel,'Choose a frame asset in Browse Frames first.');return;}const resource=availableFrames[selectedFrameIndex],ok=await apply(frame,{role:sectionRole,style:'browse',browseResource:clone(resource),left:colorOf(resource),right:'',crown:false,pinlines:panel.querySelector('[data-section-pinlines]').checked,opacity:panel.querySelector('[data-section-opacity]').value,fitTitleText:false},panel);if(ok)mount(container,frame);};
   insertAppearance(container,panel);
  }
- window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,fitUniformText,sectionLayouts,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,renderCrownArtwork,originalRectangle,fieldDefinitions};
+ window.FrameSectionTools={attachModuleTag,role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,fitUniformText,sectionLayouts,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,renderCrownArtwork,originalRectangle,fieldDefinitions};
 })();
