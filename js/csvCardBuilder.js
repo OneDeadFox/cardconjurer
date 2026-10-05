@@ -1395,6 +1395,7 @@
 	}
 
 	async function applyMappedSetSymbol(result) {
+		if(card.setSymbolBounds?.hidden){result.appliedSetSymbol='Removed in template';return;}
 		var codeInput = document.querySelector('#set-symbol-code');
 		var rarityInput = document.querySelector('#set-symbol-rarity');
 		var mappedCode = String(result.fields.setCode || '').trim();

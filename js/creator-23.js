@@ -2822,6 +2822,7 @@ function cardTextContentRect(textObject) {
 	};
 }
 function cardSetSymbolCollisionRect() {
+	if (card.setSymbolBounds?.hidden) return null;
 	var source = String((card && card.setSymbolSource) || (setSymbol && setSymbol.src) || '');
 	if (!source || source.includes('/img/blank.png')) return null;
 	var symbolZoom = Number(card.setSymbolZoom);
@@ -4733,6 +4734,13 @@ function artStopDrag(e) {
 	}
 }
 //SET SYMBOL TAB
+function setSetSymbolVisible(visible) {
+ if (!card.setSymbolBounds) return;
+ var before=createDesignStateSnapshot();
+ card.setSymbolBounds.hidden=!visible;
+ drawTextBuffer();drawCard();drawNewGuidelines();
+ commitDesignUndoSnapshot(before,visible?'Restore set symbol':'Remove set symbol');
+}
 function uploadSetSymbol(imageSource, otherParams) {
 	ImageLoadTracker.track(imageSource);
 	return new Promise(function (resolve) {
@@ -5068,6 +5076,7 @@ function drawPlacedImage(context, image, x, y, width, height, rotation) {
 	context.restore();
 }
 function drawSetSymbol(cardContext, setSymbol, bounds) {
+	if (bounds.hidden) return;
 	if (!bounds) return;
 	var symbolWidth = setSymbol.width * card.setSymbolZoom;
 	var symbolHeight = setSymbol.height * card.setSymbolZoom;
@@ -5324,9 +5333,9 @@ function drawLayoutHighlights() {
 		});
 	}
 	if (layoutHighlightEnabled('layout-highlight-symbols')) {
-		if (card.setSymbolBounds) {
+		if (card.setSymbolBounds && !card.setSymbolBounds.hidden) {
 			drawLayoutHighlightBox(card.setSymbolBounds, '#ffd34e', 'Set Symbol', {
-				kind:'setSymbol', target:card.setSymbolBounds,
+				kind:'setSymbol', target:card.setSymbolBounds, deletable:true,
 				horizontal:card.setSymbolBounds.horizontal, vertical:card.setSymbolBounds.vertical,
 				rotation:card.setSymbolRotate
 			});
@@ -5415,6 +5424,7 @@ function layoutHighlightCursor(action, area) {
 function deleteLayoutHighlightArea(area) {
 	if (!area) return false;
 	if(area.kind==='classLevel'){ClassLevels.remove(area.key);return true;}
+	if(area.kind==='setSymbol'){setSetSymbolVisible(false);return true;}
 	var before=createDesignStateSnapshot();
 	if (area.kind == 'text') {
 		if (window.RulesRange) RulesRange.removeElementReferences('text', area.key);
@@ -7350,7 +7360,7 @@ function drawNewGuidelines() {
 		setSymbolX -= setSymbolWidth;
 	}
 	guidelinesContext.fillStyle = 'red';
-	guidelinesContext.fillRect(setSymbolX, setSymbolY, setSymbolWidth, setSymbolHeight);
+	if (!card.setSymbolBounds.hidden) guidelinesContext.fillRect(setSymbolX, setSymbolY, setSymbolWidth, setSymbolHeight);
 	// grid
 	guidelinesContext.globalAlpha = 1;
 	guidelinesContext.beginPath();
