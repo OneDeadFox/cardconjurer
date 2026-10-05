@@ -76,7 +76,7 @@
   }
   ctx.putImageData(first,0,0);
  }
- async function renderStyle(style,sectionRole,left,right,pinlines,crown){
+ async function renderStyle(style,sectionRole,left,right,pinlines,crown,options={}){
   const resource=style.variants[left];if(!resource)throw Error(style.label+' does not have a '+colors[left]+' appearance.');
   const primaryMask=resource.masks.find(mask=>mask.name.toLowerCase()===sectionRole);
   const maskNames=primaryMask?[primaryMask.name]:[];
@@ -88,6 +88,7 @@
    // Pinline masks span the entire card. Keep only this section's portion.
    if(pinlines&&names.length>maskNames.length){const clip=expand(rect,.004);ctx.globalCompositeOperation='destination-in';ctx.fillStyle='black';const limiter=canvas(size.width,size.height);limiter.getContext('2d').fillRect(clip.x*size.width,clip.y*size.height,clip.width*size.width,clip.height*size.height);ctx.drawImage(limiter,0,0);}
    ctx.globalCompositeOperation='source-over';
+   if(options.clearSymbol&&sectionRole==='title'&&(style.id==='battle'||style.id.startsWith('transform-'))){const icon=style.id==='battle'?{x:.116,y:.056,width:.047,height:.066}:style.id==='transform-back'?{x:1737/2010,y:.0505,width:.0734,height:.0524}:{x:.0594,y:.0505,width:.0734,height:.0524};ctx.globalCompositeOperation='source-atop';ctx.fillStyle='black';ctx.beginPath();ctx.ellipse((icon.x+icon.width/2)*size.width,(icon.y+icon.height/2)*size.height,icon.width*size.width/2,icon.height*size.height/2,0,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';}
    if(style.id==='prototype')for(const extra of variant.extras||[])ctx.drawImage(await drawResource(extra,[],size),0,0);
    if(crown&&sectionRole==='title'){
     ctx.drawImage(await crownCanvas(style,key,pinlines,size,rect),0,0);
@@ -146,6 +147,13 @@
    status(panel,'Appearance replaced. The card layout and text content were preserved.');return true;
   }catch(error){await applyDesignStateSnapshot(before);status(panel,error.message);return false;}
   finally{busy=false;}
+ }
+ async function renderCrownArtwork(style,color,pinlines=true,backing=true){
+  const native=style.variants[color];if(!native)throw Error('No stock crown for this color.');
+  const asset=await image(native.src),size={width:asset.naturalWidth||asset.width,height:asset.naturalHeight||asset.height};
+  const mask=canvas(size.width,size.height);mask.getContext('2d').drawImage(await image(native.masks.find(item=>item.name==='Title').src),0,0,size.width,size.height);
+  const rect=alphaBounds(mask),composed=await crownCanvas(style,color,pinlines,size,rect,backing),outer=alphaBounds(composed),cropped=canvas(outer.width*size.width,outer.height*size.height);
+  cropped.getContext('2d').drawImage(composed,outer.x*size.width,outer.y*size.height,outer.width*size.width,outer.height*size.height,0,0,cropped.width,cropped.height);return cropped.toDataURL('image/png');
  }
  async function changeCrown(frame,options,panel){
   if(busy||!card.frames.includes(frame)||role(frame)!=='title')return false;
@@ -470,5 +478,5 @@
   panel.querySelector('[data-section-browse]').onclick=async()=>{if(typeof availableFrames==='undefined'||typeof selectedFrameIndex==='undefined'||!availableFrames[selectedFrameIndex]){status(panel,'Choose a frame asset in Browse Frames first.');return;}const resource=availableFrames[selectedFrameIndex],ok=await apply(frame,{role:sectionRole,style:'browse',browseResource:clone(resource),left:colorOf(resource),right:'',crown:false,pinlines:panel.querySelector('[data-section-pinlines]').checked,opacity:panel.querySelector('[data-section-opacity]').value,fitTitleText:false},panel);if(ok)mount(container,frame);};
   insertAppearance(container,panel);
  }
- window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,fitUniformText,sectionLayouts,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,originalRectangle,fieldDefinitions};
+ window.FrameSectionTools={role,apply,changeCrown,attachPrototype,updatePrototype,renderPrototype,fitUniformText,sectionLayouts,syncRuleModules,mount,sync,cutouts,restoreAppearance,insertFields,renderStyle,renderCrownArtwork,originalRectangle,fieldDefinitions};
 })();

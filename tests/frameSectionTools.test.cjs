@@ -188,5 +188,6 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  assert.ok(effective(prototypeField)>=defaultSize-1,'Fixed override overflow must not shrink other fields');
  uniformRange.autoSizeModules=false;S.syncRuleModules();assert.ok(Math.abs(fixedGroup.fraction-manualFraction)<1e-8,'Disabling auto height restores manual height');
  delete fixedGroup.rulesFontVersion;prototypeField.size=.0123;prototypeField.fontSize=-4;S.syncRuleModules();assert.equal(prototypeField.size,.0123);assert.equal(prototypeField.fontSize,-4,'Migration must preserve explicit font choices');
+ const crownCardBefore=JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value);const crownSrc=await S.renderCrownArtwork(context.FrameSectionCatalog.styles.find(style=>style.id==='battle'),'u',false,true);assert.ok(crownSrc.startsWith('data:image/png'));assert.equal(JSON.stringify(context.card,(key,value)=>key==='image'?undefined:value),crownCardBefore,'Stock crown generation does not mutate live layout');
  console.log('PASS: shared section swaps, split composition, geometry/content preservation, pinline/crown removal, preset fields, movement, rollback and serializable assets.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

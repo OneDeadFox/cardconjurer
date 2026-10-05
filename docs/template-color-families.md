@@ -2,8 +2,9 @@
 
 A saved Frame Designer project supplies the complete layout. Color families change
 linked layer artwork while preserving bounds, text areas, ranges, modules, opacity,
-rotation, and neutral artwork. Existing projects retain their appearance until
-color switching is enabled and layers are explicitly linked.
+rotation, and neutral artwork. Recognized stock elements automatically select existing catalog assets from CSV
+colors. Custom artwork changes only when custom color switching is enabled and
+its layers are explicitly linked. Blank CSV colors retain the saved appearance.
 
 ## Set up a layout
 
@@ -13,7 +14,15 @@ In **Frame Design → Element Tools → Template Colors**:
 2. Select a color and upload that family's image for that color. All images in a
    family should have identical dimensions, framing, and element placement.
 3. Select a layer and link it to the family. Other layers can share the family.
-4. Enable CSV color switching and save the Frame Designer project.
+4. Enable custom family color switching and save the Frame Designer project.
+
+Stock P/T badges, catalog sections, crowns, and attached prototype pieces do not
+need families. Automatic stock colors are on by default and can be disabled with
+**Automatically color recognized stock elements from CSV**. Stock P/T selection
+follows the regular importer: two colors use the multicolor badge, with artifact
+and vehicle badges chosen for those card types. Uploaded custom artwork remains
+unchanged unless linked. Stock source/style metadata is retained through container
+resizing so artwork can still change after editing geometry.
 
 “Use Layer Artwork for Selected Color” records the selected layer's existing
 image. “Add Available Stock Colors” generates variants for supported stock P/T
@@ -31,7 +40,11 @@ they do not introduce a new half mask. Use these with existing masked half layer
 or half-specific images. “Single color or blended two colors” composes both colors
 with the existing feathered right-half mask at the layer's card coordinates.
 
-Use **Keep Layer Fixed** for neutral borders, symbols, and other unchanged artwork.
+Use **Remove Family from Layer** to detach a custom link. It does not delete the
+family, its uploaded assets, or the layer. Recognized stock elements then resume
+automatic selection; unrecognized custom artwork remains unchanged. Explicit
+custom links take precedence over stock lookup. Neutral borders and symbols
+need no links.
 Families, variants, and linked masks are included in project save/export/import.
 Family creation, image association, linking, and unlinking participate in design
 undo/redo.
@@ -48,7 +61,7 @@ undo/redo.
 
 Blank colors preserve the saved artwork. More than two colors select the
 Multicolor variant. Explicit left/right columns take precedence over Color and
-Color Identity. A missing requested variant or family fails that row before the
+Color Identity. A missing requested custom or stock variant or family fails that row before the
 live card is loaded; there is no silent fallback to an unrelated color.
 
 Map custom text columns using **Template fields by label**. Fields match their

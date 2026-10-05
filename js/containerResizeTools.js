@@ -90,7 +90,7 @@
   const sy=[0,top,source.height-bottom,source.height],dy=[0,top,result.height-bottom,result.height];
   for(let i=0;i<3;i++){const band=canvas(source.width,sy[i+1]-sy[i]);band.getContext('2d').drawImage(source,0,sy[i],source.width,band.height,0,0,band.width,band.height);ctx.drawImage(slices(band,result.width,Math.max(1,dy[i+1]-dy[i])),0,dy[i]);}return result;
  }
- async function setImage(frame,source,b){frame.src=source.toDataURL('image/png');frame.image=await load(frame.src);frame.bounds=copy(b);frame.masks=[];frame.rotation=0;frame.flipX=false;frame.flipY=false;frame.colorOverlayCheck=false;frame.hslHue=frame.hslSaturation=frame.hslLightness=0;delete frame.ogBounds;delete frame.maskCanvasBounds;delete frame.assetId;frame.resizeContainerRaster=true;frame.fixedAppearance=true;}
+ async function setImage(frame,source,b){const recipe=window.TemplateThemes?.stockRecipe(frame,card);if(recipe)frame.stockThemeRecipe=recipe;frame.src=source.toDataURL('image/png');frame.image=await load(frame.src);frame.bounds=copy(b);frame.masks=[];frame.rotation=0;frame.flipX=false;frame.flipY=false;frame.colorOverlayCheck=false;frame.hslHue=frame.hslSaturation=frame.hslLightness=0;delete frame.ogBounds;delete frame.maskCanvasBounds;delete frame.assetId;frame.resizeContainerRaster=true;frame.fixedAppearance=true;}
  async function apply(s,target){
    if(s.kind==='title')return applyTitle(s,target);
    const original=s.original;
