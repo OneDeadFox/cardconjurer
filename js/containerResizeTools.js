@@ -41,6 +41,7 @@
    // Include the nearby stroke, without capturing the title or upper frame.
    if(!saved){const pad=6/card.width;outer={x:Math.max(0,outer.x-pad),y:Math.max(0,outer.y-6/card.height),width:Math.min(1,outer.x+outer.width+pad)-Math.max(0,outer.x-pad),height:Math.min(1,outer.y+outer.height+6/card.height)-Math.max(0,outer.y-6/card.height)};}
    else outer=copy(saved.bounds);
+   if(!saved)outer=await includePipelineStrokes(outer,'Title container');
    session={kind:'rules',owner,range,types,typeRects,typeBox,pt,original:outer,draft:copy(outer),mode:activeFrameDesignMode,committing:false,snapshot:createDesignStateSnapshot(),baseline:capture(),pending:null,previewPromise:null,timer:null,previewError:null};
    show();
   }catch(error){notify(error.message,6);}finally{opening=false;}
@@ -58,6 +59,7 @@
   const symbols=card.frames.filter(frame=>ids.has(frame.bossTitleOwner));
   let outer=ownerRect;for(const b of titleRects)outer=union(outer,b);for(const frame of [...crowns,...symbols])outer=union(outer,rect(frame));
   if(saved)outer=copy(saved.bounds);else{const x=Math.max(0,outer.x-6/card.width),y=Math.max(0,outer.y-6/card.height);outer={x,y,width:Math.min(1,outer.x+outer.width+6/card.width)-x,height:Math.min(1,outer.y+outer.height+6/card.height)-y};}
+  if(!saved)outer=await includePipelineStrokes(outer,'Rules container');
   session={kind:'title',owner,peers,titleRects,crowns,symbols,original:outer,draft:copy(outer),mode:activeFrameDesignMode,committing:false,snapshot:createDesignStateSnapshot(),baseline:capture(),pending:null,previewPromise:null,timer:null,previewError:null};show();
  }
  function matchRulesWidth(){if(!session||session.kind!=='title')return;const selected=window.RulesRange?.getSelected(),owner=card.frames.find(frame=>frame.resizeContainer&&frame.sectionModule?.rangeId===selected?.id)||card.frames.find(frame=>frame.resizeContainer);if(!owner){message('Resize the rules container first, then use its saved width here.');return;}session.draft.x=owner.resizeContainer.bounds.x;session.draft.width=owner.resizeContainer.bounds.width;refresh();requestPreview();}
@@ -70,6 +72,19 @@
 
  function draw(){if(!session)return false;const b=previewLayoutBounds(session.draft),ctx=previewContext;ctx.save();ctx.strokeStyle='#ba82ff';ctx.lineWidth=2;ctx.setLineDash([8,4]);ctx.strokeRect(b.x,b.y,b.width,b.height);ctx.setLineDash([]);ctx.fillStyle='#ba82ff';for(const x of [b.x,b.x+b.width/2,b.x+b.width])for(const y of [b.y,b.y+b.height/2,b.y+b.height])if(x!==b.x+b.width/2||y!==b.y+b.height/2)ctx.fillRect(x-4,y-4,8,8);ctx.font='bold 14px sans-serif';ctx.fillText((session.kind==='title'?'Title':'Rules')+' container — resize preview',b.x+8,b.y+18);ctx.restore();return true;}
  function edgeAt(p){if(!session)return '';const b=previewLayoutBounds(session.draft),tol=12;let edge='';if(p.y>=b.y-tol&&p.y<=b.y+b.height+tol){if(Math.abs(p.x-b.x)<=tol)edge+='left';else if(Math.abs(p.x-b.x-b.width)<=tol)edge+='right';}if(p.x>=b.x-tol&&p.x<=b.x+b.width+tol){if(Math.abs(p.y-b.y)<=tol)edge+='top';else if(Math.abs(p.y-b.y-b.height)<=tol)edge+='bottom';}return edge;}
+ // Capture complete connected strokes, even when part extends past the frame's box.
+ function connectedBounds(source,b){
+  const w=source.width,h=source.height,p=source.getContext('2d').getImageData(0,0,w,h).data,seen=new Uint8Array(w*h),queue=new Uint32Array(w*h);
+  let left=Math.floor(b.x*w),top=Math.floor(b.y*h),right=Math.ceil((b.x+b.width)*w),bottom=Math.ceil((b.y+b.height)*h),count=0;
+  const add=i=>{if(i>=0&&i<w*h&&!seen[i]&&p[i*4+3]>0){seen[i]=1;queue[count++]=i;}};
+  for(let y=Math.max(0,top);y<Math.min(h,bottom);y++)for(let x=Math.max(0,left);x<Math.min(w,right);x++)add(y*w+x);
+  for(let n=0;n<count;n++){const i=queue[n],x=i%w,y=Math.floor(i/w);left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);if(x)add(i-1);if(x+1<w)add(i+1);if(y)add(i-w);if(y+1<h)add(i+w);}
+  return{x:left/w,y:top/h,width:(right-left)/w,height:(bottom-top)/h};
+ }
+ async function includePipelineStrokes(bounds,excluded){
+  for(const frame of card.frames.filter(frame=>/pinline|pipeline/i.test(frame.componentKind||frame.name||'')&&!frame.name.includes(excluded))){if(frame.rotation)continue;bounds=union(bounds,connectedBounds(await rendered(frame),bounds));}
+  return bounds;
+ }
  async function rendered(frame){
   const output=canvas(card.width,card.height),ctx=output.getContext('2d'),b=frame.bounds,og=frame.ogBounds||b;
   ctx.fillRect(0,0,output.width,output.height);ctx.globalCompositeOperation='source-in';
@@ -141,6 +156,6 @@
   window.addEventListener('creatortabchanged',cancel);window.addEventListener('frameworkspacechanged',cancel);
  }
  function restore(frame,definition){if(!frame.resizeContainerRaster&&!definition.resizeContainerRaster&&!frame.resizeContainer&&!definition.resizeContainer&&!frame.titleResizeContainer&&!definition.titleResizeContainer)return;for(const key of ['componentKind','resizeContainer','titleResizeContainer','resizeContainerRaster','fixedAppearance','ogBounds','maskCanvasBounds','assetId','flipX','flipY','colorOverlayCheck','hslHue','hslSaturation','hslLightness']){if(definition[key]===undefined)delete frame[key];else frame[key]=copy(definition[key]);}frame.src=definition.src;frame.masks=copy(definition.masks||[]);load(frame.src).then(image=>{frame.image=image;return Promise.all(frame.masks.map(async mask=>{mask.image=await load(mask.src);}));}).then(drawFrames);}
- window.ContainerResizeTools={open,openTitle:()=>open('title'),cancel,draw,isOpen:()=>!!session,restore,resized,map,slices,cursor,flushPreview:()=>runPreview(session)};
+ window.ContainerResizeTools={connectedBounds,open,openTitle:()=>open('title'),cancel,draw,isOpen:()=>!!session,restore,resized,map,slices,cursor,flushPreview:()=>runPreview(session)};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();

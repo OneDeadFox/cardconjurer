@@ -27,7 +27,10 @@
   if(from.y.length!==to.y.length){from.y=[from.y[0],from.y[from.y.length-1]];to.y=[to.y[0],to.y[to.y.length-1]];}
   const output=canvas(reference.width,reference.height),ctx=output.getContext('2d');
   for(let x=0;x<from.x.length-1;x++)for(let y=0;y<from.y.length-1;y++)ctx.drawImage(source,from.x[x],from.y[y],from.x[x+1]-from.x[x],from.y[y+1]-from.y[y],to.x[x],to.y[y],to.x[x+1]-to.x[x],to.y[y+1]-to.y[y]);
-  ctx.globalCompositeOperation='destination-in';ctx.drawImage(reference,0,0);return output;
+  // The reference supplies coverage once; multiplying two antialiased edges
+  // would darken/thin the saved stroke every time a template is recolored.
+  const pixels=ctx.getImageData(0,0,output.width,output.height),coverage=reference.getContext('2d').getImageData(0,0,reference.width,reference.height).data;
+  for(let i=3;i<pixels.data.length;i+=4)pixels.data[i]=pixels.data[i]?coverage[i]:0;ctx.putImageData(pixels,0,0);return output;
  }
  async function compose(family,link,choice,data,frame){
   const left=link.side==='right'?(choice.right||choice.left):choice.left,right=link.side==='full'?choice.right:'';
@@ -57,10 +60,20 @@
   if(role&&style)return{kind:'section',style:style.id,role};
   return null;
  }
+ // Only the frame body and its pipeline split; other multicolor components use gold.
+ function elementChoice(frame,data,choice,recipe){
+  if(!choice.right)return choice;
+  const role=frame.sectionAppearance?.role||String(frame.componentKind||'').toLowerCase();
+  const name=String(frame.name||'');
+  const pipeline=/pinline|pipeline/i.test(role+' '+name);
+  const body=recipe?.kind==='native'&&!/title|type|rules|power|toughness/i.test(role)&&!(frame.masks||[]).some(mask=>/title|type|rules|power|toughness/i.test(mask.name||''));
+  const customBody=!recipe&&/\bframe\b/i.test(role+' '+name)&&!/title|type|rules|power|toughness/i.test(role+' '+name)&&!(frame.masks||[]).some(mask=>/title|type|rules|power|toughness/i.test(mask.name||''));
+  return pipeline||body||customBody?choice:{...choice,left:'m',right:''};
+ }
  function unlink(frame){delete frame.templateTheme;}
  async function stockArtwork(frame,data,choice,recipe){
   if(recipe.kind==='pt'){
-   const type=String(data.text?.type?.text||'').toLowerCase(),key=/vehicle/.test(type)?'v':/artifact/.test(type)?'a':choice.right?'m':choice.left==='l'?'c':choice.left;
+   const type=String(data.text?.type?.text||'').toLowerCase(),key=choice.left==='m'||choice.right?'m':/vehicle/.test(type)?'v':/artifact/.test(type)?'a':choice.left==='l'?'c':choice.left;
    const src=recipe.source.replace(/[WUBRGMALCV]\.png$/i,key.toUpperCase()+'.png');await image(src);return{src,masks:copy(frame.masks||[])};
   }
   const catalog=window.FrameSectionCatalog?.styles||[];let variants={},masks=[];
@@ -104,12 +117,12 @@
   const duplicates=settings.enabled?pipelineDuplicates(data):new Map(),changes=[];
   for(const frame of data.frames||[]){
    if(duplicates.has(frame))continue;
-   const link=settings.enabled&&frame.templateTheme;
-   if(link){const family=settings.families.find(family=>family.id===link.familyId);if(!family)throw Error('Missing asset family for '+frame.name+'.');changes.push({frame,src:await compose(family,link,choice,data,frame),masks:copy(link.masks||[]),recipe:stockRecipe(frame,data)});continue;}
-   const recipe=autoStock&&stockRecipe(frame,data);if(recipe)changes.push({frame,...await stockArtwork(frame,data,choice,recipe),recipe});
+   const link=settings.enabled&&frame.templateTheme,recipe=stockRecipe(frame,data),localChoice=elementChoice(frame,data,choice,recipe);
+   if(link){const family=settings.families.find(family=>family.id===link.familyId);if(!family)throw Error('Missing asset family for '+frame.name+'.');changes.push({frame,src:await compose(family,link,localChoice,data,frame),masks:copy(link.masks||[]),recipe,choice:localChoice});continue;}
+   if(autoStock&&recipe)changes.push({frame,...await stockArtwork(frame,data,localChoice,recipe),recipe,choice:localChoice});
   }
   if(!changes.length){if(settings.enabled)warnings.push('No linked custom layers or recognized stock elements were found for color switching.');return data;}
-  for(const {frame,src,masks,recipe} of changes){frame.src=src;delete frame.image;delete frame.assetId;frame.masks=masks;if(recipe)frame.stockThemeRecipe=recipe;if(frame.sectionAppearance){frame.sectionAppearance.left=choice.left;frame.sectionAppearance.right=choice.right;}if(frame.sectionCrown){frame.sectionCrown.left=choice.left;frame.sectionCrown.right=choice.right;}if(frame.sectionModule){frame.sectionModule.left=choice.left;frame.sectionModule.right=choice.right;}}
+  for(const {frame,src,masks,recipe,choice} of changes){frame.src=src;delete frame.image;delete frame.assetId;frame.masks=masks;if(recipe)frame.stockThemeRecipe=recipe;if(frame.sectionAppearance){frame.sectionAppearance.left=choice.left;frame.sectionAppearance.right=choice.right;}if(frame.sectionCrown){frame.sectionCrown.left=choice.left;frame.sectionCrown.right=choice.right;}if(frame.sectionModule){frame.sectionModule.left=choice.left;frame.sectionModule.right=choice.right;}}
   for(const [companion,owner] of duplicates){companion.templateThemeDuplicate=companion.templateThemeDuplicate||{owner:owner.designLayerId,originalHidden:!!companion.hidden};companion.hidden=true;}
   data.csvImport=data.csvImport||{};data.csvImport.templateColors=[choice.left,choice.right].filter(Boolean);return data;
  }
@@ -133,6 +146,6 @@
   panel.querySelector('[data-unlink]').onclick=()=>{const frame=card.frames.find(frame=>frame.designLayerId===panel.querySelector('[data-layer]').value);if(frame)save(()=>unlink(frame),'Remove family from layer');};refresh();
  }
  function restore(frame,definition){if((frame.templateTheme||definition.templateTheme)&&frame.src!==definition.src){frame.src=definition.src;frame.masks=copy(definition.masks||[]);if(definition.assetId)frame.assetId=definition.assetId;else delete frame.assetId;Promise.all([image(frame.src).then(asset=>frame.image=asset),...frame.masks.map(async mask=>mask.image=await image(mask.src))]).then(()=>{if(typeof drawFrames==='function')drawFrames();}).catch(error=>console.error(error));}if(definition.templateTheme)frame.templateTheme=copy(definition.templateTheme);else delete frame.templateTheme;if(definition.stockThemeRecipe)frame.stockThemeRecipe=copy(definition.stockThemeRecipe);else delete frame.stockThemeRecipe;}
- window.TemplateThemes={apply,records,colors,selection,fieldLabel,mapFields,refresh,restore,stockRecipe,stockArtwork,unlink,pipelineDuplicates,fitPipeline};window.addEventListener('frameprojectschanged',refresh);window.addEventListener('frameworkspacechanged',refresh);window.addEventListener('creatortabchanged',refresh);
+ window.TemplateThemes={apply,records,colors,selection,fieldLabel,mapFields,refresh,restore,stockRecipe,stockArtwork,unlink,pipelineDuplicates,fitPipeline,elementChoice};window.addEventListener('frameprojectschanged',refresh);window.addEventListener('frameworkspacechanged',refresh);window.addEventListener('creatortabchanged',refresh);
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();
