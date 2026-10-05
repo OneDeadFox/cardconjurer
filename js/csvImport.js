@@ -63,6 +63,9 @@
 			label: 'Alternate face',
 			fields: [
 				['field:altName', 'Alt Name'],
+				['field:altTemplate', 'Alt Saved Frame Project (Template)'],
+				['field:altOrientation', 'Alt Card Orientation'],
+				...['supertype1','supertype2','supertype3','cardType1','cardType2','cardType3','subtype1','subtype2','subtype3'].map(key=>['field:alt'+key[0].toUpperCase()+key.slice(1),'Alt '+key]),
 				['field:altColor', 'Alt Color'],
 				['field:altColorIdentity', 'Alt Color Identity'],
 				['field:altManaCost', 'Alt Mana Cost'],
@@ -147,6 +150,7 @@
 		rarity: 'field:rarity',
 		typeline: 'field:typeLine',
 		creaturetype: 'field:typeLine',
+		supertype: 'field:supertype1',
 		supertype1: 'field:supertype1',
 		supertype2: 'field:supertype2',
 		supertype3: 'field:supertype3',
@@ -185,6 +189,23 @@
 		artgrayscale: 'feature:artGrayscale',
 		grayscaleart: 'feature:artGrayscale',
 		altname: 'field:altName',
+		alttemplate: 'field:altTemplate',
+		altorientation: 'field:altOrientation',
+		altsupertype: 'field:altSupertype1',
+		altsupertype1: 'field:altSupertype1',
+		altsupertype2: 'field:altSupertype2',
+		altsupertype3: 'field:altSupertype3',
+		altcardtype: 'field:altCardType1',
+		altcardtype1: 'field:altCardType1',
+		altcardtype2: 'field:altCardType2',
+		altcardtype3: 'field:altCardType3',
+		altsubtype: 'field:altSubtype1',
+		altsubtype1: 'field:altSubtype1',
+		altsubtype2: 'field:altSubtype2',
+		altsubtype3: 'field:altSubtype3',
+		ability4bossability: 'field:altAbility1',
+		ability5lootbox: 'alttemplatefield:prototype rules',
+		recovery: 'metadata',
 		alternatename: 'field:altName',
 		altcolor: 'field:altColor',
 		altcoloridentity: 'field:altColorIdentity',
@@ -381,7 +402,7 @@
 
 		var labels=new Map();
 		[window.card,...savedFrameProjects().map(project=>project.card)].filter(Boolean).forEach(data=>Object.values(data.text||{}).forEach(field=>{var label=String(field.csvFieldLabel||field.name||'').trim();if(label)labels.set(label.toLowerCase().replace(/\s+/g,' '),label);}));
-		if(labels.size)groups.push({label:'Template fields by label',fields:[...labels].map(([key,label])=>['templatefield:'+key,label])});
+		if(labels.size){groups.push({label:'Template fields by label (both faces)',fields:[...labels].map(([key,label])=>['templatefield:'+key,label])});groups.push({label:'Front template text fields',fields:[...labels].map(([key,label])=>['fronttemplatefield:'+key,label])});groups.push({label:'Back template text fields',fields:[...labels].map(([key,label])=>['alttemplatefield:'+key,label])});}
 		var textFields = [];
 		var seenTextFields = {};
 		if (window.card && card.text) {
@@ -483,6 +504,7 @@
 
 	function getAutomaticTarget(header) {
 		var normalized = normalizeHeader(header);
+		if(/^card\s*#$/i.test(String(header).trim()))return 'field:collectorNumber';
 		if (aliases[normalized]) {
 			return aliases[normalized];
 		}
@@ -675,6 +697,7 @@
 		var transformIndex = getMappedColumn('field:transform');
 		var flipIndex = getMappedColumn('field:flip');
 		var templateIndex = getMappedColumn('field:template');
+		var altTemplateIndex = getMappedColumn('field:altTemplate');
 		var frameTypeIndex = getMappedColumn('field:frameType');
 		var frameVariantIndex = getMappedColumn('field:frameVariant');
 		var projectNames = savedFrameProjects().map(function (project) {
@@ -685,6 +708,9 @@
 			var transform = transformIndex === -1 ? false : parseBoolean(row[transformIndex]);
 			var flip = flipIndex === -1 ? false : parseBoolean(row[flipIndex]);
 			var templateName = templateIndex === -1 ? '' : String(row[templateIndex] || '').trim();
+			var altTemplateName=altTemplateIndex===-1?'':String(row[altTemplateIndex]||'').trim();
+			if(altTemplateName&&!transform)errors.push('Row '+(index+2)+' requires Transform = TRUE to use Alt Template.');
+			if(altTemplateName&&!projectNames.includes(altTemplateName.toLowerCase()))errors.push('Row '+(index+2)+' names an unknown alternate frame project: '+altTemplateName+'.');
 			var frameType = frameTypeIndex === -1 ? '' : String(row[frameTypeIndex] || '').trim();
 			var frameVariant = frameVariantIndex === -1 ? '' : String(row[frameVariantIndex] || '').trim();
 
@@ -707,7 +733,7 @@
 
 		var mappedSingles = {};
 		state.mappings.forEach(function (target, index) {
-			if (!target || target === 'ignore' || target === 'metadata' || target.indexOf('textbox:') === 0 || target.indexOf('templatefield:') === 0) {
+			if (!target || target === 'ignore' || target === 'metadata' || target.indexOf('textbox:') === 0 || target.indexOf('templatefield:') === 0 || target.indexOf('fronttemplatefield:') === 0 || target.indexOf('alttemplatefield:') === 0) {
 				return;
 			}
 			if (mappedSingles[target] !== undefined) {

@@ -424,7 +424,7 @@
 		var fields = {};
 		var metadata = {};
 		var textboxes = {};
-		var templateFields = {};
+		var templateFields = {},frontTemplateFields={},altTemplateFields={};
 		var imageFields = {};
 		var features = {};
 
@@ -451,6 +451,7 @@
 				imageFields[target.substring('imagefield:'.length)] = value;
 				return;
 			}
+			if(target.indexOf('fronttemplatefield:')===0||target.indexOf('alttemplatefield:')===0){var faceFields=target.startsWith('front')?frontTemplateFields:altTemplateFields;var faceLabel=target.substring(target.indexOf(':')+1);(faceFields[faceLabel] ||= []).push(value.trim());return;}
 			if (target.indexOf('templatefield:') === 0) {
 				var label=target.substring(14);
 				(templateFields[label] ||= []).push(value.trim());
@@ -471,7 +472,7 @@
 			fields: fields,
 			metadata: metadata,
 			textboxes: textboxes,
-			templateFields: templateFields,
+			templateFields: templateFields,frontTemplateFields:frontTemplateFields,altTemplateFields:altTemplateFields,
 			imageFields: imageFields,
 			features: features,
 			sourceRow: rowIndex + 2
@@ -561,6 +562,7 @@
 			(targets[2] || targets[3] || targets[4])) {
 			targets[1] = 'levelup';
 		}
+		if(!targets[1]&&cardData.text?.rules&&(targets[2]||targets[3]||targets[4]))targets[1]='rules';
 		return targets;
 	}
 
@@ -698,7 +700,10 @@
 		alternate.color = fields.altColor || fields.color || '';
 		alternate.colorIdentity = fields.altColorIdentity || fields.colorIdentity || '';
 		alternate.manaCost = fields.altManaCost || '';
-		alternate.typeLine = fields.altTypeLine || fields.typeLine || '';
+		var altTypes={};for(const key of ['supertype1','supertype2','supertype3','cardType1','cardType2','cardType3','subtype1','subtype2','subtype3']){var altKey='alt'+key[0].toUpperCase()+key.slice(1);if(hasOwn(fields,altKey))altTypes[key]=fields[altKey];delete alternate[key];}
+		alternate.typeLine=hasOwn(fields,'altTypeLine')?fields.altTypeLine:Object.keys(altTypes).length?assembleTypeLine(altTypes):fields.typeLine||'';
+		alternate.template=fields.altTemplate||fields.template||'';
+		if(fields.altTemplate){delete alternate.frameType;delete alternate.frameVariant;alternate.orientation=fields.altOrientation||'';}else if(hasOwn(fields,'altOrientation'))alternate.orientation=fields.altOrientation;
 		alternate.ability1 = fields.altAbility1 || '';
 		alternate.ability2 = fields.altAbility2 || '';
 		alternate.ability3 = fields.altAbility3 || '';
@@ -734,6 +739,7 @@
 		var csvState = CSVImporter.getState();
 		var mapped = collectMappedRow(csvState, rowIndex);
 		var requestedTemplate = String(mapped.fields.template || '').trim();
+		if(String(mapped.fields.altTemplate||'').trim()&&!parseBoolean(mapped.fields.transform))throw Error('Alt Template requires Transform = TRUE.');
 		var hasBuiltInFrameRequest = !!String((mapped.fields.frameType || '') + (mapped.fields.frameVariant || '')).trim();
 		if (!templateCard && !requestedTemplate && !hasBuiltInFrameRequest) {
 			throw new Error('Provide Frame Type/Frame Variant in the CSV, name a saved Frame Designer project in Template, or capture an optional fallback card.');
@@ -742,7 +748,7 @@
 		var transform = parseBoolean(mapped.fields.transform);
 		var flip = parseBoolean(mapped.fields.flip);
 		var separateFaces = transform;
-		var usesTemplateFields = !!requestedTemplate || !hasBuiltInFrameRequest;
+		var usesTemplateFields = !!requestedTemplate || !!mapped.fields.altTemplate || !hasBuiltInFrameRequest;
 		var builtCard = cloneSerializableCard(baseCard);
 		var warnings = [];
 		var primaryFields = primaryFaceFields(mapped.fields, separateFaces);
@@ -784,6 +790,10 @@
 			}
 			alternateCard.csvImport = JSON.parse(JSON.stringify(csvImport));
 			alternateCard.csvImport.face = 'back';
+			alternateCard.csvImport.template=alternateFields.template;
+			alternateCard.csvImport.color=alternateFields.color;
+			alternateCard.csvImport.colorIdentity=alternateFields.colorIdentity;
+			alternateCard.csvImport.orientation=alternateFields.orientation||'';
 			if (transform && !String(mapped.fields.altName || mapped.fields.altTypeLine ||
 				mapped.fields.altAbility1 || mapped.fields.altAbility2 || mapped.fields.altAbility3 ||
 				mapped.fields.altAbility4 || mapped.fields.altFlavorText ||
@@ -798,7 +808,7 @@
 			fields: primaryFields,
 			alternateFields: alternateFields,
 			textboxes: JSON.parse(JSON.stringify(mapped.textboxes)),
-			templateFields: mapped.templateFields,
+			templateFields: mapped.templateFields,frontTemplateFields:mapped.frontTemplateFields,altTemplateFields:mapped.altTemplateFields,
 			imageFields: usesTemplateFields ? Object.assign({}, mapped.imageFields) : {},
 			features: Object.assign({}, mapped.features),
 			warnings: warnings,
@@ -816,7 +826,7 @@
 				card: cloneSerializableCard(result.alternateCard),
 				fields: Object.assign({}, result.alternateFields),
 				textboxes: JSON.parse(JSON.stringify(result.textboxes || {})),
-			templateFields: result.templateFields || {},
+			templateFields: Object.assign({},result.templateFields||{},result.altTemplateFields||{}),
 				imageFields: Object.assign({}, result.imageFields),
 				features: Object.assign({}, result.features),
 				warnings: result.warnings.slice(),
@@ -829,7 +839,7 @@
 			card: cloneSerializableCard(result.card),
 			fields: Object.assign({}, result.fields),
 			textboxes: JSON.parse(JSON.stringify(result.textboxes || {})),
-			templateFields: result.templateFields || {},
+			templateFields: Object.assign({},result.templateFields||{},result.frontTemplateFields||{}),
 			imageFields: Object.assign({}, result.imageFields),
 			features: Object.assign({}, result.features),
 			warnings: result.warnings.slice(),
