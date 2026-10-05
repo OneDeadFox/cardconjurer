@@ -8,6 +8,7 @@ const drawText = source.slice(source.indexOf('async function drawText() {'), sou
 const calls = [];
 const context = vm.createContext({
   card: {},
+  document: {},
   window: {FrameTextPresets: {sync: () => calls.push('sync')}},
   textCanvas: {width: 750, height: 1050},
   prePTCanvas: {width: 750, height: 1050},
@@ -42,5 +43,9 @@ vm.runInContext(drawText, context);
   assert.ok(calls.indexOf('fit uniform')<calls.indexOf('clear text'),'Shared sizing uses renderer fit results before the final canvas is cleared and redrawn');
   assert.equal(calls.filter(call=>call==='publish').length,1,'Only the completed render publishes fit results');
   assert.equal(calls.filter(call=>call==='Main rules').length,2);assert.equal(calls.filter(call=>call==='Prototype rules').length,2);
+  calls.length=0;let release,active=0,peak=0;
+  const fontsReady=new Promise(resolve=>release=resolve);context.document.fonts={load:()=>fontsReady};
+  context.window.FrameSectionTools.fitUniformText=async()=>{active++;peak=Math.max(peak,active);await Promise.resolve();active--;calls.push('fit after fonts');};
+  const first=context.drawText(),second=context.drawText();assert.equal(calls.length,0,'No fitting happens before the font is ready');release();await Promise.all([first,second]);assert.equal(peak,1,'Concurrent redraw requests never run the shared fitter together');assert.equal(calls.filter(call=>call==='publish').length,2,'A redraw requested during fitting runs after the active render');
   console.log('PASS: early text redraw waits for initialization; initialized text renders normally.');
 })().catch(error => {console.error(error); process.exitCode = 1;});

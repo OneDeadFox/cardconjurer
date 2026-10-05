@@ -169,7 +169,8 @@ function layer(name,color,extra=[]){return{name:color+' Frame — '+name,compone
  await S.fitUniformText(async(field,key)=>{measured++;return effective(field)<=(key===fixedGroup.mainKey?47:39);});
  assert.ok(Math.abs(effective(body)-39)<1e-8);assert.ok(Math.abs(effective(prototypeField)-39)<1e-8);assert.equal(effective(mana),manaSize,'Uniform rules sizing excludes mana text');
  assert.equal(body.rangeUniformTextSize,true);assert.equal(prototypeField.rangeUniformTextSize,true);
- const beforeCached=measured;await S.fitUniformText(async()=>{measured++;return false;});assert.equal(measured,beforeCached,'Repeated renders reuse a verified shared fit');
+ const beforeCached=measured;await S.fitUniformText(async()=>{measured++;return true;});assert.equal(measured,beforeCached+2,'Cached fits are checked against the current renderer');
+ await S.fitUniformText(async field=>effective(field)<=35);assert.ok(Math.abs(effective(body)-35)<1e-8,'A cached fit is recalculated when actual font metrics need a smaller size');assert.ok(Math.abs(effective(prototypeField)-35)<1e-8);
  body.text+=' A changed ability';await S.fitUniformText(async field=>{measured++;return effective(field)<=31;});assert.ok(Math.abs(effective(body)-31)<1e-8);assert.ok(Math.abs(effective(prototypeField)-31)<1e-8,'Content changes recalculate both fields together');
  uniformRange.uniformTextSize=false;await S.fitUniformText(async()=>{throw Error('Independent fields should use their normal renderer fit');});assert.equal(body.rangeFontReduction,0);assert.equal(prototypeField.rangeFontReduction,0);assert.equal(body.size,.04);assert.equal(prototypeField.size,.031,'Turning off matching preserves original defaults');
  // Legacy generated small-box defaults must not force a large reduction on an empty ability.

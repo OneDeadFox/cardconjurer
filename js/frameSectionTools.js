@@ -355,7 +355,11 @@
    const max=Math.max(1,Math.floor(Math.min(...fields.map(({field})=>defaultPixelSize(field))))),limit=Number.isFinite(range.maxFontReduction)?Math.max(0,range.maxFontReduction):Infinity,min=Math.max(1,Math.ceil(Math.max(...fields.filter(({field})=>!/\{fontoverride(?:[+-]?\d+)?\}/i.test(field.text||'')).map(({field})=>defaultPixelSize(field)-limit),max-limit)));
    const signature=()=>JSON.stringify({height:card.height,width:card.width,auto:range.autoSizeModules,uniform:range.uniformTextSize,limit:range.maxFontReduction,modules:range.modules.map(module=>({id:module.id,min:module.minSize,max:module.maxSize})),fields:fields.map(({key,field})=>({key,...Object.fromEntries(Object.entries(field).filter(([name])=>!['rangeFontReduction','rangeUniformTextSize','rangeClip'].includes(name)))})),obstacles:card.frames.filter(item=>/power|toughness/i.test(item.componentKind||item.name||'')).map(item=>({bounds:item.bounds,rotation:item.rotation,hidden:item.hidden}))});
    const cached=uniformRulesCache.get(group.rangeId);
-   if(cached?.signature===signature()){group.uniformSize=cached.size;setUniformRulesSize(frame,cached.size,range.uniformTextSize);continue;}
+   if(cached?.signature===signature()){
+    group.uniformSize=cached.size;setUniformRulesSize(frame,cached.size,range.uniformTextSize);
+    let valid=true;for(const {field,key} of fields){if(!String(field.text||'').trim())continue;if(!await fits(field,key)&&!/\{fontoverride(?:[+-]?\d+)?\}/i.test(field.text||''))valid=false;}
+    if(valid)continue;uniformRulesCache.delete(group.rangeId);
+   }
    if(range.autoSizeModules&&!group.autoSizingActive){group.manualFraction=group.fraction;group.autoSizingActive=true;}
    const prototypeModule=range.modules.find(module=>module.elements.some(entry=>entry.kind==='frame'&&entry.key===group.partId));
    const protoFields=prototypeModule.elements.filter(entry=>entry.kind==='text').map(entry=>({key:entry.key,field:card.text?.[entry.key]})).filter(item=>item.field&&!item.field.hidden);

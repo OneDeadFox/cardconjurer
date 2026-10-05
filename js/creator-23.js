@@ -3079,9 +3079,17 @@ function autoFrameBuffer() {
 	autoFrameTimer = setTimeout(autoFrame, 500);
 }
 async function drawText() {
+ drawText.pending=true;
+ if(drawText.promise)return drawText.promise;
+ drawText.promise=(async function(){do{drawText.pending=false;await drawTextOnce();}while(drawText.pending);})();
+ try{return await drawText.promise;}finally{drawText.promise=null;}
+}
+async function drawTextOnce() {
 	// Image loads can request a redraw before the initial frame defines text.
 	// Leave it unset so the frame pack can still initialize its defaults.
 	if (!card || !card.text) return;
+	// Fit against the real font metrics rather than a temporary fallback font.
+	if(document.fonts?.load){const fonts=new Set(['mplantin']);for(const field of Object.values(card.text)){if(field.font)fonts.add(field.font);for(const match of String(field.text||'').matchAll(/\{font([a-z][a-z0-9_-]*)\}/gi))fonts.add(match[1]);}await Promise.all([...fonts].map(font=>document.fonts.load('16px "'+font+'"')));}
 	window.FrameTextPresets?.sync();
 	if (card.version==='dungeonModules' && window.DungeonModules?.reflow()) {
 		if (typeof dungeonEdited==='function') dungeonEdited(true);
@@ -3558,7 +3566,8 @@ function writeText(textObject, targetContext) {
 		lineContext.lineJoin = textLineJoin;
 		var rubyGlobalAnnSize = prescanRubySize(splitText, textObject, lineContext, textSize, textFontStyle, textFont, textFontExtension);
 		//Begin looping through words/codes
-		innerloop: for (word of splitText) {
+		innerloop: for (var tokenIndex=0;tokenIndex<splitText.length;tokenIndex++) {
+			var word=splitText[tokenIndex];
 			var wordToWrite = word;
 			if (wordToWrite.includes('{') && wordToWrite.includes('}') || textManaCost || savedFont) {
 				var possibleCode = wordToWrite.toLowerCase().replace('{', '').replace('}', '');
@@ -4110,7 +4119,7 @@ function writeText(textObject, targetContext) {
 				newLine = true;
 			}
 			//if we need a new line, go to the next line
-			if ((newLine && !textOneLine) || splitText.indexOf(word) == splitText.length - 1) {
+			if ((newLine && !textOneLine) || tokenIndex == splitText.length - 1) {
 				var horizontalAdjust = 0
 				if (textAlign == 'center') {
 					horizontalAdjust = (textWidth - currentX) / 2;
@@ -4205,7 +4214,7 @@ function writeText(textObject, targetContext) {
 				}
 				collisionFitFailed = true;
 			}
-			if (splitText.indexOf(word) == splitText.length - 1) {
+			if (tokenIndex == splitText.length - 1) {
 				//should manage vertical centering here
 				var verticalAdjust = 0;
 				if (!textObject.noVerticalCenter) {
@@ -7173,6 +7182,7 @@ function saveCard(saveFromFile) {
 	}
 }
 async function loadCardData(cardData, failureLabel) {
+	if(drawText.promise)await drawText.promise;
 	// Clear the draggable frames, then restore a fresh copy of the supplied card data.
 	document.querySelector('#frame-list').innerHTML = null;
 	card = cardData ? JSON.parse(JSON.stringify(cardData)) : null;
