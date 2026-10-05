@@ -70,7 +70,7 @@
     const owner=data.frames.find(item=>item.designLayerId===recipe.owner),rendered=await FrameSectionTools.renderPrototype(color,'',owner?.sectionModule?.pinlines!==false);src=recipe.piece?rendered.extras[recipe.piece].src:rendered.src;
    }else if(recipe.kind==='crown'){
     const owner=data.frames.find(item=>item.designLayerId===frame.sectionCrown.owner),type=frame.sectionCrown.type;
-    const style=catalog.find(item=>item.id===(type&&type!=='auto'?type:owner?.sectionAppearance?.style||stockRecipe(owner||{},data)?.style||(data.version==='battle'?'battle':'regular')));
+    const style=catalog.find(item=>item.id===(type&&type!=='auto'?type:owner?.sectionAppearance?.crownStyle||owner?.sectionAppearance?.style||stockRecipe(owner||{},data)?.style||(data.version==='battle'?'battle':'regular')));
     if(!style)throw Error('Cannot identify the stock crown style.');
     src=await FrameSectionTools.renderCrownArtwork(style,color,frame.sectionCrown.pinlines,frame.sectionCrown.backing);
    }else{

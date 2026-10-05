@@ -7,7 +7,8 @@ window.FrameSectionCatalog = {
       "sourcePack": "M15RegularNew",
       "roles": [
         "title",
-        "rules"
+        "rules",
+        "type"
       ],
       "variants": {
         "w": {
@@ -364,11 +365,12 @@ window.FrameSectionCatalog = {
     },
     {
       "id": "borderless",
-      "label": "Showcase — Borderless (transparent)",
+      "label": "Showcase \u2014 Borderless (transparent)",
       "sourcePack": "GenericShowcase",
       "roles": [
         "title",
-        "rules"
+        "rules",
+        "type"
       ],
       "variants": {
         "w": {
@@ -623,11 +625,12 @@ window.FrameSectionCatalog = {
     },
     {
       "id": "borderless-alt",
-      "label": "Showcase — Borderless (Alt)",
+      "label": "Showcase \u2014 Borderless (Alt)",
       "sourcePack": "Borderless",
       "roles": [
         "title",
-        "rules"
+        "rules",
+        "type"
       ],
       "variants": {
         "w": {
@@ -953,7 +956,8 @@ window.FrameSectionCatalog = {
       "sourcePack": "M15ClearTextboxes",
       "roles": [
         "title",
-        "rules"
+        "rules",
+        "type"
       ],
       "variants": {
         "w": {
@@ -1240,11 +1244,12 @@ window.FrameSectionCatalog = {
     },
     {
       "id": "transform-front",
-      "label": "Transform — front",
+      "label": "Transform \u2014 front",
       "sourcePack": "M15TransformFront",
       "roles": [
         "title",
-        "rules"
+        "rules",
+        "type"
       ],
       "variants": {
         "w": {
@@ -1601,11 +1606,12 @@ window.FrameSectionCatalog = {
     },
     {
       "id": "transform-back",
-      "label": "Transform — back",
+      "label": "Transform \u2014 back",
       "sourcePack": "M15TransformBackNew",
       "roles": [
         "title",
-        "rules"
+        "rules",
+        "type"
       ],
       "variants": {
         "w": {
@@ -1966,7 +1972,8 @@ window.FrameSectionCatalog = {
       "sourcePack": "Battle",
       "roles": [
         "title",
-        "rules"
+        "rules",
+        "type"
       ],
       "variants": {
         "w": {
@@ -2292,7 +2299,8 @@ window.FrameSectionCatalog = {
       "sourcePack": "Adventure",
       "roles": [
         "title",
-        "rules"
+        "rules",
+        "type"
       ],
       "variants": {
         "w": {
