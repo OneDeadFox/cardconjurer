@@ -166,6 +166,8 @@
   return duplicates;
  }
  async function apply(data,fields,warnings=[]){
+  const wallChoice=selection(fields);
+  if(data.version==='dungeonModules'&&wallChoice.requested)data.dungeonWallColor=(wallChoice.right?'m':wallChoice.left).toUpperCase();
   const settings=config(data),autoStock=settings.autoStock!==false;if(!settings.enabled&&!autoStock)return data;const choice=selection(fields);if(!choice.requested)return data;
   const duplicates=settings.enabled?pipelineDuplicates(data):new Map(),changes=[];
   for(const frame of data.frames||[]){

@@ -21,6 +21,7 @@ if (!loadedVersions.includes('/js/frames/versionDungeon.js')) {
 			<option value="R">Red</option>
 			<option value="G">Green</option>
 			<option value="C">Colorless</option>
+			<option value="M">Multicolor (gold)</option>
 		</select>
 	</div>`;
 	if (!card.dungeon) {
@@ -57,6 +58,7 @@ if (!loadedVersions.includes('/js/frames/versionDungeon.js')) {
 	var dungeonTextureG = new Image(); setImageUrl(dungeonTextureG, '/img/frames/dungeon/walls/textures/g.png');
 	var dungeonTextureC = new Image(); setImageUrl(dungeonTextureC, '/img/frames/dungeon/walls/textures/c.png');
 	dungeonTextureC.onload = dungeonEditedBuffer;
+	[dungeonTextureW,dungeonTextureU,dungeonTextureB,dungeonTextureR,dungeonTextureG].forEach(function(texture){texture.onload=dungeonEditedBuffer;});
 }
 
 var drawingDungeon;
@@ -97,7 +99,7 @@ function dungeonEdited(skipTextRedraw) {
 		}
 		rooms.push(newRoom);
 	});
-	if (prototype) DungeonModules.modules().forEach(DungeonModules.syncRoom);
+	if (prototype) DungeonModules.modules().forEach(function(room){DungeonModules.syncRoom(room);});
 	// init variables
 	const cellSize = scaleHeight(0.0381);
 	const origX = scaleX(0.0734);
@@ -178,8 +180,18 @@ function dungeonEdited(skipTextRedraw) {
 	}
 	// apply textures and FX
 	dungeonContext.globalCompositeOperation = 'source-in';
-	var color=document.querySelector('#dungeon-color')?.value||'B';
+	var color=prototype?(card.dungeonWallColor||'B'):(document.querySelector('#dungeon-color')?.value||'B');
 	var texture=window[`dungeonTexture${color==='custom'?'B':color}`];
+	if(color==='M'){
+		// Retain the stock stone grain while supplying the missing gold palette.
+		var base=window.dungeonTextureW;
+		if(!base.complete||!base.naturalWidth){dungeonContext.globalCompositeOperation='source-over';base.addEventListener('load',dungeonEditedBuffer,{once:true});return;}
+		if(!window.dungeonTextureM){
+			var gold=document.createElement('canvas');gold.width=base.naturalWidth;gold.height=base.naturalHeight;
+			var ctx=gold.getContext('2d');ctx.drawImage(base,0,0);ctx.globalCompositeOperation='multiply';ctx.fillStyle='#d4b75f';ctx.fillRect(0,0,gold.width,gold.height);window.dungeonTextureM=gold;
+		}
+		texture=window.dungeonTextureM;
+	}
 	if(prototype && color==='custom' && card.dungeonWallTexture) {
 		if(window.dungeonTextureCustom?.src!==card.dungeonWallTexture) {
 			window.dungeonTextureCustom=new Image();

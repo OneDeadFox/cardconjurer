@@ -27,6 +27,8 @@
     layout.symbol={x:.9227,y:stone?.885:.8739,width:.12,height:.0381,vertical:'center',horizontal:'right'};
    }
   }
+  // Legacy mana widths are measured from zero, not the title's left inset.
+  if(saved?.text?.mana&&saved.text.mana.x===undefined)layout.text.mana.x=0;
   // Placement metadata belongs to the new frame, never an older text anchor.
   delete layout.symbol.frameAnchor;return layout;
  }
