@@ -4,6 +4,46 @@
 	'use strict';
 	var selectedId = '';
 	var pipelineProfiles=new WeakMap();
+	var wallRasterCache=null;
+	// Shade the union of the walls, rather than overlapping independently shaded
+	// rectangles. At a junction, an outline belongs on an exposed edge only.
+	function paintPipelineWalls(context,material,segments,cornerModel,trace){
+		var canvas=document.createElement('canvas');canvas.width=card.width;canvas.height=card.height;
+		var shape=canvas.getContext('2d');if(!shape.createImageData)return false;
+		var key=JSON.stringify([card.width,card.height,material,[material.top.anchor,material.bottom.anchor,material.left?.anchor,material.right?.anchor],segments,cornerModel?.paths]);
+		if(wallRasterCache?.key===key){context.drawImage(wallRasterCache.canvas,0,0);return true;}
+		var placement=material.samplePlacement||material.placement;
+		var bottom=Math.max(...modules().map(r=>r.bounds.y+r.bounds.height))*card.height,left=Math.min(...modules().map(r=>r.bounds.x))*card.width;
+		function profileAt(horizontal,x,y){return horizontal?(Math.abs(y-bottom)<=material.bottom.length*unit(true)+2?material.bottom:material.top):(Math.abs(x-left)<=(material.left?.length||0)*unit(false)+2?material.left:material.right)||material.top;}
+		function unit(horizontal){return horizontal?card.height*(placement.height||1)/material.sourceHeight:card.width*(placement.width||1)/material.sourceWidth;}
+		var widths=[material.top.length*unit(true),material.bottom.length*unit(true)];if(material.left)widths.push(material.left.length*unit(false));if(material.right)widths.push(material.right.length*unit(false));
+		shape.strokeStyle='#fff';shape.lineWidth=Math.min(...widths);shape.lineCap='butt';shape.lineJoin='miter';trace(shape);shape.stroke();
+		// Respect edited rounded/beveled/T geometry throughout the colored walls.
+		var paths=cornerModel?.paths||segments.map(function(s){return s.axis==='horizontal'?[[s.start,s.position],[s.end,s.position]]:[[s.position,s.start],[s.position,s.end]];});
+		paths.forEach(function(path){for(var i=1;i<path.length;i++){var a=path[i-1],b=path[i],horizontal=Math.abs(a[1]-b[1])<.01,vertical=Math.abs(a[0]-b[0])<.01;if(!horizontal&&!vertical)continue;
+			var profile=profileAt(horizontal,(a[0]+b[0])/2,(a[1]+b[1])/2),scale=unit(horizontal),offset=(profile.length/2-profile.anchor)*scale;
+			shape.lineWidth=profile.length*scale;shape.beginPath();shape.moveTo(a[0]+(horizontal?0:offset),a[1]+(horizontal?offset:0));shape.lineTo(b[0]+(horizontal?0:offset),b[1]+(horizontal?offset:0));shape.stroke();
+		}});
+		shape.fillStyle='#fff';cornerModel?.nodes.forEach(function(n){if(Object.keys(n.arms).length<2||!(/^(square|t-)/.test(n.settings.style)))return;var hp=profileAt(true,n.x,n.y),vp=profileAt(false,n.x,n.y);shape.fillRect(n.x-vp.anchor*unit(false),n.y-hp.anchor*unit(true),vp.length*unit(false),hp.length*unit(true));});
+		var coverage=shape.getImageData(0,0,canvas.width,canvas.height),output=shape.createImageData(canvas.width,canvas.height),data=coverage.data,w=canvas.width,h=canvas.height,limit=Math.ceil(Math.max(...widths))+2;
+		function distance(x,y,dx,dy){var d=0;while(d<limit){x+=dx;y+=dy;d++;if(x<0||y<0||x>=w||y>=h||data[(y*w+x)*4+3]<64)break;}return d-.5;}
+		var parsed=new WeakMap();function colors(profile){var result=parsed.get(profile);if(!result){result=profile.map(function(stops){return stops.map(function(s){return {position:s.position,rgba:s.color.match(/[\d.]+/g).map(Number)};});});parsed.set(profile,result);}return result;}
+		function color(profile,index,position){var stops=colors(profile)[Math.max(0,Math.min(profile.length-1,index))],a=stops[0],b=stops[stops.length-1];for(var i=1;i<stops.length;i++){if(position<=stops[i].position){a=stops[i-1];b=stops[i];break;}}var t=Math.max(0,Math.min(1,(position-a.position)/(b.position-a.position||1)));return a.rgba.map(function(v,i){return v+(b.rgba[i]-v)*t;});}
+		var tables=new WeakMap(),sy=unit(true),sx=unit(false);
+		function table(profile,horizontal){var old=tables.get(profile),span=horizontal?w:h;if(old&&old.span===span)return old.data;var data=new Uint8ClampedArray(profile.length*span*4);for(var row=0;row<profile.length;row++)for(var position=0;position<span;position++){var relative=(position/span-(horizontal?(placement.x||0):(placement.y||0)))/(horizontal?(placement.width||1):(placement.height||1)),rgba=color(profile,row,relative),i=(row*span+position)*4;data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=rgba[3]*255;}tables.set(profile,{span:span,data:data});return data;}
+		var horizontalTables=new Map(),verticalTables=new Map();[material.top,material.bottom].forEach(function(p){horizontalTables.set(p,table(p,true));});[material.left,material.right].filter(Boolean).forEach(function(p){verticalTables.set(p,table(p,false));});
+		for(var y=0;y<h;y++){var hp=profileAt(true,0,y),ht=horizontalTables.get(hp);for(var x=0;x<w;x++){var i=(y*w+x)*4;if(!data[i+3])continue;
+			var vp=profileAt(false,x,y),dt=distance(x,y,0,-1)/sy,db=distance(x,y,0,1)/sy,dl=distance(x,y,-1,0)/sx,dr=distance(x,y,1,0)/sx;
+			var profile=hp,depth=dt,side=0,position=x,span=w,lookup=ht,best=dt/Math.max(.5,hp.anchor),fraction=db/Math.max(.5,hp.length-hp.anchor);
+			if(fraction<best){best=fraction;depth=db;side=1;}
+			fraction=dl/Math.max(.5,vp.anchor);if(fraction<best){best=fraction;profile=vp;depth=dl;side=0;position=y;span=h;lookup=verticalTables.get(vp)||table(vp,false);}
+			fraction=dr/Math.max(.5,vp.length-vp.anchor);if(fraction<best){profile=vp;depth=dr;side=1;position=y;span=h;lookup=verticalTables.get(vp)||table(vp,false);}
+			depth=Math.min(depth,side?profile.length-profile.anchor-.5:profile.anchor-.5);var index=side?profile.length-1-Math.floor(depth):Math.floor(depth),j=(Math.max(0,Math.min(profile.length-1,index))*span+position)*4;
+			output.data[i]=lookup[j];output.data[i+1]=lookup[j+1];output.data[i+2]=lookup[j+2];output.data[i+3]=data[i+3]*lookup[j+3]/255;
+		}}
+
+		shape.putImageData(output,0,0);wallRasterCache={key:key,canvas:canvas};context.drawImage(canvas,0,0);return true;
+	}
 	// Sample a long horizontal stroke from the active pipeline artwork. This
 	// carries custom textures, bevel colors, and its already-composed split mask.
 	function pipelineProfile(){
@@ -18,33 +58,42 @@
 					if(count>span*.35){var last=runs[runs.length-1];if(last&&last.end===a)last.end++;else runs.push({start:a,end:a+1});}}
 				return runs.filter(function(run){return run.end-run.start>=2&&run.end-run.start<length*.08;});}
 			var horizontal=bands('horizontal'),vertical=bands('vertical');if(!horizontal.length)return null;
-			var samplePixels=pixels;
+			// Geometry comes from the uploaded pipeline mask. Expanding its sampled
+			// bevel must never change the anchor (or move rooms on each redraw).
+			var top=horizontal.find(function(b){return (b.start+b.end)/2/h>.07;})||horizontal[0],bottom=horizontal.find(function(b){return (b.start+b.end)/2/h>.65;})||horizontal[horizontal.length-1];
+			var sourceBounds=vertical.length&&horizontal.length>=3?{x:(vertical[0].start+vertical[0].end)/2/w,right:(vertical[vertical.length-1].start+vertical[vertical.length-1].end)/2/w,top:(top.start+top.end)/2/h,bottom:(bottom.start+bottom.end)/2/h}:null;
+			var samplePixels=pixels,placement=frame.bounds||{x:0,y:0,width:1,height:1};
 			if(rendered?.width){var full=document.createElement('canvas');full.width=w;full.height=h;var fullCtx=full.getContext('2d');fullCtx.drawImage(rendered,(Number(card.marginX)||0)*card.width,(Number(card.marginY)||0)*card.height,card.width,card.height,0,0,w,h);var finalPixels=fullCtx.getImageData(0,0,w,h).data;
 				if(finalPixels.some(function(value,i){return i%4===3&&value>100;})){
 					samplePixels=finalPixels;
 					function materialRow(a,axis){var span=axis==='horizontal'?w:h,count=0;for(var b=Math.floor(span*.25);b<span*.75;b++){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4,r=finalPixels[i],g=finalPixels[i+1],blue=finalPixels[i+2];if(finalPixels[i+3]>100&&(Math.max(r,g,blue)-Math.min(r,g,blue)>35||(r+g+blue)/3<85))count++;}return count>span*.35;}
-					function expand(run,axis){var start=run.start,end=run.end,limit=axis==='horizontal'?h:w;while(start>Math.max(0,run.start-6)&&materialRow(start-1,axis))start--;while(end<Math.min(limit,run.end+6)&&materialRow(end,axis))end++;return {start:start,end:end};}
-					horizontal=horizontal.map(function(run){return expand(run,'horizontal');});vertical=vertical.map(function(run){return expand(run,'vertical');});
+					function expand(run,axis){var limit=axis==='horizontal'?h:w,origin=(axis==='horizontal'?placement.y:placement.x)||0,scale=(axis==='horizontal'?placement.height:placement.width)||1,start=Math.round(origin*limit+run.start*scale),end=Math.round(origin*limit+run.end*scale),anchor=origin*limit+(run.start+run.end)/2*scale,lo=start,hi=end;while(start>Math.max(0,lo-6)&&materialRow(start-1,axis))start--;while(end<Math.min(limit,hi+6)&&materialRow(end,axis))end++;return {start:start,end:end,anchor:anchor};}
+					top=expand(top,'horizontal');bottom=expand(bottom,'horizontal');vertical=vertical.map(function(run){return expand(run,'vertical');});
+					placement={x:0,y:0,width:1,height:1};
 				}
 			}
-			function sample(run,axis){var result=[],span=axis==='horizontal'?w:h;for(var a=run.start;a<run.end;a++){var colors=[];for(var b=Math.floor(span*.15);b<=span*.85;b+=Math.max(1,Math.floor(span*.025))){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4;colors.push({position:b/span,color:'rgba('+samplePixels[i]+','+samplePixels[i+1]+','+samplePixels[i+2]+','+(samplePixels[i+3]/255)+')'});}result.push(colors);}return result;}
-			var top=horizontal.find(function(b){return (b.start+b.end)/2/h>.07;})||horizontal[0],bottom=horizontal.find(function(b){return (b.start+b.end)/2/h>.65;})||horizontal[horizontal.length-1];
+			function sample(run,axis){var result=[],span=axis==='horizontal'?w:h;for(var a=run.start;a<run.end;a++){var colors=[];for(var b=Math.floor(span*.15);b<=span*.85;b+=Math.max(1,Math.floor(span*.025))){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4;colors.push({position:b/span,color:'rgba('+samplePixels[i]+','+samplePixels[i+1]+','+samplePixels[i+2]+','+(samplePixels[i+3]/255)+')'});}result.push(colors);}result.anchor=(run.anchor===undefined?(run.start+run.end)/2:run.anchor)-run.start;return result;}
 			profile={sourceWidth:w,sourceHeight:h,top:sample(top,'horizontal'),bottom:sample(bottom,'horizontal'),left:vertical.length?sample(vertical[0],'vertical'):null,right:vertical.length?sample(vertical[vertical.length-1],'vertical'):null,
-				bounds:vertical.length&&horizontal.length>=3?{x:(vertical[0].start+vertical[0].end)/2/w,right:(vertical[vertical.length-1].start+vertical[vertical.length-1].end)/2/w,top:(top.start+top.end)/2/h,bottom:(bottom.start+bottom.end)/2/h}:null};
+				bounds:sourceBounds,samplePlacement:placement};
 			pipelineProfiles.set(image,profile);
 		}catch(error){return null;}
 		var b=frame.bounds||{x:0,y:0,width:1,height:1};return Object.assign({},profile,{placement:b});
 	}
 	function alignPipelineBounds(material){
-		if(!material?.bounds||!modules().length||modules().every(function(r){return r.pipelineAligned===3;}))return;
+		if(!material?.bounds||!modules().length)return;
 		var list=modules(),footer=list.slice().sort(function(a,b){return b.bounds.width-a.bounds.width;})[0],left=Math.min(...list.map(r=>r.bounds.x)),right=Math.max(...list.map(r=>r.bounds.x+r.bounds.width)),top=Math.min(...list.map(r=>r.bounds.y));
 		if(footer.bounds.y<=top||footer.bounds.width<right-left-.001)return;
-		var p=material.placement,b=material.bounds,target={x:(p.x||0)+b.x*(p.width||1),right:(p.x||0)+b.right*(p.width||1),top:(p.y||0)+b.top*(p.height||1),bottom:(p.y||0)+b.bottom*(p.height||1)},fixed=footer.bounds.y;
+		var p=material.placement,b=material.bounds,target={x:(p.x||0)+b.x*(p.width||1),right:(p.x||0)+b.right*(p.width||1),top:(p.y||0)+b.top*(p.height||1),bottom:(p.y||0)+b.bottom*(p.height||1)},fixed=footer.bounds.y,oldFixed=fixed;
 		if(target.top>=fixed||target.bottom<=fixed)return;
+		var previous=card.dungeonPipelineEnvelope;
+		if(previous&&modules().every(function(r){return r.pipelineAligned===4;})&&['x','right','top','bottom'].every(function(k){return Math.abs(previous[k]-target[k])<1e-8;}))return;
+		// Save the wide final row's upper edge independently of text fitting.
+		if(previous&&previous.footerId===footer.id)fixed=previous.footerTop;
+		card.dungeonPipelineEnvelope=Object.assign({},target,{footerId:footer.id,footerTop:fixed});
 		list.forEach(function(room){var box=room.bounds,end=box.y+box.height;box.x=target.x+(box.x-left)*(target.right-target.x)/(right-left);box.width*= (target.right-target.x)/(right-left);
-			if(room===footer){box.height=target.bottom-fixed;}else{box.y=target.top+(box.y-top)*(fixed-target.top)/(fixed-top);box.height=(end-top)*(fixed-target.top)/(fixed-top)+target.top-box.y;}
+			if(room===footer){box.y=fixed;box.height=target.bottom-fixed;}else{box.y=target.top+(box.y-top)*(fixed-target.top)/(oldFixed-top);box.height=(end-top)*(fixed-target.top)/(oldFixed-top)+target.top-box.y;}
 			if(room.lockedBounds)room.lockedBounds=JSON.parse(JSON.stringify(box));if(room.autoFitOriginalBounds)room.autoFitOriginalBounds={y:box.y,height:box.height};if(room.csvRowBounds)room.csvRowBounds={x:target.x+(room.csvRowBounds.x-left)*(target.right-target.x)/(right-left),width:room.csvRowBounds.width*(target.right-target.x)/(right-left)};
-			room.pipelineAligned=3;syncRoom(room);
+			room.pipelineAligned=4;syncRoom(room);
 		});
 		if(card.dungeonHeightLock)card.dungeonHeightLock={top:target.top,bottom:target.bottom};if(card.dungeonAutoFitBounds)card.dungeonAutoFitBounds={top:target.top,bottom:target.bottom};
 		var art=card.artBounds;if(art){art.x=target.x;art.y=target.top;art.width=Math.min(...list.filter(r=>r!==footer).map(r=>r.bounds.x))-target.x;art.height=fixed-target.top;}
@@ -130,7 +179,7 @@
 		card.dungeonLayoutLocked=false;
 		card.dungeonWallTexture='';
 		card.dungeonWallColor='B';card.dungeonPadding=null;card.dungeonVerticalPadding=null;
-		card.dungeonAutoFit=false;card.dungeonAutoFitBounds=null;card.dungeonHeightLock=null;
+		card.dungeonAutoFit=false;card.dungeonAutoFitBounds=null;card.dungeonHeightLock=null;card.dungeonPipelineEnvelope=null;
 		sample.forEach(function(values){addRoom(fromGrid.apply(null,values));});
 		selectedId=modules()[0]?.id||'';
 	}
@@ -202,12 +251,13 @@
 		render();commit(before,'Toggle dungeon text fitting');
 	}
 	function reflow() {
+		if(card.version==='dungeonModules')alignPipelineBounds(pipelineProfile());
 		if(card.version!=='dungeonModules'||!card.dungeonAutoFit||!modules().length||!window.RulesRange?.measureModuleText)return false;
 		var list=modules(),height=card.height,levels=[];
 		list.forEach(function(room){if(room.geometryLocked&&room.lockedBounds)Object.assign(room.bounds,room.lockedBounds);rememberRoomHeight(room);});
 		list.forEach(function(room){levels.push(room.bounds.y*height,(room.bounds.y+room.bounds.height)*height);});
 		levels.sort(function(a,b){return a-b;});levels=levels.filter(function(value,i){return !i||value-levels[i-1]>.001;});
-		var envelope=card.dungeonHeightLock||card.dungeonAutoFitBounds||(card.dungeonAutoFitBounds={top:levels[0]/height,bottom:levels[levels.length-1]/height});
+		var envelope=card.dungeonPipelineEnvelope||card.dungeonHeightLock||card.dungeonAutoFitBounds||(card.dungeonAutoFitBounds={top:levels[0]/height,bottom:levels[levels.length-1]/height});
 		var available=Math.max(1,(envelope.bottom-envelope.top)*height),common=Infinity;
 		function index(value){return levels.findIndex(function(level){return Math.abs(level-value)<.001;});}
 		var records=list.map(function(room){var text=field(room),box=room.bounds,base=text?((Number(text.size)||.038)*height+(parseInt(text.fontSize||'0',10)||0)):0;
@@ -229,12 +279,13 @@
 			}
 			return positions;
 		}
-		var hasLocks=records.some(function(r){return r.room.geometryLocked;});
+		var hasLocks=records.some(function(r){return r.room.geometryLocked;}),pipeline=card.dungeonPipelineEnvelope;
 		function constrain(raw) {
-			if(!hasLocks){if(card.dungeonHeightLock){var total=raw[raw.length-1];if(total>0)return raw.map(function(p){return p*available/total;});}return raw;}
+			if(!hasLocks&&!pipeline){if(card.dungeonHeightLock){var total=raw[raw.length-1];if(total>0)return raw.map(function(p){return p*available/total;});}return raw;}
 			// Fixed row boundaries preserve shared walls alongside locked rooms.
 			var pins=new Map([[0,0]]);
-			if(card.dungeonHeightLock)pins.set(levels.length-1,available);
+			if(card.dungeonHeightLock||pipeline)pins.set(levels.length-1,available);
+			if(pipeline){var footer=records.find(function(r){return r.room.id===pipeline.footerId;});if(footer)pins.set(footer.start,(pipeline.footerTop-envelope.top)*height);}
 			records.forEach(function(r){if(r.room.geometryLocked){pins.set(r.start,levels[r.start]-envelope.top*height);pins.set(r.end,levels[r.end]-envelope.top*height);}});
 			var anchors=Array.from(pins.entries()).sort(function(a,b){return a[0]-b[0];}),output=raw.slice();
 			for(var a=0;a<anchors.length-1;a++){var left=anchors[a],right=anchors[a+1],span=raw[right[0]]-raw[left[0]];
@@ -312,7 +363,7 @@
 	}
 	function drawWalls(mask,fx) {
 		var material=pipelineProfile();alignPipelineBounds(material);
-		var segments=wallSegments(modules()),thickness=material?material.top.length/material.sourceHeight*(material.placement.height||1)*card.height:Math.max(3,card.height*.006);
+		var segments=wallSegments(modules()),thickness=material?material.top.length/material.sourceHeight*((material.samplePlacement||material.placement).height||1)*card.height:Math.max(3,card.height*.006);
 		var edges=segments.map(function(segment){return segment.axis==='horizontal'?[[segment.start,segment.position],[segment.end,segment.position]]:[[segment.position,segment.start],[segment.position,segment.end]];});
 		function same(a,b){return Math.abs(a[0]-b[0])<.001&&Math.abs(a[1]-b[1])<.001;}
 		// Join touching endpoints into polylines so miter joins fill the outer corner.
@@ -335,7 +386,7 @@
 		mask.translate(marginX,marginY);fx.translate(marginX,marginY);
 		mask.lineCap=fx.lineCap='butt';mask.lineJoin=fx.lineJoin='miter';
 		if(!material){path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();}
-		if(material){
+		if(material&&!paintPipelineWalls(mask,material,segments,cornerModel,path)){
 			// Fill joined corners with the material's core. Outlines belong only to
 			// the directional strips below; painting a second outline leaves spurs
 			// where horizontal and vertical source strokes have different widths.

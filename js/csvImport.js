@@ -833,6 +833,7 @@
 			renderMappings();
 			renderPreview();
 			document.querySelector('#csv-import-details').classList.remove('hidden');
+			document.querySelector('#csv-card-preview-panel')?.classList.remove('hidden');
 			validateAndRenderStatus();
 			if (window.CSVCardBuilder) {
 				CSVCardBuilder.csvChanged();
@@ -840,6 +841,7 @@
 		} catch (error) {
 			state.structuralErrors = [error.message || 'The CSV file could not be read.'];
 			document.querySelector('#csv-import-details').classList.add('hidden');
+			document.querySelector('#csv-card-preview-panel')?.classList.add('hidden');
 			validateAndRenderStatus();
 		}
 	}

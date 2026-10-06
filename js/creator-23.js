@@ -1855,6 +1855,9 @@ function drawFrames() {
 		frameContext.globalAlpha = 1;
 		frameContext.drawImage(prePTCanvas, 0, 0, frameCanvas.width, frameCanvas.height);
 	}
+	// Pipeline walls sample the completed frame, including the active color mask.
+	// Refresh after composition so an image/theme change cannot leave stale walls.
+	if(card.version==='dungeonModules'&&typeof dungeonEdited==='function')dungeonEdited(true);
 	drawCard();
 }
 function loadFramePacks(framePackOptions = []) {

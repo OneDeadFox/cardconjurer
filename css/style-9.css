@@ -748,6 +748,13 @@ textarea.input {
 	grid-gap: 1rem;
 	padding: 1rem 0;
 }
+.creator-canvas-column {
+	width: 100%;
+	max-width: 750px;
+	min-width: 0;
+}
+.creator-canvas-column .creator-canvas { width: 100%; display: block; }
+#csv-card-preview-panel { margin-top: 1rem; box-sizing: border-box; width: 100%; }
 .creator-canvas {
 	max-width: 750px;
 	width: 100vw;
@@ -1448,3 +1455,4 @@ textarea.input {
 .container-resize-heading button { font-size:1.5rem; background:transparent; color:inherit; border:0; cursor:pointer; }
 .container-resize-editor p { margin:.75rem 0; }
 .container-resize-editor label { display:block; margin:.5rem 0; }
+

@@ -135,7 +135,21 @@
 		</div>
 		<!-- Regular stuff -->
 		<div class='creator-grid margin-bottom-large'>
+			<div class='creator-canvas-column'>
 			<canvas class='creator-canvas box-shadow' id='previewCanvas' width='1005' height='1407'></canvas>
+<section id='csv-card-preview-panel' class='readable-background padding hidden' aria-label='CSV card preview'>
+<h3 class='margin-bottom'>Preview Card</h3>
+<div class='csv-preview-controls margin-bottom'>
+									<select id='csv-card-preview-row' class='input' aria-label='Select CSV card row to preview'></select>
+									<select id='csv-card-preview-face' class='input' aria-label='Select CSV card face to preview'>
+										<option value='front'>Front / Single Face</option>
+										<option value='back'>Transform Back</option>
+									</select>
+									<button class='input' onclick='CSVCardBuilder.previewSelectedRow();'>Preview Selected Card</button>
+								</div>
+								<h5 id='csv-card-preview-status' class='padding margin-bottom input-description'>Preview uses session memory and does not save the card.</h5>
+</section>
+			</div>
 			<div class='creator-menu box-shadow'>
 				<div id='creator-menu-tabs' class='creator-menu-tabs'>
 					<h3 class='selectable readable-background selected' onclick='toggleCreatorTabs(event, "frame")'>Frame</h3>
@@ -1116,15 +1130,7 @@
 								<h5 class='padding margin-bottom input-description'>Capture the current card as the fallback when a row has no saved Template</h5>
 								<button class='input margin-bottom' onclick='CSVCardBuilder.captureTemplate();'>Capture Current Card as Fallback Template</button>
 								<h5 id='csv-template-status' class='padding margin-bottom input-description'>No fallback template captured. Rows with a saved Template name can still render.</h5>
-								<div class='csv-preview-controls margin-bottom'>
-									<select id='csv-card-preview-row' class='input' aria-label='Select CSV card row to preview'></select>
-									<select id='csv-card-preview-face' class='input' aria-label='Select CSV card face to preview'>
-										<option value='front'>Front / Single Face</option>
-										<option value='back'>Transform Back</option>
-									</select>
-									<button class='input' onclick='CSVCardBuilder.previewSelectedRow();'>Preview Selected Card</button>
-								</div>
-								<h5 id='csv-card-preview-status' class='padding margin-bottom input-description'>Preview uses session memory and does not save the card.</h5>
+
 								<h5 class='padding margin-bottom input-description'>Generate all included rows and download one ZIP file per Player/Chunk value</h5>
 								<button id='csv-batch-export' class='input margin-bottom' onclick='CSVCardBuilder.exportBatch();'>Generate and Download CSV Batch</button>
 								<progress id='csv-batch-progress' class='margin-bottom' max='1' value='0' style='width:100%;'></progress>
@@ -1416,3 +1422,4 @@
 	<script defer src='/js/csvCardBuilder.js'></script>
 	<script defer src='/js/frameSearch.js'></script>
 <!-- END OF CONTENT -->
+
