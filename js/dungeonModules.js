@@ -3,6 +3,23 @@
 (function () {
 	'use strict';
 	var selectedId = '';
+	var pipelineProfiles=new WeakMap();
+	// Sample a long horizontal stroke from the active pipeline artwork. This
+	// carries custom textures, bevel colors, and its already-composed split mask.
+	function pipelineProfile(){
+		var frame=(card.frames||[]).find(function(f){return !f.hidden&&/pipeline|pinline/i.test(f.componentKind||f.componentLabel||f.name||'')&&f.image?.naturalWidth;});
+		if(!frame||card.dungeonWallColor==='custom')return null;
+		var image=frame.image;if(pipelineProfiles.has(image))return pipelineProfiles.get(image);
+		try{
+			var canvas=document.createElement('canvas');canvas.width=Math.min(600,image.naturalWidth);canvas.height=Math.round(canvas.width*image.naturalHeight/image.naturalWidth);
+			var ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,canvas.width,canvas.height);var pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data,w=canvas.width,h=canvas.height,bands=[];
+			for(var y=0;y<h;y++){var count=0;for(var x=Math.floor(w*.15);x<w*.85;x++)if(pixels[(y*w+x)*4+3]>100)count++;
+				if(count>w*.45){var last=bands[bands.length-1];if(last&&last.end===y)last.end++;else bands.push({start:y,end:y+1});}}
+			var band=bands.find(function(b){return b.end-b.start>=2&&b.end-b.start<h*.08;});if(!band)return null;
+			var profile=[];for(var y=band.start;y<band.end;y++){var colors=[];for(var x=Math.floor(w*.15);x<=w*.85;x+=Math.max(1,Math.floor(w*.025))){var i=(y*w+x)*4;colors.push({position:x/w,color:'rgba('+pixels[i]+','+pixels[i+1]+','+pixels[i+2]+','+(pixels[i+3]/255)+')'});}profile.push(colors);}
+			pipelineProfiles.set(image,profile);return profile;
+		}catch(error){return null;}
+	}
 	var sample = [[0,0,16,2],[0,2,8,4],[8,2,8,4],[0,6,5,5],[5,6,6,5],[11,6,5,5],[0,11,8,4],[8,11,8,4],[0,15,16,4]];
 	function grid() { return {cell: card.height * .0381, x:card.width * .0734, y:card.height * .1377}; }
 	function fromGrid(x,y,w,h) { var g=grid(); return {x:(g.x+x*g.cell)/card.width,y:(g.y+y*g.cell)/card.height,width:w*g.cell/card.width,height:h*g.cell/card.height}; }
@@ -265,6 +282,7 @@
 	}
 	function drawWalls(mask,fx) {
 		var segments=wallSegments(modules()),thickness=Math.max(3,card.height*.006);
+		var material=pipelineProfile();
 		var edges=segments.map(function(segment){return segment.axis==='horizontal'?[[segment.start,segment.position],[segment.end,segment.position]]:[[segment.position,segment.start],[segment.position,segment.end]];});
 		function same(a,b){return Math.abs(a[0]-b[0])<.001&&Math.abs(a[1]-b[1])<.001;}
 		// Join touching endpoints into polylines so miter joins fill the outer corner.
@@ -286,17 +304,25 @@
 		var marginX=scaleX(0),marginY=scaleY(0);
 		mask.translate(marginX,marginY);fx.translate(marginX,marginY);
 		mask.lineCap=fx.lineCap='butt';mask.lineJoin=fx.lineJoin='miter';
-		path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();
+		if(!material){path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();}
+		if(material){
+			// Concentric joined strokes reproduce the sampled outline/bevel profile.
+			for(var k=0;k<Math.ceil(material.length/2);k++){
+				var gradient=mask.createLinearGradient(0,0,card.width,0);
+				material[k].forEach(function(stop){gradient.addColorStop(stop.position,stop.color);});
+				path(mask);mask.strokeStyle=gradient;mask.lineWidth=Math.max(1,thickness*(1-2*k/material.length));mask.stroke();
+			}
+		}
 		// Keep outlines only where they face a room. The union includes both sides of
 		// shared walls, but excludes the outward side of each exterior boundary.
-		fx.save();if(cornerModel){DungeonCorners.clipRooms(fx,cornerModel);}else{fx.beginPath();
+		if(!material){fx.save();if(cornerModel){DungeonCorners.clipRooms(fx,cornerModel);}else{fx.beginPath();
 		modules().forEach(function(room){var b=room.bounds;fx.rect(b.x*card.width,b.y*card.height,b.width*card.width,b.height*card.height);});
 		fx.clip();}
 		path(fx);fx.strokeStyle='rgba(0,0,0,.55)';fx.lineWidth=thickness+3;fx.stroke();
 		// Clear the interior completely; reusing the translucent outline color leaves a dark tint.
 		fx.globalCompositeOperation='destination-out';fx.strokeStyle='#fff';fx.lineWidth=Math.max(1,thickness-2);fx.stroke();
 		fx.globalCompositeOperation='source-over';
-		fx.restore();
+		fx.restore();}
 		// Door markers stay white above the wall texture and point down on either wall axis.
 		doorways(modules()).forEach(function(door){
 			var x=door.x*card.width,y=door.y*card.height;
@@ -306,6 +332,7 @@
 			fx.fillStyle='#fff';fx.fill();fx.strokeStyle='rgba(0,0,0,.65)';fx.lineWidth=Math.min(1.5,width*.08);fx.stroke();
 		});
 		fx.restore();mask.restore();
+		return !!material;
 	}
 	function render() { if(card.version!=='dungeonModules')return;reflow();syncAll();if(typeof dungeonEdited==='function')dungeonEdited(); refresh(); }
 	function refresh() {

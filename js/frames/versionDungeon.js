@@ -15,6 +15,7 @@ if (!loadedVersions.includes('/js/frames/versionDungeon.js')) {
 	<div class='readable-background padding'>
 		<h5 class='padding margin-bottom input-description'>Select the dungeon wall color:</h5>
 		<select id='dungeon-color' class='input' onchange='dungeonEditedBuffer();'>
+			<option value="pipeline">Match frame pipeline</option>
 			<option value="W">White</option>
 			<option value="U">Blue</option>
 			<option value="B" selected="selected">Black</option>
@@ -107,8 +108,8 @@ function dungeonEdited(skipTextRedraw) {
 	// walls
 	dungeonContext.clearRect(0, 0, dungeonCanvas.width, dungeonCanvas.height);
 	dungeonFXContext.clearRect(0, 0, dungeonFXCanvas.width, dungeonFXCanvas.height);
-	if (prototype) DungeonModules.drawWalls(dungeonContext, dungeonFXContext);
-	else rooms.forEach(room => {
+	var pipelineWalls=prototype&&DungeonModules.drawWalls(dungeonContext, dungeonFXContext);
+	if (!prototype) rooms.forEach(room => {
 		//top left corner
 		dungeonContext.drawImage(dungeonShapetopleft, origX + cellSize * room[0], origY + cellSize * room[1], cellSize, cellSize);
 		dungeonFXContext.drawImage(dungeonFXtopleft, origX + cellSize * room[0], origY + cellSize * room[1], cellSize, cellSize);
@@ -179,8 +180,9 @@ function dungeonEdited(skipTextRedraw) {
 	});
 	}
 	// apply textures and FX
-	dungeonContext.globalCompositeOperation = 'source-in';
+	if(!pipelineWalls){dungeonContext.globalCompositeOperation = 'source-in';
 	var color=prototype?(card.dungeonWallColor||'B'):(document.querySelector('#dungeon-color')?.value||'B');
+	if(color==='pipeline'){var identity=card.csvImport?.templateColors||[];color=identity.length>1?'M':(identity[0]||'B').toUpperCase();}
 	var texture=window[`dungeonTexture${color==='custom'?'B':color}`];
 	if(color==='M'){
 		// Retain the stock stone grain while supplying the missing gold palette.
@@ -201,7 +203,7 @@ function dungeonEdited(skipTextRedraw) {
 		if(window.dungeonTextureCustom.complete && window.dungeonTextureCustom.naturalWidth)texture=window.dungeonTextureCustom;
 	}
 	dungeonContext.drawImage(texture, 0, 0, dungeonCanvas.width, dungeonCanvas.height);
-	dungeonContext.globalCompositeOperation = 'source-over';
+	dungeonContext.globalCompositeOperation = 'source-over';}
 	dungeonContext.drawImage(dungeonFXCanvas, 0, 0, dungeonCanvas.width, dungeonCanvas.height);
 	if(prototype) window.DungeonCorners?.applyFades(dungeonContext);
 	// finish

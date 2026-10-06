@@ -12,6 +12,14 @@
    if(!n){n={x:x,y:y,refs:[],arms:{},settings:{style:'square',size:.02,fades:{}}};nodes.push(n);}n.refs.push({room:room,key:p[0]});
    var settings=room.cornerStyles?.[p[0]];if(settings&&(!n.settings.stamp||settings.stamp>=n.settings.stamp))n.settings=settings;
   });});
+  // The art opening meets the outer pipeline at these two room corners.
+  // Supply a T by default; explicit user corner choices continue to win.
+  var list=rooms(),top=Math.min(...list.map(r=>r.bounds.y)),footer=list.slice().sort((a,b)=>b.bounds.width-a.bounds.width)[0];
+  if(footer&&footer.bounds.y>top&&list.some(r=>r.bounds.x>footer.bounds.x+.1))nodes.forEach(function(n){
+   if(n.refs.some(ref=>ref.room.cornerStyles?.[ref.key]))return;
+   if(n.refs.some(ref=>ref.key==='tl'&&Math.abs(ref.room.bounds.y-top)<.001&&ref.room.bounds.x>footer.bounds.x+.1))n.settings={style:'t-down',size:.012,fades:{}};
+   if(n.refs.some(ref=>ref.room===footer&&ref.key==='tl'))n.settings={style:'t-right',size:.012,fades:{}};
+  });
   nodes.forEach(function(n){segments.forEach(function(s){var h=s.axis==='horizontal',pos=h?n.x:n.y;if(!near(s.position,h?n.y:n.x)||pos<s.start-.001||pos>s.end+.001)return;
    var cuts=[s.start,s.end];nodes.forEach(function(other){if(near(h?other.y:other.x,s.position)){var value=h?other.x:other.y;if(value>s.start&&value<s.end)cuts.push(value);}});
    var before=cuts.filter(function(v){return v<pos-.001;}),after=cuts.filter(function(v){return v>pos+.001;});
