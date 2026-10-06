@@ -9,17 +9,38 @@
 	function pipelineProfile(){
 		var frame=(card.frames||[]).find(function(f){return !f.hidden&&/pipeline|pinline/i.test(f.componentKind||f.componentLabel||f.name||'')&&f.image?.naturalWidth;});
 		if(!frame||card.dungeonWallColor==='custom')return null;
-		var image=frame.image;if(pipelineProfiles.has(image))return pipelineProfiles.get(image);
-		try{
+		var image=frame.image,profile=pipelineProfiles.get(image);
+		if(!profile)try{
 			var canvas=document.createElement('canvas');canvas.width=Math.min(600,image.naturalWidth);canvas.height=Math.round(canvas.width*image.naturalHeight/image.naturalWidth);
-			var ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,canvas.width,canvas.height);var pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data,w=canvas.width,h=canvas.height,bands=[];
-			for(var y=0;y<h;y++){var count=0;for(var x=Math.floor(w*.15);x<w*.85;x++)if(pixels[(y*w+x)*4+3]>100)count++;
-				if(count>w*.45){var last=bands[bands.length-1];if(last&&last.end===y)last.end++;else bands.push({start:y,end:y+1});}}
-			var band=bands.find(function(b){return b.end-b.start>=2&&b.end-b.start<h*.08;});if(!band)return null;
-			var profile=[];for(var y=band.start;y<band.end;y++){var colors=[];for(var x=Math.floor(w*.15);x<=w*.85;x+=Math.max(1,Math.floor(w*.025))){var i=(y*w+x)*4;colors.push({position:x/w,color:'rgba('+pixels[i]+','+pixels[i+1]+','+pixels[i+2]+','+(pixels[i+3]/255)+')'});}profile.push(colors);}
-			pipelineProfiles.set(image,profile);return profile;
+			var ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,canvas.width,canvas.height);var pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data,w=canvas.width,h=canvas.height;
+			function bands(axis){var runs=[],length=axis==='horizontal'?h:w,span=axis==='horizontal'?w:h;
+				for(var a=0;a<length;a++){var count=0;for(var b=Math.floor(span*.25);b<span*.75;b++){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b;if(pixels[(y*w+x)*4+3]>100)count++;}
+					if(count>span*.35){var last=runs[runs.length-1];if(last&&last.end===a)last.end++;else runs.push({start:a,end:a+1});}}
+				return runs.filter(function(run){return run.end-run.start>=2&&run.end-run.start<length*.08;});}
+			var horizontal=bands('horizontal'),vertical=bands('vertical');if(!horizontal.length)return null;
+			function sample(run,axis){var result=[],span=axis==='horizontal'?w:h;for(var a=run.start;a<run.end;a++){var colors=[];for(var b=Math.floor(span*.15);b<=span*.85;b+=Math.max(1,Math.floor(span*.025))){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4;colors.push({position:b/span,color:'rgba('+pixels[i]+','+pixels[i+1]+','+pixels[i+2]+','+(pixels[i+3]/255)+')'});}result.push(colors);}return result;}
+			var top=horizontal.find(function(b){return (b.start+b.end)/2/h>.07;})||horizontal[0],bottom=horizontal.find(function(b){return (b.start+b.end)/2/h>.65;})||horizontal[horizontal.length-1];
+			profile={top:sample(top,'horizontal'),bottom:sample(bottom,'horizontal'),left:vertical.length?sample(vertical[0],'vertical'):null,right:vertical.length?sample(vertical[vertical.length-1],'vertical'):null,
+				bounds:vertical.length&&horizontal.length>=3?{x:(vertical[0].start+vertical[0].end)/2/w,right:(vertical[vertical.length-1].start+vertical[vertical.length-1].end)/2/w,top:(top.start+top.end)/2/h,bottom:(bottom.start+bottom.end)/2/h}:null};
+			pipelineProfiles.set(image,profile);
 		}catch(error){return null;}
+		var b=frame.bounds||{x:0,y:0,width:1,height:1};return Object.assign({},profile,{placement:b});
 	}
+	function alignPipelineBounds(material){
+		if(!material?.bounds||!modules().length||modules().every(function(r){return r.pipelineAligned===2;}))return;
+		var list=modules(),footer=list.slice().sort(function(a,b){return b.bounds.width-a.bounds.width;})[0],left=Math.min(...list.map(r=>r.bounds.x)),right=Math.max(...list.map(r=>r.bounds.x+r.bounds.width)),top=Math.min(...list.map(r=>r.bounds.y));
+		if(footer.bounds.y<=top||footer.bounds.width<right-left-.001)return;
+		var p=material.placement,b=material.bounds,target={x:(p.x||0)+b.x*(p.width||1),right:(p.x||0)+b.right*(p.width||1),top:(p.y||0)+b.top*(p.height||1),bottom:(p.y||0)+b.bottom*(p.height||1)},fixed=footer.bounds.y;
+		if(target.top>=fixed||target.bottom<=fixed)return;
+		list.forEach(function(room){var box=room.bounds,end=box.y+box.height;box.x=target.x+(box.x-left)*(target.right-target.x)/(right-left);box.width*= (target.right-target.x)/(right-left);
+			if(room===footer){box.height=target.bottom-fixed;}else{box.y=target.top+(box.y-top)*(fixed-target.top)/(fixed-top);box.height=(end-top)*(fixed-target.top)/(fixed-top)+target.top-box.y;}
+			if(room.lockedBounds)room.lockedBounds=JSON.parse(JSON.stringify(box));if(room.autoFitOriginalBounds)room.autoFitOriginalBounds={y:box.y,height:box.height};if(room.csvRowBounds)room.csvRowBounds={x:target.x+(room.csvRowBounds.x-left)*(target.right-target.x)/(right-left),width:room.csvRowBounds.width*(target.right-target.x)/(right-left)};
+			room.pipelineAligned=2;syncRoom(room);
+		});
+		if(card.dungeonHeightLock)card.dungeonHeightLock={top:target.top,bottom:target.bottom};if(card.dungeonAutoFitBounds)card.dungeonAutoFitBounds={top:target.top,bottom:target.bottom};
+		var art=card.artBounds;if(art){art.x=target.x;art.y=target.top;art.width=Math.min(...list.filter(r=>r!==footer).map(r=>r.bounds.x))-target.x;art.height=fixed-target.top;}
+	}
+
 	var sample = [[0,0,16,2],[0,2,8,4],[8,2,8,4],[0,6,5,5],[5,6,6,5],[11,6,5,5],[0,11,8,4],[8,11,8,4],[0,15,16,4]];
 	function grid() { return {cell: card.height * .0381, x:card.width * .0734, y:card.height * .1377}; }
 	function fromGrid(x,y,w,h) { var g=grid(); return {x:(g.x+x*g.cell)/card.width,y:(g.y+y*g.cell)/card.height,width:w*g.cell/card.width,height:h*g.cell/card.height}; }
@@ -281,8 +302,8 @@
 		return segments;
 	}
 	function drawWalls(mask,fx) {
+		var material=pipelineProfile();alignPipelineBounds(material);
 		var segments=wallSegments(modules()),thickness=Math.max(3,card.height*.006);
-		var material=pipelineProfile();
 		var edges=segments.map(function(segment){return segment.axis==='horizontal'?[[segment.start,segment.position],[segment.end,segment.position]]:[[segment.position,segment.start],[segment.position,segment.end]];});
 		function same(a,b){return Math.abs(a[0]-b[0])<.001&&Math.abs(a[1]-b[1])<.001;}
 		// Join touching endpoints into polylines so miter joins fill the outer corner.
@@ -307,11 +328,17 @@
 		if(!material){path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();}
 		if(material){
 			// Concentric joined strokes reproduce the sampled outline/bevel profile.
-			for(var k=0;k<Math.ceil(material.length/2);k++){
-				var gradient=mask.createLinearGradient(0,0,card.width,0);
-				material[k].forEach(function(stop){gradient.addColorStop(stop.position,stop.color);});
-				path(mask);mask.strokeStyle=gradient;mask.lineWidth=Math.max(1,thickness*(1-2*k/material.length));mask.stroke();
+			for(var k=0;k<Math.ceil(material.top.length/2);k++){
+				var place=material.placement,gradient=mask.createLinearGradient((place.x||0)*card.width,0,((place.x||0)+(place.width||1))*card.width,0);
+				material.top[k].forEach(function(stop){gradient.addColorStop(stop.position,stop.color);});
+				path(mask);mask.strokeStyle=gradient;mask.lineWidth=Math.max(1,thickness*(1-2*k/material.top.length));mask.stroke();
 			}
+			// Sample each edge in its native direction; do not mirror the lower bevel.
+			var outerBottom=Math.max(...modules().map(r=>r.bounds.y+r.bounds.height))*card.height,outerLeft=Math.min(...modules().map(r=>r.bounds.x))*card.width;
+			segments.forEach(function(segment){var horizontal=segment.axis==='horizontal',profile=horizontal?(Math.abs(segment.position-outerBottom)<1?material.bottom:material.top):(Math.abs(segment.position-outerLeft)<1?material.left:material.right);if(!profile)return;
+				profile.forEach(function(stops,index){var offset=(index+.5)/profile.length*thickness-thickness/2,p=material.placement,gradient=horizontal?mask.createLinearGradient((p.x||0)*card.width,0,((p.x||0)+(p.width||1))*card.width,0):mask.createLinearGradient(0,(p.y||0)*card.height,0,((p.y||0)+(p.height||1))*card.height);stops.forEach(function(stop){gradient.addColorStop(stop.position,stop.color);});
+					mask.beginPath();if(horizontal){mask.moveTo(segment.start,segment.position+offset);mask.lineTo(segment.end,segment.position+offset);}else{mask.moveTo(segment.position+offset,segment.start);mask.lineTo(segment.position+offset,segment.end);}mask.strokeStyle=gradient;mask.lineWidth=thickness/profile.length+.5;mask.stroke();});
+			});
 		}
 		// Keep outlines only where they face a room. The union includes both sides of
 		// shared walls, but excludes the outward side of each exterior boundary.

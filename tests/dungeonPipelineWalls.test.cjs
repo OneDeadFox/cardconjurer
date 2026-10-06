@@ -11,4 +11,14 @@ assert.ok(gradients.some(stops=>stops.some(([p,c])=>p<.5&&c.includes('30,100,200
 const nodes=ctx.DungeonCorners.collect();assert.ok(nodes.some(n=>n.settings.style==='t-down'));assert.ok(nodes.some(n=>n.settings.style==='t-right'));
 card.dungeonModules[0].cornerStyles={tl:{style:'rounded',size:.02,fades:{}}};assert.ok(ctx.DungeonCorners.collect().some(n=>n.settings.style==='rounded'),'Authored corner selection preserved');
 card.dungeonWallColor='custom';assert.equal(ctx.DungeonModules.drawWalls(drawing,drawing),false,'Explicit custom wall texture remains available');
-console.log('PASS: pipeline wall sampling, split colors, art T-junctions, authored corners and custom texture fallback.');
+// Distinct source edges verify geometry migration and edge-specific material selection.
+for(const [start,end,color] of [[90,98,[100,50,30]],[700,708,[200,150,40]]])for(let y=start;y<end;y++)for(let x=0;x<600;x++){const i=(y*600+x)*4;pixels.set([...color,255],i);}
+for(const start of [43,554])for(let x=start;x<start+4;x++)for(let y=20;y<708;y++)pixels.set([40,70,90,255],(y*600+x)*4);
+card.frames[0].image={naturalWidth:600,naturalHeight:840};card.dungeonWallColor='pipeline';const fixedTop=card.dungeonModules[1].bounds.y;
+assert.equal(ctx.DungeonModules.drawWalls(drawing,drawing),true);const footer=card.dungeonModules[1].bounds;
+assert.equal(footer.y,fixedTop);assert.ok(Math.abs(footer.x-45/600)<1e-9);assert.ok(Math.abs(footer.y+footer.height-704/840)<1e-9);
+assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('100,50,30'))),'Top wall uses title-bottom strip');
+assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('200,150,40'))),'Bottom wall uses typeline-top strip');
+assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('40,70,90'))),'Vertical walls use vertical pipeline strip');
+const aligned=JSON.stringify(card.dungeonModules.map(r=>r.bounds));ctx.DungeonModules.drawWalls(drawing,drawing);assert.equal(JSON.stringify(card.dungeonModules.map(r=>r.bounds)),aligned);
+console.log('PASS: pipeline wall sampling, split colors, edge-specific strips, aligned envelope, fixed final-row top, stable migration and editable T-junctions.');
