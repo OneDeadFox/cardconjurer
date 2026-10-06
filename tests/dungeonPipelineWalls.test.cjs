@@ -21,4 +21,13 @@ assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('100,50,30'))),'T
 assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('200,150,40'))),'Bottom wall uses typeline-top strip');
 assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('40,70,90'))),'Vertical walls use vertical pipeline strip');
 const aligned=JSON.stringify(card.dungeonModules.map(r=>r.bounds));ctx.DungeonModules.drawWalls(drawing,drawing);assert.equal(JSON.stringify(card.dungeonModules.map(r=>r.bounds)),aligned);
-console.log('PASS: pipeline wall sampling, split colors, edge-specific strips, aligned envelope, fixed final-row top, stable migration and editable T-junctions.');
+// Rendered frame supplies bevels outside the uploaded flat-color strip.
+const finished=pixels.slice();for(let y=87;y<90;y++)for(let x=0;x<600;x++)finished.set([10,20,30,255],(y*600+x)*4);
+for(let x=558;x<561;x++)for(let y=20;y<708;y++)finished.set([15,25,35,255],(y*600+x)*4);
+ctx.frameCanvas={width:600,height:840};let created=0;
+ctx.document.createElement=()=>{const data=(created++%2)?finished:pixels;return{getContext:()=>({drawImage(){},getImageData:()=>({data})})};};
+card.dungeonModules.forEach(room=>room.pipelineAligned=2);const originalFooterY=footer.y;ctx.DungeonModules.drawWalls(drawing,drawing);
+assert.equal(footer.y,originalFooterY);assert.ok(card.dungeonModules.every(room=>room.pipelineAligned===3),'Previously aligned templates receive updated geometry');
+assert.ok(Math.abs(card.dungeonModules[0].bounds.y-92.5/840)<1e-9,'Top follows the complete rendered stroke, including its outline');
+assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('15,25,35'))),'Art-side walls include the rendered right-edge shading');
+console.log('PASS: pipeline strips, rendered bevels, native thickness, updated saved bounds, fixed final-row top, split colors and editable junctions.');

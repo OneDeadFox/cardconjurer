@@ -9,7 +9,7 @@
 	function pipelineProfile(){
 		var frame=(card.frames||[]).find(function(f){return !f.hidden&&/pipeline|pinline/i.test(f.componentKind||f.componentLabel||f.name||'')&&f.image?.naturalWidth;});
 		if(!frame||card.dungeonWallColor==='custom')return null;
-		var image=frame.image,profile=pipelineProfiles.get(image);
+		var image=frame.image,rendered=window.frameCanvas,profile=rendered?null:pipelineProfiles.get(image);
 		if(!profile)try{
 			var canvas=document.createElement('canvas');canvas.width=Math.min(600,image.naturalWidth);canvas.height=Math.round(canvas.width*image.naturalHeight/image.naturalWidth);
 			var ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,canvas.width,canvas.height);var pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data,w=canvas.width,h=canvas.height;
@@ -18,16 +18,25 @@
 					if(count>span*.35){var last=runs[runs.length-1];if(last&&last.end===a)last.end++;else runs.push({start:a,end:a+1});}}
 				return runs.filter(function(run){return run.end-run.start>=2&&run.end-run.start<length*.08;});}
 			var horizontal=bands('horizontal'),vertical=bands('vertical');if(!horizontal.length)return null;
-			function sample(run,axis){var result=[],span=axis==='horizontal'?w:h;for(var a=run.start;a<run.end;a++){var colors=[];for(var b=Math.floor(span*.15);b<=span*.85;b+=Math.max(1,Math.floor(span*.025))){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4;colors.push({position:b/span,color:'rgba('+pixels[i]+','+pixels[i+1]+','+pixels[i+2]+','+(pixels[i+3]/255)+')'});}result.push(colors);}return result;}
+			var samplePixels=pixels;
+			if(rendered?.width){var full=document.createElement('canvas');full.width=w;full.height=h;var fullCtx=full.getContext('2d');fullCtx.drawImage(rendered,(Number(card.marginX)||0)*card.width,(Number(card.marginY)||0)*card.height,card.width,card.height,0,0,w,h);var finalPixels=fullCtx.getImageData(0,0,w,h).data;
+				if(finalPixels.some(function(value,i){return i%4===3&&value>100;})){
+					samplePixels=finalPixels;
+					function materialRow(a,axis){var span=axis==='horizontal'?w:h,count=0;for(var b=Math.floor(span*.25);b<span*.75;b++){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4,r=finalPixels[i],g=finalPixels[i+1],blue=finalPixels[i+2];if(finalPixels[i+3]>100&&(Math.max(r,g,blue)-Math.min(r,g,blue)>35||(r+g+blue)/3<85))count++;}return count>span*.35;}
+					function expand(run,axis){var start=run.start,end=run.end,limit=axis==='horizontal'?h:w;while(start>Math.max(0,run.start-6)&&materialRow(start-1,axis))start--;while(end<Math.min(limit,run.end+6)&&materialRow(end,axis))end++;return {start:start,end:end};}
+					horizontal=horizontal.map(function(run){return expand(run,'horizontal');});vertical=vertical.map(function(run){return expand(run,'vertical');});
+				}
+			}
+			function sample(run,axis){var result=[],span=axis==='horizontal'?w:h;for(var a=run.start;a<run.end;a++){var colors=[];for(var b=Math.floor(span*.15);b<=span*.85;b+=Math.max(1,Math.floor(span*.025))){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4;colors.push({position:b/span,color:'rgba('+samplePixels[i]+','+samplePixels[i+1]+','+samplePixels[i+2]+','+(samplePixels[i+3]/255)+')'});}result.push(colors);}return result;}
 			var top=horizontal.find(function(b){return (b.start+b.end)/2/h>.07;})||horizontal[0],bottom=horizontal.find(function(b){return (b.start+b.end)/2/h>.65;})||horizontal[horizontal.length-1];
-			profile={top:sample(top,'horizontal'),bottom:sample(bottom,'horizontal'),left:vertical.length?sample(vertical[0],'vertical'):null,right:vertical.length?sample(vertical[vertical.length-1],'vertical'):null,
+			profile={sourceWidth:w,sourceHeight:h,top:sample(top,'horizontal'),bottom:sample(bottom,'horizontal'),left:vertical.length?sample(vertical[0],'vertical'):null,right:vertical.length?sample(vertical[vertical.length-1],'vertical'):null,
 				bounds:vertical.length&&horizontal.length>=3?{x:(vertical[0].start+vertical[0].end)/2/w,right:(vertical[vertical.length-1].start+vertical[vertical.length-1].end)/2/w,top:(top.start+top.end)/2/h,bottom:(bottom.start+bottom.end)/2/h}:null};
 			pipelineProfiles.set(image,profile);
 		}catch(error){return null;}
 		var b=frame.bounds||{x:0,y:0,width:1,height:1};return Object.assign({},profile,{placement:b});
 	}
 	function alignPipelineBounds(material){
-		if(!material?.bounds||!modules().length||modules().every(function(r){return r.pipelineAligned===2;}))return;
+		if(!material?.bounds||!modules().length||modules().every(function(r){return r.pipelineAligned===3;}))return;
 		var list=modules(),footer=list.slice().sort(function(a,b){return b.bounds.width-a.bounds.width;})[0],left=Math.min(...list.map(r=>r.bounds.x)),right=Math.max(...list.map(r=>r.bounds.x+r.bounds.width)),top=Math.min(...list.map(r=>r.bounds.y));
 		if(footer.bounds.y<=top||footer.bounds.width<right-left-.001)return;
 		var p=material.placement,b=material.bounds,target={x:(p.x||0)+b.x*(p.width||1),right:(p.x||0)+b.right*(p.width||1),top:(p.y||0)+b.top*(p.height||1),bottom:(p.y||0)+b.bottom*(p.height||1)},fixed=footer.bounds.y;
@@ -35,7 +44,7 @@
 		list.forEach(function(room){var box=room.bounds,end=box.y+box.height;box.x=target.x+(box.x-left)*(target.right-target.x)/(right-left);box.width*= (target.right-target.x)/(right-left);
 			if(room===footer){box.height=target.bottom-fixed;}else{box.y=target.top+(box.y-top)*(fixed-target.top)/(fixed-top);box.height=(end-top)*(fixed-target.top)/(fixed-top)+target.top-box.y;}
 			if(room.lockedBounds)room.lockedBounds=JSON.parse(JSON.stringify(box));if(room.autoFitOriginalBounds)room.autoFitOriginalBounds={y:box.y,height:box.height};if(room.csvRowBounds)room.csvRowBounds={x:target.x+(room.csvRowBounds.x-left)*(target.right-target.x)/(right-left),width:room.csvRowBounds.width*(target.right-target.x)/(right-left)};
-			room.pipelineAligned=2;syncRoom(room);
+			room.pipelineAligned=3;syncRoom(room);
 		});
 		if(card.dungeonHeightLock)card.dungeonHeightLock={top:target.top,bottom:target.bottom};if(card.dungeonAutoFitBounds)card.dungeonAutoFitBounds={top:target.top,bottom:target.bottom};
 		var art=card.artBounds;if(art){art.x=target.x;art.y=target.top;art.width=Math.min(...list.filter(r=>r!==footer).map(r=>r.bounds.x))-target.x;art.height=fixed-target.top;}
@@ -303,7 +312,7 @@
 	}
 	function drawWalls(mask,fx) {
 		var material=pipelineProfile();alignPipelineBounds(material);
-		var segments=wallSegments(modules()),thickness=Math.max(3,card.height*.006);
+		var segments=wallSegments(modules()),thickness=material?material.top.length/material.sourceHeight*(material.placement.height||1)*card.height:Math.max(3,card.height*.006);
 		var edges=segments.map(function(segment){return segment.axis==='horizontal'?[[segment.start,segment.position],[segment.end,segment.position]]:[[segment.position,segment.start],[segment.position,segment.end]];});
 		function same(a,b){return Math.abs(a[0]-b[0])<.001&&Math.abs(a[1]-b[1])<.001;}
 		// Join touching endpoints into polylines so miter joins fill the outer corner.
@@ -336,8 +345,9 @@
 			// Sample each edge in its native direction; do not mirror the lower bevel.
 			var outerBottom=Math.max(...modules().map(r=>r.bounds.y+r.bounds.height))*card.height,outerLeft=Math.min(...modules().map(r=>r.bounds.x))*card.width;
 			segments.forEach(function(segment){var horizontal=segment.axis==='horizontal',profile=horizontal?(Math.abs(segment.position-outerBottom)<1?material.bottom:material.top):(Math.abs(segment.position-outerLeft)<1?material.left:material.right);if(!profile)return;
-				profile.forEach(function(stops,index){var offset=(index+.5)/profile.length*thickness-thickness/2,p=material.placement,gradient=horizontal?mask.createLinearGradient((p.x||0)*card.width,0,((p.x||0)+(p.width||1))*card.width,0):mask.createLinearGradient(0,(p.y||0)*card.height,0,((p.y||0)+(p.height||1))*card.height);stops.forEach(function(stop){gradient.addColorStop(stop.position,stop.color);});
-					mask.beginPath();if(horizontal){mask.moveTo(segment.start,segment.position+offset);mask.lineTo(segment.end,segment.position+offset);}else{mask.moveTo(segment.position+offset,segment.start);mask.lineTo(segment.position+offset,segment.end);}mask.strokeStyle=gradient;mask.lineWidth=thickness/profile.length+.5;mask.stroke();});
+				var edgeThickness=profile.length/(horizontal?material.sourceHeight:material.sourceWidth)*(horizontal?(material.placement.height||1)*card.height:(material.placement.width||1)*card.width);
+				profile.forEach(function(stops,index){var offset=(index+.5)/profile.length*edgeThickness-edgeThickness/2,p=material.placement,gradient=horizontal?mask.createLinearGradient((p.x||0)*card.width,0,((p.x||0)+(p.width||1))*card.width,0):mask.createLinearGradient(0,(p.y||0)*card.height,0,((p.y||0)+(p.height||1))*card.height);stops.forEach(function(stop){gradient.addColorStop(stop.position,stop.color);});
+					mask.beginPath();if(horizontal){mask.moveTo(segment.start,segment.position+offset);mask.lineTo(segment.end,segment.position+offset);}else{mask.moveTo(segment.position+offset,segment.start);mask.lineTo(segment.position+offset,segment.end);}mask.strokeStyle=gradient;mask.lineWidth=edgeThickness/profile.length+.5;mask.stroke();});
 			});
 		}
 		// Keep outlines only where they face a room. The union includes both sides of
