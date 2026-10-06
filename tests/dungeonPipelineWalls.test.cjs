@@ -28,12 +28,12 @@ ctx.frameCanvas={width:600,height:840};let created=0;
 ctx.document.createElement=()=>{const data=(created++%2)?finished:pixels;return{getContext:()=>({drawImage(){},getImageData:()=>({data})})};};
 const painted=[];drawing.stroke=()=>painted.push(drawing.strokeStyle);
 card.dungeonModules.forEach(room=>room.pipelineAligned=2);const originalFooterY=footer.y;ctx.DungeonModules.drawWalls(drawing,drawing);
-assert.equal(footer.y,originalFooterY);assert.ok(card.dungeonModules.every(room=>room.pipelineAligned===4),'Previously aligned templates receive updated geometry');
+assert.equal(footer.y,originalFooterY);assert.ok(card.dungeonModules.every(room=>room.pipelineAligned===5),'Previously aligned templates receive updated geometry');
 assert.ok(Math.abs(card.dungeonModules[0].bounds.y-94/840)<1e-9,'Bevel expansion preserves the original pipeline anchor');
-assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('15,25,35'))),'Art-side walls include the rendered right-edge shading');
+assert.ok(!gradients.some(stops=>stops.some(([p,c])=>c.includes('15,25,35'))),'Pixels outside the authored strip cannot increase wall thickness');
 assert.ok(painted[0].stops.some(([p,c])=>c.includes('100,50,30')),'Joined junction fill uses the core material');
 assert.ok(!painted[0].stops.some(([p,c])=>c.includes('10,20,30')),'No extra dark outline is painted around joined paths');
 // Only one joined core stroke precedes directional stripes; no second joined outline.
 const joinedIndex=gradients.findIndex(stops=>stops.some(([p,c])=>c.includes('10,20,30')));
-assert.ok(joinedIndex>=0,'Directional strips still carry the genuine dark pipeline edge');
-console.log('PASS: pipeline strips, rendered bevels, native thickness, updated saved bounds, fixed final-row top, split colors and editable junctions.');
+assert.equal(joinedIndex,-1,'Adjacent dark background pixels are not part of the wall strip');
+console.log('PASS: pipeline strips, authored strip limits, native thickness, updated saved bounds, fixed final-row top, split colors and editable junctions.');

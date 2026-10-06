@@ -25,6 +25,9 @@ assert.equal(ctx.DungeonModules.drawWalls(walls.getContext('2d'),effects.getCont
 const footer=card.dungeonModules[3],b=card.dungeonModules[1].bounds,jx=Math.round(b.x*600),jy=Math.round(b.y*840);
 const pixel=(x,y)=>Array.from(walls.getContext('2d').getImageData(x,y,1,1).data);
 assert.equal(footer.bounds.y,.61,'Wide final row upper edge stays where the template placed it');
+assert.equal(card.dungeonModules[0].bounds.x,.51,'Outer alignment preserves the authored art divider');
+assert.equal(card.dungeonModules[1].bounds.x,.51);
+assert.ok(Math.abs(card.dungeonModules[1].bounds.width-card.dungeonModules[2].bounds.width)<1e-12,'Paired rooms retain equal widths');
 assert.ok(Math.abs(card.dungeonModules[0].bounds.y-94/840)<1e-9,'Bevel does not shift the title-bottom anchor');
 assert.ok(pixel(jx,jy)[3]>240,'Shared junction has no missing core');
 assert.ok(pixel(jx,jy)[2]>100,'An interior junction does not get a black overlapping outline');
@@ -48,5 +51,21 @@ card.frames[0].masks=[];card.frames[0].opacity=100;
 s.globalCompositeOperation='source-in';s.fillStyle='#3bc16d';s.fillRect(0,0,600,840);s.globalCompositeOperation='source-over';
 ctx.drawFrames();
 const recolored=pixel(390,Math.round(top.y*840));assert.ok(recolored[1]>recolored[2],'Walls sample the newly composed frame color rather than the previous blue frame');
+// Native dimensions from the Embark pipeline: 20 px vertical strips. Dark blue
+// frame pixels outside those strips must not enlarge or reposition the walls.
+const nativeSource=createCanvas(2010,2814),ns=nativeSource.getContext('2d');
+Object.defineProperties(nativeSource,{naturalWidth:{value:2010},naturalHeight:{value:2814}});
+ns.fillStyle='#087bc1';for(const y of [60,300,2350,2550])ns.fillRect(134,y,1742,25);
+ns.fillRect(134,60,20,2515);ns.fillRect(1856,60,20,2515);
+const nativeFrame=createCanvas(2010,2814),nf=nativeFrame.getContext('2d');nf.fillStyle='#152b47';nf.fillRect(0,0,2010,2814);nf.drawImage(nativeSource,0,0);
+const nativeCard={version:'dungeonModules',width:2010,height:2814,dungeonWallColor:'pipeline',frames:[{name:'Pipeline',image:nativeSource}],text:{},dungeonModules:[{id:'upper',bounds:{x:.5107276875813802,y:.1134,width:.418,height:.5958}},{id:'wide',bounds:{x:.0707333,y:.7092,width:.858,height:.13}}]};
+ctx.card=nativeCard;ctx.frameCanvas=nativeFrame;ctx.scaleX=ctx.scaleY=()=>0;
+const nativeWalls=createCanvas(2010,2814),nativeFX=createCanvas(2010,2814);
+ctx.DungeonModules.drawWalls(nativeWalls.getContext('2d'),nativeFX.getContext('2d'));
+assert.equal(nativeCard.dungeonModules[0].bounds.x,.5107276875813802);
+assert.equal(nativeCard.dungeonModules[1].bounds.y,.7092);
+function coverageWidth(x,y){const data=nativeWalls.getContext('2d').getImageData(x,y,30,1).data;let total=0;for(let i=3;i<data.length;i+=4)total+=data[i]/255;return total;}
+assert.ok(Math.abs(coverageWidth(130,2200)-20)<.02,'Exterior wall uses exactly the authored 20 px strip');
+assert.ok(Math.abs(coverageWidth(1012,1000)-20)<.02,'Fractional art divider stays 20 px wide without double-painted antialiasing');
 if(process.env.DUNGEON_RASTER_OUTPUT)fs.writeFileSync(process.env.DUNGEON_RASTER_OUTPUT,walls.toBuffer('image/png'));
 console.log('PASS: raster junction cores, missing quadrants, bevel anchors, fixed footer during fit, edited corner coverage, and frame-change redraw ordering.');

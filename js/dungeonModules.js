@@ -4,6 +4,7 @@
 	'use strict';
 	var selectedId = '';
 	var pipelineProfiles=new WeakMap();
+	var pipelineShapes=new WeakMap();
 	var wallRasterCache=null;
 	// Shade the union of the walls, rather than overlapping independently shaded
 	// rectangles. At a junction, an outline belongs on an exposed edge only.
@@ -17,10 +18,10 @@
 		function profileAt(horizontal,x,y){return horizontal?(Math.abs(y-bottom)<=material.bottom.length*unit(true)+2?material.bottom:material.top):(Math.abs(x-left)<=(material.left?.length||0)*unit(false)+2?material.left:material.right)||material.top;}
 		function unit(horizontal){return horizontal?card.height*(placement.height||1)/material.sourceHeight:card.width*(placement.width||1)/material.sourceWidth;}
 		var widths=[material.top.length*unit(true),material.bottom.length*unit(true)];if(material.left)widths.push(material.left.length*unit(false));if(material.right)widths.push(material.right.length*unit(false));
-		shape.strokeStyle='#fff';shape.lineWidth=Math.min(...widths);shape.lineCap='butt';shape.lineJoin='miter';trace(shape);shape.stroke();
+		shape.strokeStyle='#fff';shape.lineWidth=Math.min(...widths);shape.lineCap='butt';shape.lineJoin='miter';if(!cornerModel){trace(shape);shape.stroke();}
 		// Respect edited rounded/beveled/T geometry throughout the colored walls.
 		var paths=cornerModel?.paths||segments.map(function(s){return s.axis==='horizontal'?[[s.start,s.position],[s.end,s.position]]:[[s.position,s.start],[s.position,s.end]];});
-		paths.forEach(function(path){for(var i=1;i<path.length;i++){var a=path[i-1],b=path[i],horizontal=Math.abs(a[1]-b[1])<.01,vertical=Math.abs(a[0]-b[0])<.01;if(!horizontal&&!vertical)continue;
+		paths.forEach(function(path){for(var i=1;i<path.length;i++){var a=path[i-1],b=path[i],horizontal=Math.abs(a[1]-b[1])<.01,vertical=Math.abs(a[0]-b[0])<.01;if(!horizontal&&!vertical){shape.lineWidth=Math.min(...widths);shape.beginPath();shape.moveTo(a[0],a[1]);shape.lineTo(b[0],b[1]);shape.stroke();continue;}
 			var profile=profileAt(horizontal,(a[0]+b[0])/2,(a[1]+b[1])/2),scale=unit(horizontal),offset=(profile.length/2-profile.anchor)*scale;
 			shape.lineWidth=profile.length*scale;shape.beginPath();shape.moveTo(a[0]+(horizontal?0:offset),a[1]+(horizontal?offset:0));shape.lineTo(b[0]+(horizontal?0:offset),b[1]+(horizontal?offset:0));shape.stroke();
 		}});
@@ -51,13 +52,14 @@
 		if(!frame||card.dungeonWallColor==='custom')return null;
 		var image=frame.image,rendered=window.frameCanvas,profile=rendered?null:pipelineProfiles.get(image);
 		if(!profile)try{
-			var canvas=document.createElement('canvas');canvas.width=Math.min(600,image.naturalWidth);canvas.height=Math.round(canvas.width*image.naturalHeight/image.naturalWidth);
+			var canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=Math.round(canvas.width*image.naturalHeight/image.naturalWidth);
 			var ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,canvas.width,canvas.height);var pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data,w=canvas.width,h=canvas.height;
 			function bands(axis){var runs=[],length=axis==='horizontal'?h:w,span=axis==='horizontal'?w:h;
 				for(var a=0;a<length;a++){var count=0;for(var b=Math.floor(span*.25);b<span*.75;b++){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b;if(pixels[(y*w+x)*4+3]>100)count++;}
 					if(count>span*.35){var last=runs[runs.length-1];if(last&&last.end===a)last.end++;else runs.push({start:a,end:a+1});}}
 				return runs.filter(function(run){return run.end-run.start>=2&&run.end-run.start<length*.08;});}
-			var horizontal=bands('horizontal'),vertical=bands('vertical');if(!horizontal.length)return null;
+			var geometry=pipelineShapes.get(image);if(!geometry||geometry.source!==image.src||geometry.width!==w||geometry.height!==h){geometry={source:image.src,width:w,height:h,horizontal:bands('horizontal'),vertical:bands('vertical')};pipelineShapes.set(image,geometry);}
+			var horizontal=geometry.horizontal,vertical=geometry.vertical;if(!horizontal.length)return null;
 			// Geometry comes from the uploaded pipeline mask. Expanding its sampled
 			// bevel must never change the anchor (or move rooms on each redraw).
 			var top=horizontal.find(function(b){return (b.start+b.end)/2/h>.07;})||horizontal[0],bottom=horizontal.find(function(b){return (b.start+b.end)/2/h>.65;})||horizontal[horizontal.length-1];
@@ -66,9 +68,10 @@
 			if(rendered?.width){var full=document.createElement('canvas');full.width=w;full.height=h;var fullCtx=full.getContext('2d');fullCtx.drawImage(rendered,(Number(card.marginX)||0)*card.width,(Number(card.marginY)||0)*card.height,card.width,card.height,0,0,w,h);var finalPixels=fullCtx.getImageData(0,0,w,h).data;
 				if(finalPixels.some(function(value,i){return i%4===3&&value>100;})){
 					samplePixels=finalPixels;
-					function materialRow(a,axis){var span=axis==='horizontal'?w:h,count=0;for(var b=Math.floor(span*.25);b<span*.75;b++){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4,r=finalPixels[i],g=finalPixels[i+1],blue=finalPixels[i+2];if(finalPixels[i+3]>100&&(Math.max(r,g,blue)-Math.min(r,g,blue)>35||(r+g+blue)/3<85))count++;}return count>span*.35;}
-					function expand(run,axis){var limit=axis==='horizontal'?h:w,origin=(axis==='horizontal'?placement.y:placement.x)||0,scale=(axis==='horizontal'?placement.height:placement.width)||1,start=Math.round(origin*limit+run.start*scale),end=Math.round(origin*limit+run.end*scale),anchor=origin*limit+(run.start+run.end)/2*scale,lo=start,hi=end;while(start>Math.max(0,lo-6)&&materialRow(start-1,axis))start--;while(end<Math.min(limit,hi+6)&&materialRow(end,axis))end++;return {start:start,end:end,anchor:anchor};}
-					top=expand(top,'horizontal');bottom=expand(bottom,'horizontal');vertical=vertical.map(function(run){return expand(run,'vertical');});
+					// Sample within the authored strip. Frame background colors and shadows
+					// do not define thickness; they may extend far beyond the pipeline.
+					function projectBand(run,axis){var limit=axis==='horizontal'?h:w,origin=(axis==='horizontal'?placement.y:placement.x)||0,scale=(axis==='horizontal'?placement.height:placement.width)||1,start=origin*limit+run.start*scale,end=origin*limit+run.end*scale;return {start:Math.round(start),end:Math.max(Math.round(start)+1,Math.round(end)),anchor:(start+end)/2};}
+					top=projectBand(top,'horizontal');bottom=projectBand(bottom,'horizontal');vertical=vertical.map(function(run){return projectBand(run,'vertical');});
 					placement={x:0,y:0,width:1,height:1};
 				}
 			}
@@ -86,14 +89,22 @@
 		var p=material.placement,b=material.bounds,target={x:(p.x||0)+b.x*(p.width||1),right:(p.x||0)+b.right*(p.width||1),top:(p.y||0)+b.top*(p.height||1),bottom:(p.y||0)+b.bottom*(p.height||1)},fixed=footer.bounds.y,oldFixed=fixed;
 		if(target.top>=fixed||target.bottom<=fixed)return;
 		var previous=card.dungeonPipelineEnvelope;
-		if(previous&&modules().every(function(r){return r.pipelineAligned===4;})&&['x','right','top','bottom'].every(function(k){return Math.abs(previous[k]-target[k])<1e-8;}))return;
+		if(previous&&modules().every(function(r){return r.pipelineAligned===5;})&&['x','right','top','bottom'].every(function(k){return Math.abs(previous[k]-target[k])<1e-8;}))return;
 		// Save the wide final row's upper edge independently of text fitting.
 		if(previous&&previous.footerId===footer.id)fixed=previous.footerTop;
-		card.dungeonPipelineEnvelope=Object.assign({},target,{footerId:footer.id,footerTop:fixed});
-		list.forEach(function(room){var box=room.bounds,end=box.y+box.height;box.x=target.x+(box.x-left)*(target.right-target.x)/(right-left);box.width*= (target.right-target.x)/(right-left);
-			if(room===footer){box.y=fixed;box.height=target.bottom-fixed;}else{box.y=target.top+(box.y-top)*(fixed-target.top)/(oldFixed-top);box.height=(end-top)*(fixed-target.top)/(oldFixed-top)+target.top-box.y;}
-			if(room.lockedBounds)room.lockedBounds=JSON.parse(JSON.stringify(box));if(room.autoFitOriginalBounds)room.autoFitOriginalBounds={y:box.y,height:box.height};if(room.csvRowBounds)room.csvRowBounds={x:target.x+(room.csvRowBounds.x-left)*(target.right-target.x)/(right-left),width:room.csvRowBounds.width*(target.right-target.x)/(right-left)};
-			room.pipelineAligned=4;syncRoom(room);
+		var upper=list.filter(function(room){return room!==footer;}),divider=Math.min(...upper.map(function(room){return room.bounds.x;}));
+		// The art boundary is an authored divider, not a fraction of the full card
+		// width. Resize the room column between that divider and the right edge.
+		if(divider<=target.x||divider>=target.right)return;
+		card.dungeonPipelineEnvelope=Object.assign({},target,{footerId:footer.id,footerTop:fixed,artDivider:divider});
+		var oldDivider=Math.min(...upper.map(function(room){return room.bounds.x;}));
+		function columnX(x){return divider+(x-oldDivider)*(target.right-divider)/(right-oldDivider);}
+		list.forEach(function(room){var box=room.bounds,end=box.y+box.height;
+			if(room===footer){box.x=target.x;box.width=target.right-target.x;box.y=fixed;box.height=target.bottom-fixed;}
+			else{var endX=columnX(box.x+box.width);box.x=columnX(box.x);box.width=endX-box.x;box.y=target.top+(box.y-top)*(fixed-target.top)/(oldFixed-top);box.height=(end-top)*(fixed-target.top)/(oldFixed-top)+target.top-box.y;}
+			if(room.lockedBounds)room.lockedBounds=JSON.parse(JSON.stringify(box));if(room.autoFitOriginalBounds)room.autoFitOriginalBounds={y:box.y,height:box.height};
+			if(room.csvRowBounds){var old=room.csvRowBounds;room.csvRowBounds=room===footer?{x:target.x,width:target.right-target.x}:{x:columnX(old.x),width:columnX(old.x+old.width)-columnX(old.x)};}
+			room.pipelineAligned=5;syncRoom(room);
 		});
 		if(card.dungeonHeightLock)card.dungeonHeightLock={top:target.top,bottom:target.bottom};if(card.dungeonAutoFitBounds)card.dungeonAutoFitBounds={top:target.top,bottom:target.bottom};
 		var art=card.artBounds;if(art){art.x=target.x;art.y=target.top;art.width=Math.min(...list.filter(r=>r!==footer).map(r=>r.bounds.x))-target.x;art.height=fixed-target.top;}
