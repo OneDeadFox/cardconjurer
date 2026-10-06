@@ -34,6 +34,10 @@
 			if(mapping.length!==rows.length)throw Error('Dungeon Rooms requires '+rows.length+' rows separated by semicolons.');
 			mapping.forEach(function(row,i){if(row.length>2||row.length===2&&(i<1||i>3))throw Error('Only dungeon rows 2, 3 and 4 can split into two rooms.');});
 		}
+		// Imported neighboring rows share one boundary, including rounded saved coordinates.
+		rows.forEach(function(row,i){if(!i)return;var previous=rows[i-1][0].bounds,edge=previous.y+previous.height;
+			if(Math.abs(edge-row[0].bounds.y)<.001)row.forEach(function(room){var b=room.bounds,end=b.y+b.height;b.y=edge;b.height=end-edge;});
+		});
 		// Older Embark templates saved the default full-card art bounds.
 		// Infer only the left opening bounded by narrower rows and a wide footer.
 		var artBox=data.artBounds;
@@ -227,7 +231,7 @@
 	}
 	// Only rooms above/below each other connect; side walls remain solid.
 	function doorways(list) {
-		var output=[],epsilon=.0000001;
+		var output=[],epsilon=.001;
 		for(var i=0;i<list.length;i++)for(var j=i+1;j<list.length;j++) {
 			var a=list[i].bounds,b=list[j].bounds,overlapX=Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x);
 			if(overlapX>epsilon && (Math.abs(a.y+a.height-b.y)<epsilon || Math.abs(b.y+b.height-a.y)<epsilon))output.push({axis:'horizontal',x:Math.max(a.x,b.x)+overlapX/2,y:Math.abs(a.y+a.height-b.y)<epsilon?b.y:a.y,span:overlapX});

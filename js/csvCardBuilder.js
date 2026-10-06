@@ -428,10 +428,16 @@
 		var templateFields = {},frontTemplateFields={},altTemplateFields={};
 		var imageFields = {};
 		var features = {};
+		var dungeonRow=csvState.mappings.some(function(target,i){return target==='field:dungeonRooms'&&String(row[i]||'').trim();});
 
 		csvState.mappings.forEach(function (target, columnIndex) {
 			var value = row[columnIndex] === undefined ? '' : String(row[columnIndex]);
 			var header = csvState.headers[columnIndex];
+			if(dungeonRow){
+				var combined=String(header).toLowerCase().replace(/[^a-z0-9]/g,'');
+				if(combined==='ability4bossability'&&target==='field:altAbility1')target='field:ability4';
+				if(combined==='ability5lootbox'&&target==='alttemplatefield:prototype rules')target='field:ability5';
+			}
 
 			if (target === 'ignore') {
 				return;
@@ -2127,4 +2133,3 @@
 		buildCard: buildCard
 	};
 })();
-
