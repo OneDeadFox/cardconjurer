@@ -9,6 +9,10 @@ for(const room of data.dungeonModules){assert.equal(data.text[room.textKey].font
 for(let i=1;i<=3;i++){const rooms=data.dungeonModules.filter(r=>r.csvRowId===source.dungeonModules.filter((r,j,all)=>!j||Math.abs(r.bounds.y-all[j-1].bounds.y)>.001)[i].id);assert.equal(rooms.length,2);assert.equal(rooms[0].bounds.width,rooms[1].bounds.width);assert.equal(rooms[0].bounds.y,rooms[1].bounds.y);assert.equal(rooms[0].bounds.height,rooms[1].bounds.height);}
 assert.deepEqual(data.frames,source.frames);assert.ok(Math.abs(data.dungeonModules.at(-1).bounds.width-source.dungeonModules.at(-1).bounds.width)<1e-12,'Wide bottom room preserved');
 const ids=data.dungeonModules.map(r=>r.id);D.applyCsvRooms(data,fields,[]);assert.deepEqual(data.dungeonModules.map(r=>r.id),ids,'Repeat preview retains stable room IDs');
+assert.ok(data.artBounds.x>=source.dungeonModules.at(-1).bounds.x);
+assert.ok(data.artBounds.x+data.artBounds.width<=source.dungeonModules[0].bounds.x);
+assert.ok(data.artBounds.y+data.artBounds.height<source.dungeonModules.at(-1).bounds.y);
+const explicitArt=clone(source);explicitArt.artBounds={x:.1,y:.2,width:.3,height:.4};D.applyCsvRooms(explicitArt,fields,[]);assert.deepEqual(explicitArt.artBounds,{x:.1,y:.2,width:.3,height:.4},'Explicit art bounds preserved');
 const copy=clone(source),before=JSON.stringify(copy);assert.throws(()=>D.applyCsvRooms(copy,{dungeonRooms:'1|2;3;4;5;6'},[]),/Only dungeon rows/);assert.equal(JSON.stringify(copy),before);assert.throws(()=>D.applyCsvRooms(copy,{dungeonRooms:'1;2'},[]),/requires 5 rows/);assert.throws(()=>D.applyCsvRooms(copy,{dungeonRooms:'1;2;0;3;4'},[]),/1 to 12/);
 const warnings=[];D.applyCsvRooms(clone(source),{dungeonRooms:'1;2;3;4;5'},warnings);assert.equal(warnings.length,5);
 D.applyCsvRooms(data,{...fields,dungeonRooms:'1;2;3;4;5'},[]);assert.equal(data.dungeonModules.length,5);assert.equal(Object.keys(data.text).filter(k=>k.endsWith('Right')).length,0,'Merged rooms remove their generated text fields');

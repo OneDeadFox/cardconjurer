@@ -34,6 +34,19 @@
 			if(mapping.length!==rows.length)throw Error('Dungeon Rooms requires '+rows.length+' rows separated by semicolons.');
 			mapping.forEach(function(row,i){if(row.length>2||row.length===2&&(i<1||i>3))throw Error('Only dungeon rows 2, 3 and 4 can split into two rooms.');});
 		}
+		// Older Embark templates saved the default full-card art bounds.
+		// Infer only the left opening bounded by narrower rows and a wide footer.
+		var artBox=data.artBounds;
+		if(!artBox||(artBox.x===0&&artBox.y===0&&artBox.width===1&&artBox.height===1)){
+			var footer=rows[rows.length-1]?.[0],upper=rows.slice(0,-1).flat();
+			if(footer&&upper.length){
+				var left=footer.bounds.x,right=Math.min(...upper.map(function(r){return r.bounds.x;})),top=Math.min(...upper.map(function(r){return r.bounds.y;})),bottom=footer.bounds.y;
+				if(right-left>.1&&bottom>top&&upper.every(function(r){return r.bounds.y+r.bounds.height<=bottom+.001;})){
+					var halfWall=.003,halfWallX=halfWall*data.height/data.width;
+					data.artBounds={x:left+halfWallX,y:top,width:right-left-2*halfWallX,height:bottom-top-halfWall};
+				}
+			}
+		}
 		var next=[],counter=0;
 		rows.forEach(function(row,index){
 			row.sort(function(a,b){return a.bounds.x-b.bounds.x;});
@@ -352,4 +365,3 @@
 	function remove(roomId) { var before=snapshot(),index=modules().findIndex(function(room){return room.id===roomId;});if(index<0)return;var room=modules().splice(index,1)[0];delete card.text[room.textKey];selectedId=modules()[Math.min(index,modules().length-1)]?.id||'';loadTextOptions(card.text,true);render();commit(before,'Delete dungeon room'); }
 	window.DungeonModules={applyCsvRooms:applyCsvRooms,initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setRoomLock:setRoomLock,setHeightLock:setHeightLock,setPadding:setPadding,setVerticalPadding:setVerticalPadding,roomPadding:roomPadding,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
 })();
-
