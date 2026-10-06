@@ -336,12 +336,13 @@
 		mask.lineCap=fx.lineCap='butt';mask.lineJoin=fx.lineJoin='miter';
 		if(!material){path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();}
 		if(material){
-			// Concentric joined strokes reproduce the sampled outline/bevel profile.
-			for(var k=0;k<Math.ceil(material.top.length/2);k++){
-				var place=material.placement,gradient=mask.createLinearGradient((place.x||0)*card.width,0,((place.x||0)+(place.width||1))*card.width,0);
-				material.top[k].forEach(function(stop){gradient.addColorStop(stop.position,stop.color);});
-				path(mask);mask.strokeStyle=gradient;mask.lineWidth=Math.max(1,thickness*(1-2*k/material.top.length));mask.stroke();
-			}
+			// Fill joined corners with the material's core. Outlines belong only to
+			// the directional strips below; painting a second outline leaves spurs
+			// where horizontal and vertical source strokes have different widths.
+			var place=material.placement,core=material.top[Math.floor(material.top.length/2)],gradient=mask.createLinearGradient((place.x||0)*card.width,0,((place.x||0)+(place.width||1))*card.width,0);
+			core.forEach(function(stop){gradient.addColorStop(stop.position,stop.color);});
+			var widths=[thickness];if(material.left)widths.push(material.left.length/material.sourceWidth*(place.width||1)*card.width);if(material.right)widths.push(material.right.length/material.sourceWidth*(place.width||1)*card.width);widths.push(material.bottom.length/material.sourceHeight*(place.height||1)*card.height);
+			path(mask);mask.strokeStyle=gradient;mask.lineWidth=Math.max(1,Math.min(...widths));mask.stroke();
 			// Sample each edge in its native direction; do not mirror the lower bevel.
 			var outerBottom=Math.max(...modules().map(r=>r.bounds.y+r.bounds.height))*card.height,outerLeft=Math.min(...modules().map(r=>r.bounds.x))*card.width;
 			segments.forEach(function(segment){var horizontal=segment.axis==='horizontal',profile=horizontal?(Math.abs(segment.position-outerBottom)<1?material.bottom:material.top):(Math.abs(segment.position-outerLeft)<1?material.left:material.right);if(!profile)return;

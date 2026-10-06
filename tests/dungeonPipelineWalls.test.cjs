@@ -3,7 +3,7 @@ const card={width:600,height:840,dungeonWallColor:'U',frames:[{name:'Custom Pipe
 const pixels=new Uint8ClampedArray(600*840*4);
 for(let y=20;y<28;y++)for(let x=0;x<600;x++){const i=(y*600+x)*4;pixels[i]=x<300?30:70;pixels[i+1]=x<300?100:180;pixels[i+2]=x<300?200:80;pixels[i+3]=255;}
 const gradients=[];
-const drawing=new Proxy({createLinearGradient(){const stops=[];gradients.push(stops);return{addColorStop:(p,c)=>stops.push([p,c])};}}, {get:(o,k)=>k in o?o[k]:()=>{}});
+const drawing=new Proxy({createLinearGradient(){const stops=[];gradients.push(stops);return{stops,addColorStop:(p,c)=>stops.push([p,c])};}}, {get:(o,k)=>k in o?o[k]:()=>{}});
 const ctx={card,scaleX:()=>0,scaleY:()=>0,document:{createElement:()=>({getContext:()=>({drawImage(){},getImageData:()=>({data:pixels})})}),querySelector:()=>null}};ctx.window=ctx;vm.createContext(ctx);
 for(const file of ['js/dungeonModules.js','js/dungeonCorners.js'])vm.runInContext(fs.readFileSync(file,'utf8'),ctx);
 assert.equal(ctx.DungeonModules.drawWalls(drawing,drawing),true);
@@ -26,8 +26,14 @@ const finished=pixels.slice();for(let y=87;y<90;y++)for(let x=0;x<600;x++)finish
 for(let x=558;x<561;x++)for(let y=20;y<708;y++)finished.set([15,25,35,255],(y*600+x)*4);
 ctx.frameCanvas={width:600,height:840};let created=0;
 ctx.document.createElement=()=>{const data=(created++%2)?finished:pixels;return{getContext:()=>({drawImage(){},getImageData:()=>({data})})};};
+const painted=[];drawing.stroke=()=>painted.push(drawing.strokeStyle);
 card.dungeonModules.forEach(room=>room.pipelineAligned=2);const originalFooterY=footer.y;ctx.DungeonModules.drawWalls(drawing,drawing);
 assert.equal(footer.y,originalFooterY);assert.ok(card.dungeonModules.every(room=>room.pipelineAligned===3),'Previously aligned templates receive updated geometry');
 assert.ok(Math.abs(card.dungeonModules[0].bounds.y-92.5/840)<1e-9,'Top follows the complete rendered stroke, including its outline');
 assert.ok(gradients.some(stops=>stops.some(([p,c])=>c.includes('15,25,35'))),'Art-side walls include the rendered right-edge shading');
+assert.ok(painted[0].stops.some(([p,c])=>c.includes('100,50,30')),'Joined junction fill uses the core material');
+assert.ok(!painted[0].stops.some(([p,c])=>c.includes('10,20,30')),'No extra dark outline is painted around joined paths');
+// Only one joined core stroke precedes directional stripes; no second joined outline.
+const joinedIndex=gradients.findIndex(stops=>stops.some(([p,c])=>c.includes('10,20,30')));
+assert.ok(joinedIndex>=0,'Directional strips still carry the genuine dark pipeline edge');
 console.log('PASS: pipeline strips, rendered bevels, native thickness, updated saved bounds, fixed final-row top, split colors and editable junctions.');
