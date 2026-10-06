@@ -18,16 +18,31 @@
 		function profileAt(horizontal,x,y){return horizontal?(Math.abs(y-bottom)<=material.bottom.length*unit(true)+2?material.bottom:material.top):(Math.abs(x-left)<=(material.left?.length||0)*unit(false)+2?material.left:material.right)||material.top;}
 		function unit(horizontal){return horizontal?card.height*(placement.height||1)/material.sourceHeight:card.width*(placement.width||1)/material.sourceWidth;}
 		var widths=[material.top.length*unit(true),material.bottom.length*unit(true)];if(material.left)widths.push(material.left.length*unit(false));if(material.right)widths.push(material.right.length*unit(false));
+		var envelope=card.dungeonPipelineEnvelope,nativeJoins=[],nativeCorners=[];
+		function near(a,b){return Math.abs(a-b)<1;}
+		if(material.rendered&&envelope&&cornerModel){
+			var outerRight=envelope.right*card.width,outerTop=envelope.top*card.height,footerY=envelope.footerTop*card.height;
+			cornerModel.nodes.forEach(function(n){
+				if(n.settings.style==='t-right'&&near(n.x,left)&&near(n.y,footerY))nativeJoins.push({node:n,arm:'up',horizontal:false});
+				if(n.settings.style==='t-down'&&near(n.y,outerTop)&&near(n.x,envelope.artDivider*card.width))nativeJoins.push({node:n,arm:'left',horizontal:true});
+				if(n.settings.style==='square'&&((near(n.y,bottom)&&(near(n.x,left)||near(n.x,outerRight)))||(near(n.x,outerRight)&&near(n.y,outerTop))))nativeCorners.push(n);
+			});
+		}
+		function nativeExtension(a,b){return nativeJoins.some(function(join){var n=join.node;if(join.arm==='up')return near(a[0],n.x)&&near(b[0],n.x)&&Math.max(a[1],b[1])<=n.y+.01&&Math.min(a[1],b[1])>=n.y-n.radius-.01;return near(a[1],n.y)&&near(b[1],n.y)&&Math.max(a[0],b[0])<=n.x+.01&&Math.min(a[0],b[0])>=n.x-n.radius-.01;});}
 		shape.strokeStyle='#fff';shape.lineWidth=Math.min(...widths);shape.lineCap='butt';shape.lineJoin='miter';if(!cornerModel){trace(shape);shape.stroke();}
 		// Respect edited rounded/beveled/T geometry throughout the colored walls.
 		var paths=cornerModel?.paths||segments.map(function(s){return s.axis==='horizontal'?[[s.start,s.position],[s.end,s.position]]:[[s.position,s.start],[s.position,s.end]];});
-		paths.forEach(function(path){for(var i=1;i<path.length;i++){var a=path[i-1],b=path[i],horizontal=Math.abs(a[1]-b[1])<.01,vertical=Math.abs(a[0]-b[0])<.01;if(!horizontal&&!vertical){shape.lineWidth=Math.min(...widths);shape.beginPath();shape.moveTo(a[0],a[1]);shape.lineTo(b[0],b[1]);shape.stroke();continue;}
+		paths.forEach(function(path){for(var i=1;i<path.length;i++){var a=path[i-1],b=path[i];if(nativeExtension(a,b))continue;var horizontal=Math.abs(a[1]-b[1])<.01,vertical=Math.abs(a[0]-b[0])<.01;if(!horizontal&&!vertical){shape.lineWidth=Math.min(...widths);shape.beginPath();shape.moveTo(a[0],a[1]);shape.lineTo(b[0],b[1]);shape.stroke();continue;}
 			var profile=profileAt(horizontal,(a[0]+b[0])/2,(a[1]+b[1])/2),scale=unit(horizontal),offset=(profile.length/2-profile.anchor)*scale;
 			shape.lineWidth=profile.length*scale;shape.beginPath();shape.moveTo(a[0]+(horizontal?0:offset),a[1]+(horizontal?offset:0));shape.lineTo(b[0]+(horizontal?0:offset),b[1]+(horizontal?offset:0));shape.stroke();
 		}});
 		shape.fillStyle='#fff';cornerModel?.nodes.forEach(function(n){if(Object.keys(n.arms).length<2||!(/^(square|t-)/.test(n.settings.style)))return;var hp=profileAt(true,n.x,n.y),vp=profileAt(false,n.x,n.y);shape.fillRect(n.x-vp.anchor*unit(false),n.y-hp.anchor*unit(true),vp.length*unit(false),hp.length*unit(true));});
 		var coverage=shape.getImageData(0,0,canvas.width,canvas.height),output=shape.createImageData(canvas.width,canvas.height),data=coverage.data,w=canvas.width,h=canvas.height,limit=Math.ceil(Math.max(...widths))+2;
-		function distance(x,y,dx,dy){var d=0;while(d<limit){x+=dx;y+=dy;d++;if(x<0||y<0||x>=w||y>=h||data[(y*w+x)*4+3]<64)break;}return d-.5;}
+		// Existing frame strokes continue through these two junctions. Include
+		// that continuation when shading, without painting another capped stub.
+		nativeJoins.forEach(function(join){var n=join.node,p=profileAt(join.horizontal,n.x,n.y),u=unit(join.horizontal),reach=n.radius+limit*2;if(join.horizontal)shape.fillRect(n.x-reach,n.y-p.anchor*u,reach*2,p.length*u);else shape.fillRect(n.x-p.anchor*u,n.y-reach,p.length*u,reach*2);});
+		var distanceData=nativeJoins.length?shape.getImageData(0,0,w,h).data:data;
+		function distance(x,y,dx,dy){var d=0;while(d<limit){x+=dx;y+=dy;d++;if(x<0||y<0||x>=w||y>=h||distanceData[(y*w+x)*4+3]<64)break;}return d-.5;}
 		var parsed=new WeakMap();function colors(profile){var result=parsed.get(profile);if(!result){result=profile.map(function(stops){return stops.map(function(s){return {position:s.position,rgba:s.color.match(/[\d.]+/g).map(Number)};});});parsed.set(profile,result);}return result;}
 		function color(profile,index,position){var stops=colors(profile)[Math.max(0,Math.min(profile.length-1,index))],a=stops[0],b=stops[stops.length-1];for(var i=1;i<stops.length;i++){if(position<=stops[i].position){a=stops[i-1];b=stops[i];break;}}var t=Math.max(0,Math.min(1,(position-a.position)/(b.position-a.position||1)));return a.rgba.map(function(v,i){return v+(b.rgba[i]-v)*t;});}
 		var tables=new WeakMap(),sy=unit(true),sx=unit(false);
@@ -43,7 +58,18 @@
 			output.data[i]=lookup[j];output.data[i+1]=lookup[j+1];output.data[i+2]=lookup[j+2];output.data[i+3]=data[i+3]*lookup[j+3]/255;
 		}}
 
-		shape.putImageData(output,0,0);wallRasterCache={key:key,canvas:canvas};context.drawImage(canvas,0,0);return true;
+		shape.putImageData(output,0,0);
+		// Carry the art-side lower outline through the entire final-row boundary,
+		// including the arms of the T; each doorway remains an opening.
+		if(envelope&&material.underline){var y=envelope.footerTop*card.height,p=material.top,u=unit(true),depth=material.underline.depth*u;shape.strokeStyle=material.underline.color;shape.lineWidth=depth;shape.lineCap='butt';
+			segments.filter(function(s){return s.axis==='horizontal'&&near(s.position,y);}).forEach(function(s){var start=s.start,end=s.end;if(near(start,left))start+=((material.left?.length||0)-(material.left?.anchor||0))*unit(false);if(near(end,envelope.right*card.width))end-=(material.right?.anchor||0)*unit(false);if(end>start){shape.beginPath();shape.moveTo(start,y+material.underline.offset*u);shape.lineTo(end,y+material.underline.offset*u);shape.stroke();}});
+		}
+		// The composed frame already contains the correctly colored native
+		// pipeline and rounded title/type corners at these exact coordinates.
+		// Reveal it once, avoiding a second square stroke over the curved artwork.
+		nativeJoins.forEach(function(join){var n=join.node,p=profileAt(join.horizontal,n.x,n.y),u=unit(join.horizontal),reach=n.radius+limit;if(join.horizontal)shape.clearRect(n.x-reach,n.y-p.anchor*u,reach*2,p.length*u);else shape.clearRect(n.x-p.anchor*u,n.y-reach,p.length*u,reach*2);});
+		nativeCorners.forEach(function(n){var hp=profileAt(true,n.x,n.y),vp=profileAt(false,n.x,n.y),rx=Math.max(vp.length*unit(false)*3,hp.length*unit(true)*2),ry=Math.max(hp.length*unit(true)*2,vp.length*unit(false)*2);rx=Math.min(rx,(n.arms.left||n.arms.right||Infinity)*.45);ry=Math.min(ry,(n.arms.up||n.arms.down||Infinity)*.45);shape.clearRect(n.x-rx,n.y-ry,rx*2,ry*2);});
+		wallRasterCache={key:key,canvas:canvas};context.drawImage(canvas,0,0);return true;
 	}
 	// Sample a long horizontal stroke from the active pipeline artwork. This
 	// carries custom textures, bevel colors, and its already-composed split mask.
@@ -64,10 +90,10 @@
 			// bevel must never change the anchor (or move rooms on each redraw).
 			var top=horizontal.find(function(b){return (b.start+b.end)/2/h>.07;})||horizontal[0],bottom=horizontal.find(function(b){return (b.start+b.end)/2/h>.65;})||horizontal[horizontal.length-1];
 			var sourceBounds=vertical.length&&horizontal.length>=3?{x:(vertical[0].start+vertical[0].end)/2/w,right:(vertical[vertical.length-1].start+vertical[vertical.length-1].end)/2/w,top:(top.start+top.end)/2/h,bottom:(bottom.start+bottom.end)/2/h}:null;
-			var samplePixels=pixels,placement=frame.bounds||{x:0,y:0,width:1,height:1};
+			var samplePixels=pixels,hasRenderedFrame=false,placement=frame.bounds||{x:0,y:0,width:1,height:1};
 			if(rendered?.width){var full=document.createElement('canvas');full.width=w;full.height=h;var fullCtx=full.getContext('2d');fullCtx.drawImage(rendered,(Number(card.marginX)||0)*card.width,(Number(card.marginY)||0)*card.height,card.width,card.height,0,0,w,h);var finalPixels=fullCtx.getImageData(0,0,w,h).data;
 				if(finalPixels.some(function(value,i){return i%4===3&&value>100;})){
-					samplePixels=finalPixels;
+					samplePixels=finalPixels;hasRenderedFrame=true;
 					// Sample within the authored strip. Frame background colors and shadows
 					// do not define thickness; they may extend far beyond the pipeline.
 					function projectBand(run,axis){var limit=axis==='horizontal'?h:w,origin=(axis==='horizontal'?placement.y:placement.x)||0,scale=(axis==='horizontal'?placement.height:placement.width)||1,start=origin*limit+run.start*scale,end=origin*limit+run.end*scale;return {start:Math.round(start),end:Math.max(Math.round(start)+1,Math.round(end)),anchor:(start+end)/2};}
@@ -77,7 +103,19 @@
 			}
 			function sample(run,axis){var result=[],span=axis==='horizontal'?w:h;for(var a=run.start;a<run.end;a++){var colors=[];for(var b=Math.floor(span*.15);b<=span*.85;b+=Math.max(1,Math.floor(span*.025))){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b,i=(y*w+x)*4;colors.push({position:b/span,color:'rgba('+samplePixels[i]+','+samplePixels[i+1]+','+samplePixels[i+2]+','+(samplePixels[i+3]/255)+')'});}result.push(colors);}result.anchor=(run.anchor===undefined?(run.start+run.end)/2:run.anchor)-run.start;return result;}
 			profile={sourceWidth:w,sourceHeight:h,top:sample(top,'horizontal'),bottom:sample(bottom,'horizontal'),left:vertical.length?sample(vertical[0],'vertical'):null,right:vertical.length?sample(vertical[vertical.length-1],'vertical'):null,
-				bounds:sourceBounds,samplePlacement:placement};
+				bounds:sourceBounds,samplePlacement:placement,rendered:hasRenderedFrame};
+			// Use the dark lower edge beside the art as the reference for this run.
+			var depth=0,outline=null;for(var row=profile.top.length-1;row>=Math.floor(profile.top.length*.6);row--){var stop=profile.top[row].reduce(function(best,s){return Math.abs(s.position-.3)<Math.abs(best.position-.3)?s:best;}),rgba=stop.color.match(/[\d.]+/g).map(Number);if(rgba[3]<.5||Math.max(rgba[0],rgba[1],rgba[2])>90)break;depth++;outline=stop.color;}
+			if(depth)profile.underline={depth:depth,color:outline,offset:profile.top.length-profile.top.anchor-depth/2};
+			// Prefer the actual outline below the art when the template supplies it.
+			// It may sit just outside the colored strip; copy only that thin dark
+			// edge, without letting neighboring background pixels resize the wall.
+			if(hasRenderedFrame&&card.dungeonModules?.length){var rooms=card.dungeonModules,footer=rooms.slice().sort(function(a,b){return b.bounds.width-a.bounds.width;})[0],others=rooms.filter(function(r){return r!==footer;}),divider=others.length?Math.min(...others.map(function(r){return r.bounds.x;})):footer.bounds.x;
+				if(divider>footer.bounds.x+.05){var center=footer.bounds.y*h,edge=center+profile.top.length-profile.top.anchor,radius=Math.max(3,Math.round(h*.002)),runs=[];
+					for(var y=Math.max(0,Math.floor(edge-radius));y<Math.min(h,Math.ceil(edge+radius));y++){var dark=[];[.25,.375,.5,.625,.75].forEach(function(t){var x=Math.round((footer.bounds.x+(divider-footer.bounds.x)*t)*w),i=(y*w+x)*4;if(samplePixels[i+3]>180&&Math.max(samplePixels[i],samplePixels[i+1],samplePixels[i+2])<80)dark.push([samplePixels[i],samplePixels[i+1],samplePixels[i+2]]);});if(dark.length>=4){var last=runs[runs.length-1];if(last&&last.end===y)last.end++;else runs.push({start:y,end:y+1,color:'rgb('+dark[0].join(',')+')'});}}
+					var run=runs.filter(function(r){return r.end-r.start<=Math.max(3,profile.top.length*.4);}).sort(function(a,b){return Math.abs((a.start+a.end)/2-edge)-Math.abs((b.start+b.end)/2-edge);})[0];if(run)profile.underline={depth:run.end-run.start,color:run.color,offset:(run.start+run.end)/2-center};
+				}
+			}
 			pipelineProfiles.set(image,profile);
 		}catch(error){return null;}
 		var b=frame.bounds||{x:0,y:0,width:1,height:1};return Object.assign({},profile,{placement:b});
