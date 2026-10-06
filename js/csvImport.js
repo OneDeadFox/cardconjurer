@@ -49,6 +49,15 @@
 				['field:ability2', 'Ability 2'],
 				['field:ability3', 'Ability 3'],
 				['field:ability4', 'Ability 4'],
+				['field:ability5', 'Ability 5'],
+				['field:ability6', 'Ability 6'],
+				['field:ability7', 'Ability 7'],
+				['field:ability8', 'Ability 8'],
+				['field:ability9', 'Ability 9'],
+				['field:ability10', 'Ability 10'],
+				['field:ability11', 'Ability 11'],
+				['field:ability12', 'Ability 12'],
+				['field:dungeonRooms', 'Dungeon Rooms'],
 				['field:flavorText', 'Flavor Text'],
 				['field:power', 'Power'],
 				['field:toughness', 'Toughness'],
@@ -169,6 +178,15 @@
 		ability2: 'field:ability2',
 		ability3: 'field:ability3',
 		ability4: 'field:ability4',
+		ability5: 'field:ability5',
+		ability6: 'field:ability6',
+		ability7: 'field:ability7',
+		ability8: 'field:ability8',
+		ability9: 'field:ability9',
+		ability10: 'field:ability10',
+		ability11: 'field:ability11',
+		ability12: 'field:ability12',
+		dungeonrooms: 'field:dungeonRooms',
 		flavortext: 'field:flavorText',
 		flavor: 'field:flavorText',
 		power: 'field:power',
@@ -853,3 +871,4 @@
 		}
 	};
 })();
+

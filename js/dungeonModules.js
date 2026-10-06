@@ -17,10 +17,49 @@
 		var key='dungeonRoomModule'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 		var room={id:id(),name:name||'Room '+(modules().length+1),bounds:bounds,textKey:key};
 		modules().push(room);selectedId=room.id;
-		var definition={};definition[key]={name:room.name,text:text||room.name+'{lns}{fontmplantin}{fontsize-8}Effect.',x:bounds.x,y:bounds.y,width:bounds.width,height:bounds.height,font:'belerenb',size:.0324,align:'center',customField:true};
+		var definition={};definition[key]={name:room.name,text:text||room.name+'{lns}{fontmplantin}{fontsize-8}Effect.',x:bounds.x,y:bounds.y,width:bounds.width,height:bounds.height,font:'mplantin',size:.0324,align:'center',customField:true};
 		loadTextOptions(definition,false);
 		syncRoom(room);
 		return room;
+	}
+	// One CSV cell describes rows; IDs survive repeated previews and saved templates.
+	function applyCsvRooms(data,fields,warnings) {
+		if(data.version!=='dungeonModules'||!Array.isArray(data.dungeonModules))return false;
+		warnings=warnings||[];
+		var list=data.dungeonModules.slice().sort(function(a,b){return a.bounds.y-b.bounds.y||a.bounds.x-b.bounds.x;}),rows=[];
+		list.forEach(function(room){var row=rows.find(function(r){return Math.abs(r[0].bounds.y-room.bounds.y)<.001;});if(row)row.push(room);else rows.push([room]);});
+		var value=String(fields.dungeonRooms||'').trim(),mapping;
+		if(value){
+			mapping=value.split(';').map(function(row){return row.trim().split('|').map(function(n){if(!/^\d+$/.test(n.trim())||Number(n)<1||Number(n)>12)throw Error('Dungeon Rooms requires Ability numbers from 1 to 12.');return Number(n);});});
+			if(mapping.length!==rows.length)throw Error('Dungeon Rooms requires '+rows.length+' rows separated by semicolons.');
+			mapping.forEach(function(row,i){if(row.length>2||row.length===2&&(i<1||i>3))throw Error('Only dungeon rows 2, 3 and 4 can split into two rooms.');});
+		}
+		var next=[],counter=0;
+		rows.forEach(function(row,index){
+			row.sort(function(a,b){return a.bounds.x-b.bounds.x;});
+			var x=Math.min(...row.map(function(r){return r.bounds.x;})),right=Math.max(...row.map(function(r){return r.bounds.x+r.bounds.width;})),y=row[0].bounds.y,h=Math.max(...row.map(function(r){return r.bounds.height;}));
+			var numbers=mapping?mapping[index]:row.map(function(){return ++counter;});
+			if(mapping)counter+=numbers.length;
+			var rowId=row[0].csvRowId||row[0].id;
+			numbers.forEach(function(number,column){
+				var original=row[column]||row[0],room=JSON.parse(JSON.stringify(original)),isNew=!row[column];
+				if(isNew){room.id=rowId+'-right';room.textKey=original.textKey+'Right';delete room.cornerStyles;}
+				var text=JSON.parse(JSON.stringify(data.text[original.textKey]||{size:.0324,align:'center',customField:true}));
+				room.name='Room '+(next.length+1);room.csvRowId=rowId;room.csvRowBounds={x:x,width:right-x};room.csvAbility=number;
+				room.bounds={x:x+column*(right-x)/numbers.length,y:y,width:(right-x)/numbers.length,height:h};
+				if(room.geometryLocked)room.lockedBounds=JSON.parse(JSON.stringify(room.bounds));
+				if(room.autoFitOriginalBounds)room.autoFitOriginalBounds={y:y,height:h};
+				delete room.autoFitFont;delete text.rangeFontReduction;delete text.rangeUniformTextSize;
+				text.name=room.name;text.csvFieldLabel=room.name;text.font='mplantin';
+				if(mapping||Object.prototype.hasOwnProperty.call(fields,'ability'+number)){
+					text.text=String(fields['ability'+number]||'').trim();
+					if(mapping&&!Object.prototype.hasOwnProperty.call(fields,'ability'+number))warnings.push(room.name+' references Ability '+number+', but that column is not mapped.');
+				}
+				data.text[room.textKey]=text;next.push(room);syncRoom(room,data);
+			});
+		});
+		var keys=new Set(next.map(function(room){return room.textKey;}));list.forEach(function(room){if(!keys.has(room.textKey))delete data.text[room.textKey];});
+		data.dungeonModules=next;return true;
 	}
 	function initialize() {
 		card.dungeonModules=[];
@@ -40,13 +79,13 @@
 		if(all){card.dungeonVerticalPadding=settings;modules().forEach(function(r){delete r.verticalPadding;});}else room.verticalPadding=settings;
 		render();commit(before,all?'Set all room vertical padding':'Set room vertical padding');
 	}
-	function roomPadding(room) {
-		var box=room.bounds,explicit=Number.isFinite(room.padding)?room.padding:card.dungeonPadding;
-		var value=Number.isFinite(explicit)?Math.max(0,explicit):grid().cell*.5,vertical=verticalPadding(room);
-		var y=Math.min(value,Number.isFinite(explicit)?Math.max(0,(box.height*card.height-10)/2):box.height*card.height*.12);
+	function roomPadding(room,data=card) {
+		var box=room.bounds,explicit=Number.isFinite(room.padding)?room.padding:data.dungeonPadding;
+		var value=Number.isFinite(explicit)?Math.max(0,explicit):data.height*.0381*.5,vertical=(room.verticalPadding||data.dungeonVerticalPadding||{});
+		var y=Math.min(value,Number.isFinite(explicit)?Math.max(0,(box.height*data.height-10)/2):box.height*data.height*.12);
 		var top=Number.isFinite(vertical.top)?vertical.top:y,bottom=Number.isFinite(vertical.bottom)?vertical.bottom:y;
-		var sum=top+bottom,limit=Math.max(0,box.height*card.height-10),ratio=sum>limit?limit/sum:1;
-		return {x:Math.min(value,Number.isFinite(explicit)?Math.max(0,(box.width*card.width-10)/2):box.width*card.width*.12),
+		var sum=top+bottom,limit=Math.max(0,box.height*data.height-10),ratio=sum>limit?limit/sum:1;
+		return {x:Math.min(value,Number.isFinite(explicit)?Math.max(0,(box.width*data.width-10)/2):box.width*data.width*.12),
 			y:y,top:top*ratio,bottom:bottom*ratio,requestedTop:Number.isFinite(vertical.top)?vertical.top:value,requestedBottom:Number.isFinite(vertical.bottom)?vertical.bottom:value,
 			value:value,explicit:Number.isFinite(explicit)||Number.isFinite(vertical.top)||Number.isFinite(vertical.bottom),auto:!!vertical.auto};
 	}
@@ -55,18 +94,18 @@
 		var before=snapshot();if(all){card.dungeonPadding=value;modules().forEach(function(r){delete r.padding;});}else room.padding=value;
 		render();commit(before,all?'Set padding for all dungeon rooms':'Set room padding');
 	}
-	function syncRoom(room) {
-		var box=room.bounds,text=field(room);if(!text)return;var pad=roomPadding(room);
+	function syncRoom(room,data=card) {
+		var box=room.bounds,text=data.text?.[room.textKey];if(!text)return;var pad=roomPadding(room,data);
 		if(pad.auto&&window.RulesRange?.measureModuleText){
-			var width=Math.max(10,box.width*card.width-2*pad.x),measured=RulesRange.measureModuleText(text,width,Number(text.rangeFontReduction)||0);
-			var extra=Math.max(0,box.height*card.height-pad.top-pad.bottom-measured)/2;
+			var width=Math.max(10,box.width*data.width-2*pad.x),measured=RulesRange.measureModuleText(text,width,Number(text.rangeFontReduction)||0);
+			var extra=Math.max(0,box.height*data.height-pad.top-pad.bottom-measured)/2;
 			pad.top+=extra;pad.bottom+=extra;
 		}
-		text.x=box.x+pad.x/card.width;text.y=box.y+pad.top/card.height;
-		text.width=Math.max(10/card.width,box.width-2*pad.x/card.width);
-		text.height=Math.max(10/card.height,box.height-(pad.top+pad.bottom)/card.height);
+		text.x=box.x+pad.x/data.width;text.y=box.y+pad.top/data.height;
+		text.width=Math.max(10/data.width,box.width-2*pad.x/data.width);
+		text.height=Math.max(10/data.height,box.height-(pad.top+pad.bottom)/data.height);
 	}
-	function syncAll() { modules().forEach(syncRoom);if(typeof drawTextBuffer==='function')drawTextBuffer(); }
+	function syncAll() { modules().forEach(function(room){syncRoom(room);});if(typeof drawTextBuffer==='function')drawTextBuffer(); }
 	function currentEnvelope() {
 		var list=modules();return list.length?{top:Math.min(...list.map(room=>room.bounds.y)),bottom:Math.max(...list.map(room=>room.bounds.y+room.bounds.height))}:null;
 	}
@@ -170,6 +209,7 @@
 		px.w=Math.max(20,Math.min(card.width,px.w));px.h=Math.max(20,Math.min(card.height,px.h));
 		px.x=Math.max(0,Math.min(card.width-px.w,px.x));px.y=Math.max(0,Math.min(card.height-px.h,px.y));
 		Object.assign(box,{x:px.x/card.width,y:px.y/card.height,width:px.w/card.width,height:px.h/card.height});
+		if(room.csvRowId){var peers=modules().filter(function(r){return r.csvRowId===room.csvRowId;}),locked=peers.find(function(r){return r.geometryLocked&&r.lockedBounds;});if(locked){box.y=locked.lockedBounds.y;box.height=locked.lockedBounds.height;}peers.forEach(function(peer,i){peer.bounds.y=box.y;peer.bounds.height=box.height;if(peers.length===2&&room.csvRowBounds){peer.bounds.x=room.csvRowBounds.x+i*room.csvRowBounds.width/2;peer.bounds.width=room.csvRowBounds.width/2;}syncRoom(peer);});}
 		syncRoom(room);
 	}
 	// Only rooms above/below each other connect; side walls remain solid.
@@ -310,5 +350,6 @@
 		refresh();
 	}
 	function remove(roomId) { var before=snapshot(),index=modules().findIndex(function(room){return room.id===roomId;});if(index<0)return;var room=modules().splice(index,1)[0];delete card.text[room.textKey];selectedId=modules()[Math.min(index,modules().length-1)]?.id||'';loadTextOptions(card.text,true);render();commit(before,'Delete dungeon room'); }
-	window.DungeonModules={initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setRoomLock:setRoomLock,setHeightLock:setHeightLock,setPadding:setPadding,setVerticalPadding:setVerticalPadding,roomPadding:roomPadding,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
+	window.DungeonModules={applyCsvRooms:applyCsvRooms,initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setRoomLock:setRoomLock,setHeightLock:setHeightLock,setPadding:setPadding,setVerticalPadding:setVerticalPadding,roomPadding:roomPadding,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
 })();
+

@@ -568,6 +568,7 @@
 	}
 
 	function applyAbilityFields(cardData, fields, warnings) {
+		if(window.DungeonModules?.applyCsvRooms(cardData,fields,warnings))return;
 		if (!isMapped(fields, ['ability1', 'ability2', 'ability3', 'ability4', 'flavorText'])) {
 			return;
 		}
@@ -2126,3 +2127,4 @@
 		buildCard: buildCard
 	};
 })();
+
