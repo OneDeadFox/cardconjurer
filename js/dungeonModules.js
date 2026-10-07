@@ -105,26 +105,15 @@
 			var hp=profileAt(true,n.x,n.y),vp=profileAt(false,n.x,n.y),rx=Math.max(vp.length*unit(false)*3,hp.length*unit(true)*2),ry=Math.max(hp.length*unit(true)*2,vp.length*unit(false)*2);
 			rx=Math.min(rx,(n.arms.left||n.arms.right||Infinity)*.45);ry=Math.min(ry,(n.arms.up||n.arms.down||Infinity)*.45);
 			var dx=n.arms.right?1:-1,dy=n.arms.down?1:-1;
-			var innerX=n.x+(dx>0?vp.length-vp.anchor:-vp.anchor)*unit(false),innerY=n.y+(dy>0?hp.length-hp.anchor:-hp.anchor)*unit(true);
-			// Keep the native rounded outside, but carry each adjacent inner shadow
-			// through the revealed patch. Some uploaded pipelines contain only color
-			// here; the dark edge belongs to the generated wall or frame beneath it.
-			function edge(horizontal){
-				var expected=horizontal?innerY:innerX,radius=Math.max(2,Math.ceil((horizontal?hp.length*unit(true):vp.length*unit(false))*.6)),runs=[];
-				for(var q=Math.floor(expected-radius);q<=Math.ceil(expected+radius);q++){
-					var x=Math.round(horizontal?n.x+dx*(rx+2):q),y=Math.round(horizontal?q:n.y+dy*(ry+2));if(x<0||y<0||x>=w||y>=h)continue;
-					var rgba=shape.getImageData(x,y,1,1).data;
-					if((rgba[3]<180||Math.max(rgba[0],rgba[1],rgba[2])>=90)&&window.frameCanvas?.getContext)rgba=window.frameCanvas.getContext('2d').getImageData(x+(Number(card.marginX)||0)*w,y+(Number(card.marginY)||0)*h,1,1).data;
-					if(rgba[3]>180&&Math.max(rgba[0],rgba[1],rgba[2])<90){var last=runs[runs.length-1];if(last&&last.end===q)last.end=q+1;else runs.push({start:q,end:q+1,color:'rgba('+rgba[0]+','+rgba[1]+','+rgba[2]+','+(rgba[3]/255)+')'});}
-				}
-				return runs.filter(function(r){return r.end-r.start<=radius;}).sort(function(a,b){return Math.abs((a.start+a.end)/2-expected)-Math.abs((b.start+b.end)/2-expected);})[0];
-			}
-			var horizontal=edge(true),vertical=edge(false);
-			shape.clearRect(n.x-rx,n.y-ry,rx*2,ry*2);
-			var joinX=vertical?(vertical.start+vertical.end)/2:innerX,joinY=horizontal?(horizontal.start+horizontal.end)/2:innerY;
-			shape.lineCap='square';
-			if(horizontal){shape.strokeStyle=horizontal.color;shape.lineWidth=horizontal.end-horizontal.start;shape.beginPath();shape.moveTo(joinX,joinY);shape.lineTo(n.x+dx*rx,joinY);shape.stroke();}
-			if(vertical){shape.strokeStyle=vertical.color;shape.lineWidth=vertical.end-vertical.start;shape.beginPath();shape.moveTo(joinX,joinY);shape.lineTo(joinX,n.y+dy*ry);shape.stroke();}
+			// Reveal only the exterior of the native turn. Clearing the whole
+			// patch exposed a second, thicker inner edge from the original frame;
+			// stitching sampled lines over it produced ledges and double shadows.
+			// The room-facing quadrant keeps the same union-rendered wall as the
+			// adjoining runs, including its outline and current thickness.
+			shape.save();shape.beginPath();
+			if(dx>0)shape.rect(n.x-rx,n.y-ry,rx,ry*2);else shape.rect(n.x,n.y-ry,rx,ry*2);
+			if(dy>0)shape.rect(n.x-rx,n.y-ry,rx*2,ry);else shape.rect(n.x-rx,n.y,rx*2,ry);
+			shape.clip();shape.clearRect(n.x-rx,n.y-ry,rx*2,ry*2);shape.restore();
 		});
 		// Door ends are cuts across a wall, not left/right source-frame edges.
 		// Give both ends the same dark cap; the source's outer highlight must not
