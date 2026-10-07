@@ -5901,6 +5901,17 @@ function drawCard(backgroundOnly=false) {
 	}
 }
 //DOWNLOADING
+function cardImageExportCanvas(source=cardCanvas) {
+	if(source.width<=source.height)return source;
+	// Rotate only the finished raster, preserving all editor/template geometry.
+	const output=document.createElement('canvas');
+	output.width=source.height;output.height=source.width;
+	const context=output.getContext('2d');
+	context.translate(output.width,0);
+	context.rotate(Math.PI/2);
+	context.drawImage(source,0,0);
+	return output;
+}
 function downloadCard(alt = false, jpeg = false) {
 	if (card.infoArtist.replace(/ /g, '') == '' && !card.artSource.includes('/img/blank.png') && !card.artZoom == 0) {
 		notify('You must credit an artist before downloading!', 5);
@@ -5908,11 +5919,12 @@ function downloadCard(alt = false, jpeg = false) {
 		// Prep file information
 		var imageDataURL;
 		var imageName = getCardName();
+		const exportCanvas=cardImageExportCanvas();
 		if (jpeg) {
-			imageDataURL = cardCanvas.toDataURL('image/jpeg', 0.8);
+			imageDataURL = exportCanvas.toDataURL('image/jpeg', 0.8);
 			imageName = imageName + '.jpg';
 		} else {
-			imageDataURL = cardCanvas.toDataURL('image/png');
+			imageDataURL = exportCanvas.toDataURL('image/png');
 			imageName = imageName + '.png';
 		}
 		// Download image
@@ -6002,7 +6014,7 @@ async function bulkDownloadZip() {
             drawCard();
             
             const imageName = getCardName() + '.png';
-            const imageData = cardCanvas.toDataURL('image/png').split(',')[1];
+            const imageData = cardImageExportCanvas().toDataURL('image/png').split(',')[1];
             
             zip.file(imageName, imageData, { base64: true });
             console.log(`Zipped: ${imageName}`);

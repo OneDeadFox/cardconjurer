@@ -1635,7 +1635,7 @@
 
 	async function renderBatchCard(job, face) {
 		await prepareBatchCard(job, face);
-		return canvasToBlob(cardCanvas);
+		return canvasToBlob(cardImageExportCanvas());
 	}
 
 	function facesForResult(result) {
