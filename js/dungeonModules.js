@@ -5,14 +5,14 @@
 	var selectedId = '';
 	var pipelineProfiles=new WeakMap();
 	var pipelineShapes=new WeakMap();
-	var wallRasterCache=null;
+	var wallRasterCache=new Map();
 	// Shade the union of the walls, rather than overlapping independently shaded
 	// rectangles. At a junction, an outline belongs on an exposed edge only.
 	function paintPipelineWalls(context,material,segments,cornerModel,trace){
 		var canvas=document.createElement('canvas');canvas.width=card.width;canvas.height=card.height;
 		var shape=canvas.getContext('2d');if(!shape.createImageData)return false;
 		var key=JSON.stringify([card.width,card.height,material,[material.top.anchor,material.bottom.anchor,material.left?.anchor,material.right?.anchor],segments,cornerModel?.paths]);
-		if(wallRasterCache?.key===key){context.drawImage(wallRasterCache.canvas,0,0);return true;}
+		if(wallRasterCache.has(key)){context.drawImage(wallRasterCache.get(key),0,0);return true;}
 		var placement=material.samplePlacement||material.placement;
 		var bottom=Math.max(...modules().map(r=>r.bounds.y+r.bounds.height))*card.height,left=Math.min(...modules().map(r=>r.bounds.x))*card.width;
 		function profileAt(horizontal,x,y){return horizontal?(Math.abs(y-bottom)<=material.bottom.length*unit(true)+2?material.bottom:material.top):(Math.abs(x-left)<=(material.left?.length||0)*unit(false)+2?material.left:material.right)||material.top;}
@@ -28,11 +28,11 @@
 				if(n.settings.style==='square'&&((near(n.y,bottom)&&(near(n.x,left)||near(n.x,outerRight)))||(near(n.x,outerRight)&&near(n.y,outerTop))))nativeCorners.push(n);
 			});
 		}
-		function nativeExtension(a,b){return nativeJoins.some(function(join){var n=join.node;if(join.arm==='up')return near(a[0],n.x)&&near(b[0],n.x)&&Math.max(a[1],b[1])<=n.y+.01&&Math.min(a[1],b[1])>=n.y-n.radius-.01;return near(a[1],n.y)&&near(b[1],n.y)&&Math.max(a[0],b[0])<=n.x+.01&&Math.min(a[0],b[0])>=n.x-n.radius-.01;});}
+
 		shape.strokeStyle='#fff';shape.lineWidth=Math.min(...widths);shape.lineCap='butt';shape.lineJoin='miter';if(!cornerModel){trace(shape);shape.stroke();}
 		// Respect edited rounded/beveled/T geometry throughout the colored walls.
 		var paths=cornerModel?.paths||segments.map(function(s){return s.axis==='horizontal'?[[s.start,s.position],[s.end,s.position]]:[[s.position,s.start],[s.position,s.end]];});
-		paths.forEach(function(path){for(var i=1;i<path.length;i++){var a=path[i-1],b=path[i];if(nativeExtension(a,b))continue;var horizontal=Math.abs(a[1]-b[1])<.01,vertical=Math.abs(a[0]-b[0])<.01;if(!horizontal&&!vertical){shape.lineWidth=Math.min(...widths);shape.beginPath();shape.moveTo(a[0],a[1]);shape.lineTo(b[0],b[1]);shape.stroke();continue;}
+		paths.forEach(function(path){for(var i=1;i<path.length;i++){var a=path[i-1],b=path[i];var horizontal=Math.abs(a[1]-b[1])<.01,vertical=Math.abs(a[0]-b[0])<.01;if(!horizontal&&!vertical){shape.lineWidth=Math.min(...widths);shape.beginPath();shape.moveTo(a[0],a[1]);shape.lineTo(b[0],b[1]);shape.stroke();continue;}
 			var profile=profileAt(horizontal,(a[0]+b[0])/2,(a[1]+b[1])/2),scale=unit(horizontal),offset=(profile.length/2-profile.anchor)*scale;
 			shape.lineWidth=profile.length*scale;shape.beginPath();shape.moveTo(a[0]+(horizontal?0:offset),a[1]+(horizontal?offset:0));shape.lineTo(b[0]+(horizontal?0:offset),b[1]+(horizontal?offset:0));shape.stroke();
 		}});
@@ -67,18 +67,19 @@
 		// The composed frame already contains the correctly colored native
 		// pipeline and rounded title/type corners at these exact coordinates.
 		// Reveal it once, avoiding a second square stroke over the curved artwork.
-		nativeJoins.forEach(function(join){var n=join.node,p=profileAt(join.horizontal,n.x,n.y),u=unit(join.horizontal),reach=n.radius+limit;if(join.horizontal)shape.clearRect(n.x-reach,n.y-p.anchor*u,reach*2,p.length*u);else shape.clearRect(n.x-p.anchor*u,n.y-reach,p.length*u,reach*2);});
+
 		nativeCorners.forEach(function(n){var hp=profileAt(true,n.x,n.y),vp=profileAt(false,n.x,n.y),rx=Math.max(vp.length*unit(false)*3,hp.length*unit(true)*2),ry=Math.max(hp.length*unit(true)*2,vp.length*unit(false)*2);rx=Math.min(rx,(n.arms.left||n.arms.right||Infinity)*.45);ry=Math.min(ry,(n.arms.up||n.arms.down||Infinity)*.45);shape.clearRect(n.x-rx,n.y-ry,rx*2,ry*2);});
-		wallRasterCache={key:key,canvas:canvas};context.drawImage(canvas,0,0);return true;
+		wallRasterCache.set(key,canvas);if(wallRasterCache.size>3)wallRasterCache.delete(wallRasterCache.keys().next().value);context.drawImage(canvas,0,0);return true;
 	}
 	// Sample a long horizontal stroke from the active pipeline artwork. This
 	// carries custom textures, bevel colors, and its already-composed split mask.
-	function pipelineProfile(){
-		var frame=(card.frames||[]).find(function(f){return !f.hidden&&/pipeline|pinline/i.test(f.componentKind||f.componentLabel||f.name||'')&&f.image?.naturalWidth;});
-		if(!frame||card.dungeonWallColor==='custom')return null;
-		var image=frame.image,rendered=window.frameCanvas,profile=rendered?null:pipelineProfiles.get(image);
+	function pipelineProfile(frameOverride,renderedOverride,data){
+		data=data||card;
+		var frame=frameOverride||(data.frames||[]).find(function(f){return !f.hidden&&/pipeline|pinline/i.test(f.componentKind||f.componentLabel||f.name||'')&&(f.image?.naturalWidth||f.image?.width);});
+		if(!frame||data.dungeonWallColor==='custom')return null;
+		var image=frame.image,rendered=renderedOverride===undefined?window.frameCanvas:renderedOverride,profile=rendered?null:pipelineProfiles.get(image);
 		if(!profile)try{
-			var canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=Math.round(canvas.width*image.naturalHeight/image.naturalWidth);
+			var canvas=document.createElement('canvas');canvas.width=(image.naturalWidth||image.width);canvas.height=Math.round(canvas.width*(image.naturalHeight||image.height)/(image.naturalWidth||image.width));
 			var ctx=canvas.getContext('2d');ctx.drawImage(image,0,0,canvas.width,canvas.height);var pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data,w=canvas.width,h=canvas.height;
 			function bands(axis){var runs=[],length=axis==='horizontal'?h:w,span=axis==='horizontal'?w:h;
 				for(var a=0;a<length;a++){var count=0;for(var b=Math.floor(span*.25);b<span*.75;b++){var x=axis==='horizontal'?b:a,y=axis==='horizontal'?a:b;if(pixels[(y*w+x)*4+3]>100)count++;}
@@ -91,7 +92,7 @@
 			var top=horizontal.find(function(b){return (b.start+b.end)/2/h>.07;})||horizontal[0],bottom=horizontal.find(function(b){return (b.start+b.end)/2/h>.65;})||horizontal[horizontal.length-1];
 			var sourceBounds=vertical.length&&horizontal.length>=3?{x:(vertical[0].start+vertical[0].end)/2/w,right:(vertical[vertical.length-1].start+vertical[vertical.length-1].end)/2/w,top:(top.start+top.end)/2/h,bottom:(bottom.start+bottom.end)/2/h}:null;
 			var samplePixels=pixels,hasRenderedFrame=false,placement=frame.bounds||{x:0,y:0,width:1,height:1};
-			if(rendered?.width){var full=document.createElement('canvas');full.width=w;full.height=h;var fullCtx=full.getContext('2d');fullCtx.drawImage(rendered,(Number(card.marginX)||0)*card.width,(Number(card.marginY)||0)*card.height,card.width,card.height,0,0,w,h);var finalPixels=fullCtx.getImageData(0,0,w,h).data;
+			if(rendered?.width){var full=document.createElement('canvas');full.width=w;full.height=h;var fullCtx=full.getContext('2d');fullCtx.drawImage(rendered,(Number(data.marginX)||0)*data.width,(Number(data.marginY)||0)*data.height,data.width,data.height,0,0,w,h);var finalPixels=fullCtx.getImageData(0,0,w,h).data;
 				if(finalPixels.some(function(value,i){return i%4===3&&value>100;})){
 					samplePixels=finalPixels;hasRenderedFrame=true;
 					// Sample within the authored strip. Frame background colors and shadows
@@ -110,7 +111,7 @@
 			// Prefer the actual outline below the art when the template supplies it.
 			// It may sit just outside the colored strip; copy only that thin dark
 			// edge, without letting neighboring background pixels resize the wall.
-			if(hasRenderedFrame&&card.dungeonModules?.length){var rooms=card.dungeonModules,footer=rooms.slice().sort(function(a,b){return b.bounds.width-a.bounds.width;})[0],others=rooms.filter(function(r){return r!==footer;}),divider=others.length?Math.min(...others.map(function(r){return r.bounds.x;})):footer.bounds.x;
+			if(hasRenderedFrame&&data.dungeonModules?.length){var rooms=data.dungeonModules,footer=rooms.slice().sort(function(a,b){return b.bounds.width-a.bounds.width;})[0],others=rooms.filter(function(r){return r!==footer;}),divider=others.length?Math.min(...others.map(function(r){return r.bounds.x;})):footer.bounds.x;
 				if(divider>footer.bounds.x+.05){var center=footer.bounds.y*h,edge=center+profile.top.length-profile.top.anchor,radius=Math.max(3,Math.round(h*.002)),runs=[];
 					for(var y=Math.max(0,Math.floor(edge-radius));y<Math.min(h,Math.ceil(edge+radius));y++){var dark=[];[.25,.375,.5,.625,.75].forEach(function(t){var x=Math.round((footer.bounds.x+(divider-footer.bounds.x)*t)*w),i=(y*w+x)*4;if(samplePixels[i+3]>180&&Math.max(samplePixels[i],samplePixels[i+1],samplePixels[i+2])<80)dark.push([samplePixels[i],samplePixels[i+1],samplePixels[i+2]]);});if(dark.length>=4){var last=runs[runs.length-1];if(last&&last.end===y)last.end++;else runs.push({start:y,end:y+1,color:'rgb('+dark[0].join(',')+')'});}}
 					var run=runs.filter(function(r){return r.end-r.start<=Math.max(3,profile.top.length*.4);}).sort(function(a,b){return Math.abs((a.start+a.end)/2-edge)-Math.abs((b.start+b.end)/2-edge);})[0];if(run)profile.underline={depth:run.end-run.start,color:run.color,offset:(run.start+run.end)/2-center};
@@ -120,6 +121,30 @@
 		}catch(error){return null;}
 		var b=frame.bounds||{x:0,y:0,width:1,height:1};return Object.assign({},profile,{placement:b});
 	}
+	function capturePipelineMaterial(source,frame,data){
+		var material=pipelineProfile(Object.assign({},frame,{image:source}),null,data);
+		if(material)material.anchors=['top','bottom','left','right'].map(function(k){return material[k]?.anchor;});
+		return material;
+	}
+	function paintPipelineColors(context,material,segments,corners,trace){
+		var frame=(card.frames||[]).find(function(f){return !f.hidden&&f.dungeonPipelineMaterials;});
+		var colors=frame?.dungeonPipelineMaterials;
+		if(!colors?.left||!colors?.right)return paintPipelineWalls(context,material,segments,corners,trace);
+		var layers=[colors.left,colors.right].map(function(saved){
+			var profile=Object.assign({},saved,{rendered:material.rendered,underline:material.underline,placement:frame.bounds||saved.placement,samplePlacement:frame.bounds||saved.samplePlacement});
+			['top','bottom','left','right'].forEach(function(k,i){if(profile[k])profile[k].anchor=saved.anchors[i];});
+			var layer=document.createElement('canvas');layer.width=card.width;layer.height=card.height;
+			paintPipelineWalls(layer.getContext('2d'),profile,segments,corners,trace);return layer;
+		});
+		// Build both complete wall systems, then put the masked right color above
+		// the first. The mask is in card coordinates, including vertical walls.
+		var weights=document.createElement('canvas');weights.width=colors.mask.length;weights.height=1;
+		var wc=weights.getContext('2d'),pixels=wc.createImageData(weights.width,1);
+		colors.mask.forEach(function(alpha,x){pixels.data[x*4+3]=alpha;});wc.putImageData(pixels,0,0);
+		var right=layers[1].getContext('2d');right.globalCompositeOperation='destination-in';right.drawImage(weights,0,0,card.width,card.height);right.globalCompositeOperation='source-over';
+		context.drawImage(layers[0],0,0);context.drawImage(layers[1],0,0);return true;
+	}
+
 	function alignPipelineBounds(material){
 		if(!material?.bounds||!modules().length)return;
 		var list=modules(),footer=list.slice().sort(function(a,b){return b.bounds.width-a.bounds.width;})[0],left=Math.min(...list.map(r=>r.bounds.x)),right=Math.max(...list.map(r=>r.bounds.x+r.bounds.width)),top=Math.min(...list.map(r=>r.bounds.y));
@@ -435,7 +460,7 @@
 		mask.translate(marginX,marginY);fx.translate(marginX,marginY);
 		mask.lineCap=fx.lineCap='butt';mask.lineJoin=fx.lineJoin='miter';
 		if(!material){path(mask);mask.strokeStyle='#fff';mask.lineWidth=thickness;mask.stroke();}
-		if(material&&!paintPipelineWalls(mask,material,segments,cornerModel,path)){
+		if(material&&!paintPipelineColors(mask,material,segments,cornerModel,path)){
 			// Fill joined corners with the material's core. Outlines belong only to
 			// the directional strips below; painting a second outline leaves spurs
 			// where horizontal and vertical source strokes have different widths.
@@ -532,5 +557,5 @@
 		refresh();
 	}
 	function remove(roomId) { var before=snapshot(),index=modules().findIndex(function(room){return room.id===roomId;});if(index<0)return;var room=modules().splice(index,1)[0];delete card.text[room.textKey];selectedId=modules()[Math.min(index,modules().length-1)]?.id||'';loadTextOptions(card.text,true);render();commit(before,'Delete dungeon room'); }
-	window.DungeonModules={applyCsvRooms:applyCsvRooms,initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setRoomLock:setRoomLock,setHeightLock:setHeightLock,setPadding:setPadding,setVerticalPadding:setVerticalPadding,roomPadding:roomPadding,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
+	window.DungeonModules={capturePipelineMaterial:capturePipelineMaterial,applyCsvRooms:applyCsvRooms,initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setRoomLock:setRoomLock,setHeightLock:setHeightLock,setPadding:setPadding,setVerticalPadding:setVerticalPadding,roomPadding:roomPadding,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
 })();

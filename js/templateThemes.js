@@ -40,6 +40,14 @@
   if(!a||right&&!b)throw Error('Asset family “'+family.name+'” is missing '+(!a?palette[left]:palette[right])+'.');
   let source=await raster(a,link.sourceRegion),second=b?await raster(b,link.sourceRegion):null;
   if(frame.resizeContainerRaster&&/pinline|pipeline/i.test(frame.componentKind||frame.name||'')){const reference=await raster(frame);source=fitPipeline(source,reference);if(second)second=fitPipeline(second,reference);}
+  if(data.version==='dungeonModules'&&/pinline|pipeline/i.test(frame.componentKind||frame.name||family.name||'')){
+   delete frame.dungeonPipelineMaterials;
+   if(b&&window.DungeonModules?.capturePipelineMaterial){
+    const mask=await raster({src:'/img/frames/maskRightHalf.png'}),pixels=mask.getContext('2d').getImageData(0,Math.floor(mask.height/2),mask.width,1).data;
+    const leftMaterial=DungeonModules.capturePipelineMaterial(source,frame,data),rightMaterial=DungeonModules.capturePipelineMaterial(second,frame,data);
+    if(leftMaterial&&rightMaterial)frame.dungeonPipelineMaterials={left:leftMaterial,right:rightMaterial,mask:Array.from({length:mask.width},(_,x)=>pixels[x*4+3])};
+   }
+  }
   if(!b)return source.toDataURL();
   const normalized=canvas(source.width,source.height);normalized.getContext('2d').drawImage(second,0,0,source.width,source.height);
   const ctx=source.getContext('2d'),first=ctx.getImageData(0,0,source.width,source.height),other=normalized.getContext('2d').getImageData(0,0,source.width,source.height),mask=await image('/img/frames/maskRightHalf.png'),weights=canvas(source.width,source.height);const bounds=frame.bounds||{x:0,y:0,width:1,height:1};const blend=link.blendRegion;if(blend){const ctx=weights.getContext('2d'),end=(blend.x+blend.width)*source.width;ctx.fillRect(end,0,source.width-end,source.height);ctx.drawImage(mask,blend.x*source.width,0,blend.width*source.width,source.height);}else weights.getContext('2d').drawImage(mask,bounds.x*mask.width,bounds.y*mask.height,bounds.width*mask.width,bounds.height*mask.height,0,0,source.width,source.height);const alpha=weights.getContext('2d').getImageData(0,0,source.width,source.height).data;
@@ -84,7 +92,8 @@
  }
  function coloredArtifact(data,choice){return /\bartifact\b/i.test(data.text?.type?.text||'')&&/[wubrgm]/.test(choice.left||'');}
  function elementChoice(frame,data,choice,recipe){
-  const role=elementRole(frame,recipe);
+  const family=config(data).families?.find(item=>item.id===frame.templateTheme?.familyId);
+  const role=elementRole(frame,recipe)==='frame'&&family?elementRole({name:family.name}):elementRole(frame,recipe);
   if(role==='frame'&&coloredArtifact(data,choice))return{...choice,left:'a',right:''};
   if(!choice.right)return choice;
   return ['pinline','rules','crown'].includes(role)?choice:{...choice,left:'m',right:''};
@@ -171,6 +180,7 @@
   const settings=config(data),autoStock=settings.autoStock!==false;if(!settings.enabled&&!autoStock)return data;const choice=selection(fields);if(!choice.requested)return data;
   const duplicates=settings.enabled?pipelineDuplicates(data):new Map(),changes=[];
   for(const frame of data.frames||[]){
+   delete frame.dungeonPipelineMaterials;
    if(duplicates.has(frame))continue;
    const link=settings.enabled&&frame.templateTheme,recipe=stockRecipe(frame,data),localChoice=elementChoice(frame,data,choice,recipe);
    const classRange=(data.rulesRanges||[]).find(range=>frame.visualFamilyId&&range.visualFamilies?.[frame.visualFamilyId]);
