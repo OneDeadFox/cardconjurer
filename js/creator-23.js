@@ -3122,7 +3122,9 @@ function sampleCardRulesTextColors() {
 			if(!weight)continue;
 			const luminance=sum/weight,previous=window.CardRulesTextColors.get(field);
 			// Slight hysteresis prevents flicker while dragging artwork near the crossover.
-			const threshold=previous==='black'?.17:previous==='white'?.19:.179;
+			// Favor black on medium-light tinted boxes. The former .179 cutoff
+			// kept gold backgrounds white once the old white glyphs were excluded.
+			const threshold=previous==='black'?.13:previous==='white'?.15:.14;
 			const color=luminance>threshold?'black':'white';
 			if(previous!==color){window.CardRulesTextColors.set(field,color);changed=true;}
 		} catch(error) {

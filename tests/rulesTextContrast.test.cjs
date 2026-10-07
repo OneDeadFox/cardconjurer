@@ -21,6 +21,12 @@ assert.equal(context.sampleCardRulesTextColors(),false,'Stable background does n
 paint('#d9d9d9','#222222');context.sampleCardRulesTextColors();
 assert.equal(context.CardRulesTextColors.get(rules),'black','Moving or replacing art recalculates contrast');
 assert.equal(context.CardRulesTextColors.get(prototype),'white');
+// Gold-tinted medium background, without the old white text inflating brightness.
+paint('#8b7448','#222222');context.sampleCardRulesTextColors();
+assert.equal(context.CardRulesTextColors.get(rules),'black','Medium gold rules backgrounds use black');
+paint('#111111','#111111');context.sampleCardRulesTextColors();
+paint('#8b7448','#222222');context.sampleCardRulesTextColors();
+assert.equal(context.CardRulesTextColors.get(rules),'black','Gold switches to black even after a dark card chose white');
 // Actual source-over transparent rules box over dark artwork.
 paint('#111111','#111111');background.fillStyle='rgba(255,255,255,.6)';background.fillRect(0,0,1000,300);
 context.sampleCardRulesTextColors();assert.equal(context.CardRulesTextColors.get(rules),'black');
