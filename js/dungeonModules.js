@@ -393,6 +393,19 @@
 		text.width=Math.max(10/data.width,box.width-2*pad.x/data.width);
 		text.height=Math.max(10/data.height,box.height-(pad.top+pad.bottom)/data.height);
 	}
+	// Rendering-only clearance: keep authored padding and room geometry intact.
+	function textVerticalArea(text,data=card){
+		var list=data.dungeonModules||[],room=list.find(function(r){return data.text?.[r.textKey]===text;});if(!room)return null;
+		var b=room.bounds,pad=roomPadding(room,data),top=b.y*data.height+pad.top,bottom=(b.y+b.height)*data.height-pad.bottom;
+		var material=pipelineProfile(null,null,data),thickness=material?material.top.length/material.sourceHeight*((material.samplePlacement||material.placement).height||1)*data.height:Math.max(3,data.height*.006);
+		doorways(list).forEach(function(door){if(door.axis!=='horizontal'||door.x<b.x||door.x>b.x+b.width)return;
+			var opening=Math.min(data.height*.0381,door.span*data.width*.5),half=Math.min(thickness*1.5,opening*.65)*.4,clearance=half+Math.max(4,data.height*.003);
+			if(Math.abs(door.y-b.y)<.001)top=Math.max(top,b.y*data.height+clearance);
+			if(Math.abs(door.y-b.y-b.height)<.001)bottom=Math.min(bottom,(b.y+b.height)*data.height-clearance);
+		});
+		return {top:top-(text.y||0)*data.height,bottom:bottom-(text.y||0)*data.height};
+	}
+
 	function syncAll() { modules().forEach(function(room){syncRoom(room);});if(typeof drawTextBuffer==='function')drawTextBuffer(); }
 	function currentEnvelope() {
 		var list=modules();return list.length?{top:Math.min(...list.map(room=>room.bounds.y)),bottom:Math.max(...list.map(room=>room.bounds.y+room.bounds.height))}:null;
@@ -658,5 +671,5 @@
 		refresh();
 	}
 	function remove(roomId) { var before=snapshot(),index=modules().findIndex(function(room){return room.id===roomId;});if(index<0)return;var room=modules().splice(index,1)[0];delete card.text[room.textKey];selectedId=modules()[Math.min(index,modules().length-1)]?.id||'';loadTextOptions(card.text,true);render();commit(before,'Delete dungeon room'); }
-	window.DungeonModules={capturePipelineMaterial:capturePipelineMaterial,applyCsvRooms:applyCsvRooms,initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setRoomLock:setRoomLock,setHeightLock:setHeightLock,setPadding:setPadding,setVerticalPadding:setVerticalPadding,roomPadding:roomPadding,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
+	window.DungeonModules={capturePipelineMaterial:capturePipelineMaterial,applyCsvRooms:applyCsvRooms,initialize:initialize,mount:mount,render:render,reflow:reflow,setAutoFit:setAutoFit,setRoomLock:setRoomLock,setHeightLock:setHeightLock,setPadding:setPadding,setVerticalPadding:setVerticalPadding,roomPadding:roomPadding,refresh:refresh,modules:modules,selected:selected,select:function(roomId){selectedId=roomId;refresh();},remove:remove,snapRoom:snapRoom,syncRoom:syncRoom,textVerticalArea:textVerticalArea,doorways:doorways,wallSegments:wallSegments,drawWalls:drawWalls,toGrid:toGrid,grid:grid};
 })();

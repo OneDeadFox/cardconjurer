@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 // Exercise the production writer, recording actual paragraph line placement.
 const source=fs.readFileSync('js/creator-23.js','utf8');
 const writer=source.slice(source.indexOf('function writeText('),source.indexOf('CanvasRenderingContext2D.prototype.fillTextArc'));
-function render(text,width=95,oneLine=false){
+function render(text,width=95,oneLine=false,roomArea=null,noVerticalCenter=false){
  const lines=[],ink=[];
  const widths={Destroy:65,target:55,noncreature:96,'permanent.':97,' ':5,Exact:95};
  const lineContext={font:'',measureText(word){return {width:widths[word]??word.length*10};},clearRect(){ink.length=0;},fillText(word){ink.push(word);},drawImage(){},save(){},restore(){}};
@@ -11,8 +11,9 @@ function render(text,width=95,oneLine=false){
   paragraphCanvas:{},lineCanvas:{},paragraphContext,lineContext,savedFont:null,
   document:{querySelector:()=>({checked:false,value:'x'})},FontLoadTracker:{track(){}},splitCJKCharacters:x=>x,prescanRubySize:()=>null,
   getCardTextCollisionFit:(t,w,h)=>({width:w,height:h,regions:[]}),cardTextInkBounds:()=>({top:0,bottom:20}),cardTextLinesOverlapRegions:()=>false,recordCardTextFit(){}};
+ if(roomArea)ctx.DungeonModules={textVerticalArea:()=>roomArea};
  ctx.window=ctx;vm.createContext(ctx);vm.runInContext(writer,ctx);
- ctx.writeText({name:'Room',text,width,height:500,size:20,align:'center',oneLine}, {drawImage(){}});
+ ctx.writeText({name:'Room',text,width,height:500,size:20,align:'center',oneLine,noVerticalCenter}, {drawImage(canvas,x,y){lines.verticalAdjust=y+300;}});
  return lines;
 }
 const result=render('Destroy target noncreature permanent.');
@@ -21,4 +22,9 @@ assert.deepEqual(result.map(l=>l.y),[0,20,40,60],'Narrow room words must not ins
 assert.deepEqual(render('Exact').map(l=>l.text),['Exact'],'Exact-width first word fits without a blank first line');
 assert.deepEqual(render('Destroy\n\ntarget',200).map(l=>l.y),[0,27,54],'Explicit paragraph breaks are preserved');
 assert.deepEqual(render('Destroy target',200).map(l=>l.text),['Destroy target'],'Ordinary wrapping is unchanged');
+const balanced=render('Destroy target',100,false,{top:12,bottom:100});
+assert.equal(balanced.verticalAdjust,36,'Visible line ink is centered in the safe room area');
+assert.equal(balanced.verticalAdjust-12,100-(balanced.verticalAdjust+40),'Top and bottom clearance are equal');
+const shifted=render('Destroy',100,false,{top:12,bottom:100},true);
+assert.equal(shifted.verticalAdjust,12,'Top-aligned text shifts only enough to clear the marker');
 console.log('PASS: production text writer handles oversized and exact-width words without blank rows, preserving explicit breaks.');

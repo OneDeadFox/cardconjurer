@@ -20,3 +20,14 @@ const fitted=clone(source);D.applyCsvRooms(fitted,fields,[]);ctx.card=fitted;fit
 for(const row of new Set(fitted.dungeonModules.map(r=>r.csvRowId))){const pair=fitted.dungeonModules.filter(r=>r.csvRowId===row);if(pair.length===2){assert.equal(pair[0].bounds.y,pair[1].bounds.y);assert.equal(pair[0].bounds.height,pair[1].bounds.height);}}
 const pair=fitted.dungeonModules.filter(r=>r.csvRowId===fitted.dungeonModules[1].csvRowId);pair[0].bounds.height+=.02;D.snapRoom(pair[0],'bottom');assert.equal(pair[0].bounds.height,pair[1].bounds.height,'Manual edge dragging keeps paired row heights equal');
 console.log('PASS: dungeon CSV assignments, optional equal splits, stable IDs, cleanup, Plantin, geometry preservation, paired autofit and dragging.');
+// Doorway clearance is a render-time adjustment, including saved templates
+// with minimal padding. It must not change authored padding or locked geometry.
+const clearanceCard={width:1000,height:1400,version:'dungeonModules',dungeonPadding:4,frames:[],text:{a:{y:4/1400},b:{y:704/1400}},dungeonModules:[{id:'a',textKey:'a',bounds:{x:0,y:0,width:1,height:.5},geometryLocked:true},{id:'b',textKey:'b',bounds:{x:0,y:.5,width:1,height:.5}}]};
+const originalClearance=JSON.stringify(clearanceCard),upper=D.textVerticalArea(clearanceCard.text.a,clearanceCard),lower=D.textVerticalArea(clearanceCard.text.b,clearanceCard);
+assert.ok(upper.bottom<692,'Upper room text clears the outgoing triangle');
+assert.ok(lower.top>4,'Lower room text clears the incoming triangle');
+assert.equal(JSON.stringify(clearanceCard),originalClearance,'Automatic clearance does not mutate room geometry or padding');
+clearanceCard.dungeonVerticalPadding={top:30,bottom:40};
+assert.equal(D.textVerticalArea(clearanceCard.text.a,clearanceCard).bottom,656,'Larger custom padding is preserved');
+assert.equal(D.textVerticalArea({},clearanceCard),null,'Non-room fields use their existing layout');
+console.log('PASS: incoming/outgoing marker clearance, custom padding, and unchanged locked room geometry.');

@@ -3312,6 +3312,7 @@ function writeText(textObject, targetContext) {
 	var collisionMinimumTextSize = Math.min(startingTextSize, Math.max(1, 1 - fontSizeModifier));
 	if (textObject.rangeUniformTextSize && !textObject.rangeClip) collisionMinimumTextSize = startingTextSize;
 	var collisionFit = getCardTextCollisionFit(textObject, textWidth, textHeight);
+	var dungeonVerticalArea=card.version==='dungeonModules'&&window.DungeonModules?.textVerticalArea(textObject);
 	var collisionFitFailed = false;
 	// Empty fields need no line height and must not constrain shared font fitting.
 	if (!String(textObject.text || '').trim()) {
@@ -3544,6 +3545,7 @@ function writeText(textObject, targetContext) {
 		var drawToPrePTCanvas = false;
 		var widestLineWidth = 0;
 		var renderedLines = [];
+		var lineInkTop=Infinity,lineInkBottom=-Infinity;
 		var wrapEnabled = wrapOffset !== null && collisionFit.regions.length &&
 			!textObject.oneLine && !textObject.vertical && !textObject.arcRadius &&
 			(!textObject.align || textObject.align === 'left') && (!textObject.justify || textObject.justify === 'left');
@@ -3947,6 +3949,7 @@ function writeText(textObject, targetContext) {
 						shadowOffsetY: textShadowOffsetY,
 						shadowBlur: textShadowBlur
 					});
+					if(dungeonVerticalArea){lineInkTop=Math.min(lineInkTop,manaSymbolY-canvasMargin);lineInkBottom=Math.max(lineInkBottom,manaSymbolY-canvasMargin+manaSymbolHeight);}
 					currentX += manaSymbolWidth + manaSymbolSpacing * 2;
 
 					manaSymbolColor = origManaSymbolColor;
@@ -4152,11 +4155,11 @@ function writeText(textObject, targetContext) {
 				}
 				paragraphContext.drawImage(lineCanvas, horizontalAdjust, currentY);
 				if (currentX > startingCurrentX) {
-					var inkBounds = cardTextInkBounds(lineContext, textSize);
+					var inkBounds = dungeonVerticalArea&&Number.isFinite(lineInkTop)?{top:lineInkTop,bottom:lineInkBottom}:cardTextInkBounds(lineContext, textSize);
 					renderedLines.push({left:horizontalAdjust + startingCurrentX, right:horizontalAdjust + currentX,
 						top:currentY + inkBounds.top, bottom:currentY + inkBounds.bottom});
 				}
-				lineY = 0;
+				lineY = 0;lineInkTop=Infinity;lineInkBottom=-Infinity;
 				lineContext.clearRect(0, 0, lineCanvas.width, lineCanvas.height);
 				// boxes for 'roll a d20' cards
 				if (savedRollYPosition != null && (newLineSpacing != 0 || !(newLine && !textOneLine))) {
@@ -4215,6 +4218,11 @@ function writeText(textObject, targetContext) {
 					lineContext.restore();
 				}
 
+				if(dungeonVerticalArea&&wordToWrite.trim()){
+					var wordMetrics=lineContext.measureText(wordToWrite),fallbackInk=cardTextInkBounds(lineContext,textSize);
+					lineInkTop=Math.min(lineInkTop,lineY+(Number.isFinite(wordMetrics.actualBoundingBoxAscent)?textSize*textFontHeightRatio-wordMetrics.actualBoundingBoxAscent:fallbackInk.top));
+					lineInkBottom=Math.max(lineInkBottom,lineY+(Number.isFinite(wordMetrics.actualBoundingBoxDescent)?textSize*textFontHeightRatio+wordMetrics.actualBoundingBoxDescent:fallbackInk.bottom));
+				}
 				if (fillJustify) {
 					currentX += lineContext.measureJustifiedText(wordToWrite, justifyWidth, justifySettings);
 				} else {
@@ -4237,6 +4245,19 @@ function writeText(textObject, targetContext) {
 				var verticalAdjust = 0;
 				if (!textObject.noVerticalCenter) {
 					verticalAdjust = Math.max(0, (textHeight - currentY + textSize * 0.15) / 2);
+				}
+				// Dungeon rooms balance visible ink inside their safe padded area,
+				// rather than centering the nominal line advances over a doorway.
+				var roomArea=dungeonVerticalArea;
+				if(roomArea&&renderedLines.length&&!textObject.rotation&&!textObject.arcRadius&&!textObject.vertical){
+					var inkTop=Math.min(...renderedLines.map(line=>line.top)),inkBottom=Math.max(...renderedLines.map(line=>line.bottom));
+					var available=Math.max(1,roomArea.bottom-roomArea.top);
+					if(inkBottom-inkTop>available+.5){
+						if(startingTextSize>collisionMinimumTextSize){startingTextSize=Math.max(collisionMinimumTextSize,startingTextSize-1);continue outerloop;}
+						collisionFitFailed=true;
+					}
+					if(!textObject.noVerticalCenter)verticalAdjust=(roomArea.top+roomArea.bottom-inkTop-inkBottom)/2;
+					else if(inkBottom-inkTop<=available)verticalAdjust=Math.max(roomArea.top-inkTop,Math.min(roomArea.bottom-inkBottom,verticalAdjust));
 				}
 				var finalHorizontalAdjust = 0;
 				const horizontalAdjustUnit = (textWidth - widestLineWidth) / 2;
