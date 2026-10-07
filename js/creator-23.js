@@ -3098,6 +3098,40 @@ async function drawText() {
  drawText.promise=(async function(){do{drawText.pending=false;await drawTextOnce();}while(drawText.pending);})();
  try{return await drawText.promise;}finally{drawText.promise=null;}
 }
+// Runtime colors stay out of templates: the same layout can use different art.
+window.CardRulesTextColors = new WeakMap();
+var cardRulesColorSample;
+function sampleCardRulesTextColors() {
+	var changed=false;
+	for (const [key,field] of Object.entries(card.text||{})) {
+		const role=cardTextSemanticRole(field,key);
+		const isRules=role==='rules'||(!role&&!field.oneLine&&(/ability|room/i.test(field.name||key)||/^mplantin/i.test(field.font||'')));
+		if(!isRules||field.hidden||field.autoTextColor===false) {window.CardRulesTextColors.delete(field);continue;}
+		try {
+			if(!cardRulesColorSample){cardRulesColorSample=document.createElement('canvas');cardRulesColorSample.width=15;cardRulesColorSample.height=9;}
+			const ctx=cardRulesColorSample.getContext('2d',{willReadFrequently:true});
+			const b=field.clipToBounds&&field.rangeClip||field;
+			const x=scaleX(b.x||0),y=scaleY(b.y||0),w=scaleWidth(b.width||1),h=scaleHeight(b.height||1);
+			// Inset the sample to avoid borders, badges and neighboring regions.
+			ctx.clearRect(0,0,15,9);
+			ctx.drawImage(cardCanvas,x+w*.06,y+h*.08,w*.88,h*.84,0,0,15,9);
+			const pixels=ctx.getImageData(0,0,15,9).data;
+			let sum=0,weight=0;
+			const linear=v=>{v/=255;return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4);};
+			for(let i=0;i<pixels.length;i+=4){const a=pixels[i+3]/255;sum+=a*(.2126*linear(pixels[i])+.7152*linear(pixels[i+1])+.0722*linear(pixels[i+2]));weight+=a;}
+			if(!weight)continue;
+			const luminance=sum/weight,previous=window.CardRulesTextColors.get(field);
+			// Slight hysteresis prevents flicker while dragging artwork near the crossover.
+			const threshold=previous==='black'?.17:previous==='white'?.19:.179;
+			const color=luminance>threshold?'black':'white';
+			if(previous!==color){window.CardRulesTextColors.set(field,color);changed=true;}
+		} catch(error) {
+			// Cross-origin art must not prevent rendering or export.
+			window.CardRulesTextColors.delete(field);
+		}
+	}
+	return changed;
+}
 async function drawTextOnce() {
 	// Image loads can request a redraw before the initial frame defines text.
 	// Leave it unset so the frame pack can still initialize its defaults.
@@ -3109,6 +3143,8 @@ async function drawTextOnce() {
 		if (typeof dungeonEdited==='function') dungeonEdited(true);
 		DungeonModules.refresh();
 	}
+	// Sample the current composited art/frame, never yesterday's text pixels.
+	drawCard(true);
 	await window.FrameSectionTools?.fitUniformText(async function (field, key) {
 		resetCardTextFitState();
 		await writeText(field, textContext);
@@ -3510,6 +3546,7 @@ function writeText(textObject, targetContext) {
 		        }
 		    }
 		}
+		textColor = window.CardRulesTextColors?.get(textObject) || textColor;
 		var textFont = textObject.font || 'mplantin';
 		FontLoadTracker.track(textFont);
 		var textAlign = textObject.align || 'left';
@@ -5714,7 +5751,8 @@ initializeLayoutHighlightInteractions();
 initializeDesignUndoInteractions();
 
 //DRAWING THE CARD (putting it all together)
-function drawCard() {
+function drawCard(backgroundOnly=false) {
+	backgroundOnly=backgroundOnly===true;
 	window.BossFrameTools?.refresh();
 	// reset
 	cardContext.globalCompositeOperation = 'source-over';
@@ -5761,7 +5799,7 @@ function drawCard() {
 		cardContext.drawImage(qrCodeCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
 	} // REMOVE/DELETE PLANESWALKERCANVAS AFTER A FEW WEEKS
 	// guidelines
-	if (document.querySelector('#show-guidelines').checked) {
+	if (!backgroundOnly && document.querySelector('#show-guidelines').checked) {
 		cardContext.drawImage(guidelinesCanvas, scaleX(card.marginX) / 2, scaleY(card.marginY) / 2, cardCanvas.width, cardCanvas.height);
 	}
 	// watermark
@@ -5775,6 +5813,9 @@ function drawCard() {
 		cardContext.drawImage(dungeonCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
 	}
 	// text
+	var rulesColorChanged=sampleCardRulesTextColors();
+	if(backgroundOnly)return;
+	if(rulesColorChanged)drawTextBuffer();
 	cardContext.drawImage(textCanvas, 0, 0, cardCanvas.width, cardCanvas.height);
 	// set symbol
 	if (card.setSymbolBounds) {
