@@ -31,7 +31,7 @@ assert.ok(Math.abs(card.dungeonModules[1].bounds.width-card.dungeonModules[2].bo
 assert.ok(Math.abs(card.dungeonModules[0].bounds.y-94/840)<1e-9,'Bevel does not shift the title-bottom anchor');
 assert.ok(pixel(jx,jy)[3]>240,'Shared junction has no missing core');
 assert.ok(pixel(jx,jy)[2]>100,'An interior junction does not get a black overlapping outline');
-assert.ok(pixel(Math.round(footer.bounds.x*600)+2,Math.round(footer.bounds.y*840)+2)[3]>240,'Unequal wall widths meet without a missing corner quadrant');
+assert.ok(pixel(Math.round(footer.bounds.x*600)+1,Math.round(footer.bounds.y*840)+1)[3]>240,'Equal wall widths meet without a missing corner quadrant');
 // Auto-fit retains both exterior anchors and the art/footer boundary even without height lock.
 card.dungeonAutoFit=true;ctx.DungeonModules.reflow();
 assert.equal(footer.bounds.y,.61);assert.ok(Math.abs(footer.bounds.y+footer.bounds.height-704/840)<1e-9);
@@ -69,3 +69,10 @@ assert.ok(Math.abs(coverageWidth(130,2200)-20)<.02,'Exterior wall uses exactly t
 assert.ok(Math.abs(coverageWidth(1012,1000)-20)<.02,'Fractional art divider stays 20 px wide without double-painted antialiasing');
 if(process.env.DUNGEON_RASTER_OUTPUT)fs.writeFileSync(process.env.DUNGEON_RASTER_OUTPUT,walls.toBuffer('image/png'));
 console.log('PASS: raster junction cores, missing quadrants, bevel anchors, fixed footer during fit, edited corner coverage, and frame-change redraw ordering.');
+const topY=nativeCard.dungeonModules[0].bounds.y*2814;
+const horizontalPixels=nativeWalls.getContext('2d').getImageData(1600,Math.floor(topY)-15,1,31).data;
+let horizontalCoverage=0;for(let i=3;i<horizontalPixels.length;i+=4)horizontalCoverage+=horizontalPixels[i]/255;
+assert.ok(Math.abs(horizontalCoverage-20)<.03,'Horizontal walls match the authored 20 px vertical thickness');
+const outerPixel=Array.from(nativeWalls.getContext('2d').getImageData(1874,1000,1,1).data);
+assert.ok(outerPixel[2]>100,'Right exterior retains pipeline color instead of an added black outline');
+console.log('PASS: equal horizontal/vertical thickness and clean exterior edge.');

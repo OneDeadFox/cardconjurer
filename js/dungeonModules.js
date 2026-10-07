@@ -11,10 +11,20 @@
 	function paintPipelineWalls(context,material,segments,cornerModel,trace){
 		var canvas=document.createElement('canvas');canvas.width=card.width;canvas.height=card.height;
 		var shape=canvas.getContext('2d');if(!shape.createImageData)return false;
+		// Match horizontal runs to the authored vertical wall width. Keep source
+		// anchors for layout; only resample the rendered cross-section.
+		var place=material.samplePlacement||material.placement,vertical=material.right||material.left;
+		if(vertical){
+			var horizontalUnit=card.height*(place.height||1)/material.sourceHeight,verticalWidth=vertical.length*card.width*(place.width||1)/material.sourceWidth;
+			var count=Math.max(1,Math.round(verticalWidth/horizontalUnit)),oldTop=material.top;
+			material=Object.assign({},material);
+			['top','bottom'].forEach(function(k){var original=material[k],rows=[];for(var r=0;r<count;r++)rows.push(original[Math.min(original.length-1,Math.round(r*(original.length-1)/Math.max(1,count-1)))]);rows.anchor=original.anchor*count/original.length;material[k]=rows;});
+			if(material.underline)material.underline=Object.assign({},material.underline,{offset:material.underline.offset*count/oldTop.length,depth:material.underline.depth*count/oldTop.length});
+		}
 		var key=JSON.stringify([card.width,card.height,material,[material.top.anchor,material.bottom.anchor,material.left?.anchor,material.right?.anchor],segments,cornerModel?.paths]);
 		if(wallRasterCache.has(key)){context.drawImage(wallRasterCache.get(key),0,0);return true;}
 		var placement=material.samplePlacement||material.placement;
-		var bottom=Math.max(...modules().map(r=>r.bounds.y+r.bounds.height))*card.height,left=Math.min(...modules().map(r=>r.bounds.x))*card.width;
+		var bottom=Math.max(...modules().map(r=>r.bounds.y+r.bounds.height))*card.height,left=Math.min(...modules().map(r=>r.bounds.x))*card.width,right=Math.max(...modules().map(r=>r.bounds.x+r.bounds.width))*card.width;
 		function profileAt(horizontal,x,y){return horizontal?(Math.abs(y-bottom)<=material.bottom.length*unit(true)+2?material.bottom:material.top):(Math.abs(x-left)<=(material.left?.length||0)*unit(false)+2?material.left:material.right)||material.top;}
 		function unit(horizontal){return horizontal?card.height*(placement.height||1)/material.sourceHeight:card.width*(placement.width||1)/material.sourceWidth;}
 		var widths=[material.top.length*unit(true),material.bottom.length*unit(true)];if(material.left)widths.push(material.left.length*unit(false));if(material.right)widths.push(material.right.length*unit(false));
@@ -73,6 +83,11 @@
 				if(boundary>=outlineDepth)for(var ox=-1;ox<=1;ox+=2)for(var oy=-1;oy<=1;oy+=2)boundary=Math.min(boundary,distance(x,y,ox,oy));
 				if(boundary<outlineDepth){output.data[i]=outlineColor[0];output.data[i+1]=outlineColor[1];output.data[i+2]=outlineColor[2];output.data[i+3]=data[i+3];}
 			}
+
+			// Outer frame sides have no room-facing shadow. Paint their outside
+			// halves with the pipeline core, including where source artwork has a
+			// dark outer bevel; interior dividers retain both outlined sides.
+			if(x+.5<left||x+.5>=right){var outer=verticalTables.get(vp)||table(vp,false),core=(Math.min(vp.length-1,Math.floor(vp.anchor))*h+y)*4;output.data[i]=outer[core];output.data[i+1]=outer[core+1];output.data[i+2]=outer[core+2];output.data[i+3]=data[i+3]*outer[core+3]/255;}
 
 		}}
 

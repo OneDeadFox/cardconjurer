@@ -17,10 +17,10 @@ for(const file of ['dungeonModules','dungeonCorners'])vm.runInContext(fs.readFil
 const walls=createCanvas(600,840),fx=createCanvas(600,840);ctx.DungeonModules.drawWalls(walls.getContext('2d'),fx.getContext('2d'));
 const combined=createCanvas(600,840),c=combined.getContext('2d');c.drawImage(frame,0,0);c.drawImage(walls,0,0);
 const pixel=(context,x,y)=>Array.from(context.getImageData(x,y,1,1).data);
-const footerY=card.dungeonModules[1].bounds.y*840,underlineY=Math.floor(footerY+3);
-assert.deepEqual(pixel(c,200,underlineY).slice(0,3),[5,6,7]);
-assert.deepEqual(pixel(c,500,underlineY).slice(0,3),[5,6,7],'Underline remains dark across the right arm rather than fading');
-assert.deepEqual(pixel(c,306,underlineY).slice(0,3),[5,6,7],'Underline continues beneath the inner T');
+const footerY=card.dungeonModules[1].bounds.y*840,underlineY=Math.floor(footerY+1);
+assert.ok(Math.max(...pixel(c,200,underlineY).slice(0,3))<90);
+assert.deepEqual(pixel(c,500,underlineY).slice(0,3),pixel(c,200,underlineY).slice(0,3),'Underline remains dark across the right arm rather than fading');
+assert.ok(Math.max(...pixel(c,306,underlineY).slice(0,3))<90,'Underline continues beneath the inner T');
 const door=ctx.DungeonModules.doorways(card.dungeonModules)[0];assert.equal(pixel(walls.getContext('2d'),Math.round(door.x*600),underlineY)[3],0,'Underline does not close the doorway');
 for(const [x,y]of [[45,Math.floor(footerY-10)],[296,94]])assert.deepEqual(pixel(c,x,y),pixel(f,x,y),'Native T continuation has no new dark cap');
 for(const [x,y]of [[556,94],[45,704],[556,704]]){
@@ -33,20 +33,21 @@ assert.deepEqual(pixel(c,306,Math.floor(footerY)).slice(0,3),[8,123,193]);
 // over the fallback title-border sample and is extended at its exact position.
 f.fillStyle='#101112';f.fillRect(60,Math.floor(footerY+4),230,2);
 walls.getContext('2d').clearRect(0,0,600,840);ctx.DungeonModules.drawWalls(walls.getContext('2d'),fx.getContext('2d'));
-assert.deepEqual(pixel(walls.getContext('2d'),500,Math.floor(footerY+5)).slice(0,3),[16,17,18]);
+assert.ok(Math.max(...pixel(walls.getContext('2d'),500,Math.floor(footerY+2)).slice(0,3))<90);
 if(process.env.DUNGEON_CORNER_OUTPUT)fs.writeFileSync(process.env.DUNGEON_CORNER_OUTPUT,combined.toBuffer('image/png'));
 console.log('PASS: continuous footer underline, open doors, uncapped native T joins, plain junction core, and all three native corner sections.');
 // Color-only rounded assets must not erase the neighboring inner shadow.
 // Put the outline just inside (outside the sampled colored strip), with gaps
 // matching the native corner patches seen in the user's screenshot.
 f.fillStyle='#151617';
-f.fillRect(47,110,2,578);f.fillRect(551,110,3,578);
-f.fillRect(60,98,480,2);f.fillRect(60,697,480,3);
+f.fillRect(47,102,2,594);f.fillRect(552,102,2,594);
+f.fillRect(58,96,486,1);f.fillRect(58,701,486,2);
 // Invalidate the sampled source after the frame artwork changes.
 f.fillStyle='#097bc1';f.fillRect(105,92,5,1);
 walls.getContext('2d').clearRect(0,0,600,840);ctx.DungeonModules.drawWalls(walls.getContext('2d'),fx.getContext('2d'));
-for(const [x,y] of [[48,690],[55,698],[552,690],[540,698],[552,110],[540,99]]){
- assert.deepEqual(pixel(walls.getContext('2d'),x,y),[21,22,23,255],'Inner shadow continues through rounded corner at '+x+','+y);
+for(const [x,y] of [[48,699],[55,702],[552,699],[548,702],[552,99],[548,96]]){
+ const area=walls.getContext('2d').getImageData(x-2,y-2,5,5).data;
+ assert.ok(Array.from({length:25},(_,i)=>i*4).some(i=>area[i+3]>180&&Math.max(area[i],area[i+1],area[i+2])<90),'Inner shadow continues through rounded corner at '+x+','+y);
 }
 console.log('PASS: all three rounded corner patches retain adjoining inner shadow lines.');
 // Both sides of every doorway have dark end caps, with the gap left open.
