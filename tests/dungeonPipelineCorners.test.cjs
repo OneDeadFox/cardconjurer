@@ -36,3 +36,16 @@ walls.getContext('2d').clearRect(0,0,600,840);ctx.DungeonModules.drawWalls(walls
 assert.deepEqual(pixel(walls.getContext('2d'),500,Math.floor(footerY+5)).slice(0,3),[16,17,18]);
 if(process.env.DUNGEON_CORNER_OUTPUT)fs.writeFileSync(process.env.DUNGEON_CORNER_OUTPUT,combined.toBuffer('image/png'));
 console.log('PASS: continuous footer underline, open doors, uncapped native T joins, plain junction core, and all three native corner sections.');
+// Color-only rounded assets must not erase the neighboring inner shadow.
+// Put the outline just inside (outside the sampled colored strip), with gaps
+// matching the native corner patches seen in the user's screenshot.
+f.fillStyle='#151617';
+f.fillRect(47,110,2,578);f.fillRect(551,110,3,578);
+f.fillRect(60,98,480,2);f.fillRect(60,697,480,3);
+// Invalidate the sampled source after the frame artwork changes.
+f.fillStyle='#097bc1';f.fillRect(105,92,5,1);
+walls.getContext('2d').clearRect(0,0,600,840);ctx.DungeonModules.drawWalls(walls.getContext('2d'),fx.getContext('2d'));
+for(const [x,y] of [[48,690],[55,698],[552,690],[540,698],[552,110],[540,99]]){
+ assert.deepEqual(pixel(walls.getContext('2d'),x,y),[21,22,23,255],'Inner shadow continues through rounded corner at '+x+','+y);
+}
+console.log('PASS: all three rounded corner patches retain adjoining inner shadow lines.');
