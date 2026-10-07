@@ -16,12 +16,19 @@
 		var place=material.samplePlacement||material.placement,vertical=material.right||material.left;
 		if(vertical){
 			var horizontalUnit=card.height*(place.height||1)/material.sourceHeight,verticalWidth=vertical.length*card.width*(place.width||1)/material.sourceWidth;
-			var count=Math.max(1,Math.round(verticalWidth/horizontalUnit)),oldTop=material.top;
+			var count=Math.max(1,Math.round(verticalWidth/horizontalUnit)),oldTop=material.top,originalBottom=material.bottom;
 			material=Object.assign({},material);
 			['top','bottom'].forEach(function(k){var original=material[k],rows=[];for(var r=0;r<count;r++)rows.push(original[Math.min(original.length-1,Math.round(r*(original.length-1)/Math.max(1,count-1)))]);rows.anchor=original.anchor*count/original.length;material[k]=rows;});
 			if(material.underline)material.underline=Object.assign({},material.underline,{offset:material.underline.offset*count/oldTop.length,depth:material.underline.depth*count/oldTop.length});
 		}
-		var key=JSON.stringify([card.width,card.height,material,[material.top.anchor,material.bottom.anchor,material.left?.anchor,material.right?.anchor],segments,cornerModel?.paths]);
+		var nativeStamp=[];
+		if(material.rendered&&window.frameCanvas&&cornerModel){
+			var nc=window.frameCanvas.getContext('2d');cornerModel.nodes.filter(function(n){return n.settings.style==='square';}).forEach(function(n){
+				var x=Math.max(0,Math.floor(n.x-64+(Number(card.marginX)||0)*card.width)),y=Math.max(0,Math.floor(n.y-64+(Number(card.marginY)||0)*card.height)),pw=Math.min(128,window.frameCanvas.width-x),ph=Math.min(128,window.frameCanvas.height-y);if(pw<=0||ph<=0)return;
+				var pixels=nc.getImageData(x,y,pw,ph).data,hash=2166136261;for(var i=0;i<pixels.length;i++)hash=Math.imul(hash^pixels[i],16777619);nativeStamp.push(hash);
+			});
+		}
+		var key=JSON.stringify([nativeStamp,card.width,card.height,material,[material.top.anchor,material.bottom.anchor,material.left?.anchor,material.right?.anchor],segments,cornerModel?.paths]);
 		if(wallRasterCache.has(key)){context.drawImage(wallRasterCache.get(key),0,0);return true;}
 		var placement=material.samplePlacement||material.placement;
 		var bottom=Math.max(...modules().map(r=>r.bounds.y+r.bounds.height))*card.height,left=Math.min(...modules().map(r=>r.bounds.x))*card.width,right=Math.max(...modules().map(r=>r.bounds.x+r.bounds.width))*card.width;
@@ -102,18 +109,38 @@
 		// Reveal it once, avoiding a second square stroke over the curved artwork.
 
 		nativeCorners.forEach(function(n){
-			var hp=profileAt(true,n.x,n.y),vp=profileAt(false,n.x,n.y),rx=Math.max(vp.length*unit(false)*3,hp.length*unit(true)*2),ry=Math.max(hp.length*unit(true)*2,vp.length*unit(false)*2);
-			rx=Math.min(rx,(n.arms.left||n.arms.right||Infinity)*.45);ry=Math.min(ry,(n.arms.up||n.arms.down||Infinity)*.45);
-			var dx=n.arms.right?1:-1,dy=n.arms.down?1:-1;
-			// Reveal only the exterior of the native turn. Clearing the whole
-			// patch exposed a second, thicker inner edge from the original frame;
-			// stitching sampled lines over it produced ledges and double shadows.
-			// The room-facing quadrant keeps the same union-rendered wall as the
-			// adjoining runs, including its outline and current thickness.
-			shape.save();shape.beginPath();
-			if(dx>0)shape.rect(n.x-rx,n.y-ry,rx,ry*2);else shape.rect(n.x,n.y-ry,rx,ry*2);
-			if(dy>0)shape.rect(n.x-rx,n.y-ry,rx*2,ry);else shape.rect(n.x-rx,n.y,rx*2,ry);
-			shape.clip();shape.clearRect(n.x-rx,n.y-ry,rx*2,ry*2);shape.restore();
+			var hp=profileAt(true,n.x,n.y),vp=profileAt(false,n.x,n.y),ux=unit(false),uy=unit(true);
+			var rx=Math.min(Math.max(vp.length*ux*3,hp.length*uy*2),(n.arms.left||n.arms.right||Infinity)*.45),ry=Math.min(Math.max(hp.length*uy*2,vp.length*ux*2),(n.arms.up||n.arms.down||Infinity)*.45);
+			var native=window.frameCanvas;if(!native?.width||!oldTop||!originalBottom)return;
+			var original=n.arms.down?oldTop:originalBottom;
+			var oldUnit=horizontalUnit,oldStart=n.y-original.anchor*oldUnit,oldEnd=oldStart+original.length*oldUnit;
+			var start=n.y-hp.anchor*uy,end=start+hp.length*uy;
+			// Copy the complete native curve, not separate quadrants. Normalize
+			// its horizontal band to the wall width before blending into the runs.
+			var x0=Math.floor(n.x-rx),y0=Math.floor(n.y-ry),pw=Math.ceil(rx*2),ph=Math.ceil(ry*2);
+			var patch=document.createElement('canvas');patch.width=pw;patch.height=ph;var pc=patch.getContext('2d');
+			for(var row=0;row<ph;row++){
+				var y=y0+row+.5,sourceY=y;
+				if(y>=start&&y<=end)sourceY=oldStart+(y-start)*(oldEnd-oldStart)/(end-start);
+				else if(y<start)sourceY=y+(oldStart-start)*Math.max(0,1-(start-y)/Math.max(1,ry));
+				else sourceY=y+(oldEnd-end)*Math.max(0,1-(y-end)/Math.max(1,ry));
+				pc.drawImage(native,x0+(Number(card.marginX)||0)*card.width,sourceY-.5+(Number(card.marginY)||0)*card.height,pw,1,0,row,pw,1);
+			}
+			// Continue the room-facing outline through the native square inside
+			// turn. The rounded exterior remains the original frame artwork.
+			if(outlineDepth){var dx=n.arms.right?1:-1,dy=n.arms.down?1:-1,ix=n.x+(dx>0?vp.length-vp.anchor:-vp.anchor)*ux,iy=n.y+(dy>0?hp.length-hp.anchor:-hp.anchor)*uy;
+				pc.strokeStyle='rgba('+outlineColor.join(',')+')';pc.lineWidth=outlineDepth;pc.lineJoin='miter';pc.beginPath();pc.moveTo(n.x+dx*rx-x0,iy-dy*outlineDepth/2-y0);pc.lineTo(ix-dx*outlineDepth/2-x0,iy-dy*outlineDepth/2-y0);pc.lineTo(ix-dx*outlineDepth/2-x0,n.y+dy*ry-y0);pc.stroke();}
+			var pixels=pc.getImageData(0,0,pw,ph),existing=shape.getImageData(x0,y0,pw,ph);
+			for(var py=0;py<ph;py++)for(var px=0;px<pw;px++){
+				var i=(py*pw+px)*4,fade=Math.min(1,Math.max(0,(rx-Math.abs(x0+px+.5-n.x))/(rx*.35)),Math.max(0,(ry-Math.abs(y0+py+.5-n.y))/(ry*.35)));
+				var inside=(x0+px+.5-n.x)*(n.arms.right?1:-1)>=0&&(y0+py+.5-n.y)*(n.arms.down?1:-1)>=0;
+				if(inside&&pixels.data[i+3]<254)continue;
+				// Interpolate premultiplied pixels in one operation. Erasing then
+				// drawing a feathered patch reduces alpha twice and leaves a halo.
+				var oldAlpha=existing.data[i+3]/255*(1-fade),newAlpha=pixels.data[i+3]/255*fade,alpha=oldAlpha+newAlpha;
+				for(var channel=0;channel<3;channel++)existing.data[i+channel]=alpha?(existing.data[i+channel]*oldAlpha+pixels.data[i+channel]*newAlpha)/alpha:0;
+				existing.data[i+3]=alpha*255;
+			}shape.putImageData(existing,x0,y0);
 		});
 		// Door ends are cuts across a wall, not left/right source-frame edges.
 		// Give both ends the same dark cap; the source's outer highlight must not

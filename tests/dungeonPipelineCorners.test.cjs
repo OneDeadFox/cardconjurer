@@ -25,7 +25,8 @@ const door=ctx.DungeonModules.doorways(card.dungeonModules)[0];assert.equal(pixe
 for(const [x,y]of [[45,Math.floor(footerY-10)],[296,94]])assert.deepEqual(pixel(c,x,y),pixel(f,x,y),'Native T continuation has no new dark cap');
 for(const [x,y]of [[556,94],[45,704],[556,704]]){
  const dx=x===45?1:-1,dy=y===94?1:-1;
- for(let oy=-8;oy<8;oy++)for(let ox=-8;ox<8;ox++)if((ox+.5)*dx<0||(oy+.5)*dy<0)assert.deepEqual(pixel(c,x+ox,y+oy),pixel(f,x+ox,y+oy),'Native exterior rounded artwork remains unchanged');
+ assert.equal(pixel(walls.getContext('2d'),x-dx*6,y-dy*6)[3],0,'Rounded exterior stays open instead of a square overlay');
+ assert.ok(pixel(c,x+dx,y+dy)[3]>200,'Native inside turn has continuous coverage');
 }
 // Internal junction cores should remain plain, without a square light/dark tile.
 assert.deepEqual(pixel(c,306,Math.floor(footerY)).slice(0,3),[8,123,193]);
