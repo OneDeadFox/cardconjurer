@@ -63,7 +63,7 @@
 		var parsed=new WeakMap();function colors(profile){var result=parsed.get(profile);if(!result){result=profile.map(function(stops){return stops.map(function(s){return {position:s.position,rgba:s.color.match(/[\d.]+/g).map(Number)};});});parsed.set(profile,result);}return result;}
 		function color(profile,index,position){var stops=colors(profile)[Math.max(0,Math.min(profile.length-1,index))],a=stops[0],b=stops[stops.length-1];for(var i=1;i<stops.length;i++){if(position<=stops[i].position){a=stops[i-1];b=stops[i];break;}}var t=Math.max(0,Math.min(1,(position-a.position)/(b.position-a.position||1)));return a.rgba.map(function(v,i){return v+(b.rgba[i]-v)*t;});}
 		var tables=new WeakMap(),sy=unit(true),sx=unit(false);
-		function table(profile,horizontal){var old=tables.get(profile),span=horizontal?w:h;if(old&&old.span===span)return old.data;var data=new Uint8ClampedArray(profile.length*span*4);for(var row=0;row<profile.length;row++)for(var position=0;position<span;position++){var relative=(position/span-(horizontal?(placement.x||0):(placement.y||0)))/(horizontal?(placement.width||1):(placement.height||1)),rgba=color(profile,row,relative),i=(row*span+position)*4;data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=rgba[3]*255;}tables.set(profile,{span:span,data:data});return data;}
+		function table(profile,horizontal){var old=tables.get(profile),span=horizontal?w:h;if(old&&old.span===span)return old.data;var data=new Uint8ClampedArray(profile.length*span*4);for(var row=0;row<profile.length;row++)for(var position=0;position<span;position++){var relative=(position/span-(horizontal?(placement.x||0):(placement.y||0)))/(horizontal?(placement.width||1):(placement.height||1));if(!horizontal&&material.rendered&&envelope)relative=Math.max((envelope.top+.04-(placement.y||0))/(placement.height||1),Math.min((envelope.bottom-.04-(placement.y||0))/(placement.height||1),relative));var rgba=color(profile,row,relative),i=(row*span+position)*4;data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=rgba[3]*255;}tables.set(profile,{span:span,data:data});return data;}
 		// The texture supplies color and bevel, while the union supplies the
 		// silhouette. A right-side source strip can have a highlight instead of
 		// a dark edge; it must not remove the outline of a room or a T junction.
@@ -106,11 +106,15 @@
 		}
 		// The composed frame already contains the correctly colored native
 		// pipeline and rounded title/type corners at these exact coordinates.
-		// Reveal it once, avoiding a second square stroke over the curved artwork.
+		// Normalize the lower run and its native turns together so the old
+		// typeline border cannot remain visible underneath a second dark edge.
 
-		nativeCorners.forEach(function(n){
+		var nativeSections=nativeCorners.slice();
+		if(nativeCorners.length&&envelope)nativeSections.unshift({x:(left+right)/2,y:bottom,arms:{left:(right-left)/2,right:(right-left)/2,up:1},straight:true});
+		nativeSections.forEach(function(n){
 			var hp=profileAt(true,n.x,n.y),vp=profileAt(false,n.x,n.y),ux=unit(false),uy=unit(true);
 			var rx=Math.min(Math.max(vp.length*ux*3,hp.length*uy*2),(n.arms.left||n.arms.right||Infinity)*.45),ry=Math.min(Math.max(hp.length*uy*2,vp.length*ux*2),(n.arms.up||n.arms.down||Infinity)*.45);
+			if(n.straight){rx=(right-left)/2-vp.length*ux;if(rx<=0)return;ry=Math.max(hp.length*uy*2,vp.length*ux*2);}
 			var native=window.frameCanvas;if(!native?.width||!oldTop||!originalBottom)return;
 			var original=n.arms.down?oldTop:originalBottom;
 			var oldUnit=horizontalUnit,oldStart=n.y-original.anchor*oldUnit,oldEnd=oldStart+original.length*oldUnit;
@@ -126,15 +130,28 @@
 				else sourceY=y+(oldEnd-end)*Math.max(0,1-(y-end)/Math.max(1,ry));
 				pc.drawImage(native,x0+(Number(card.marginX)||0)*card.width,sourceY-.5+(Number(card.marginY)||0)*card.height,pw,1,0,row,pw,1);
 			}
+			// Keep the native background bevel out of the colored wall core.
+			// Its shading differs from a room wall and otherwise appears as a
+			// horizontal smudge where this local corner section begins.
+			var clean=pc.getImageData(0,0,pw,ph),dx=n.arms.right?1:-1,dy=n.arms.down?1:-1;
+			for(var cy=0;cy<ph;cy++)for(var cx=0;cx<pw;cx++){
+				var gx=x0+cx+.5,gy=y0+cy+.5,ci=(cy*pw+cx)*4;
+				var inVertical=!n.straight&&(gx-n.x)*dx>=0&&(gx-n.x)*dx<vp.length*ux/2&&(gy-n.y)*dy>=0;
+				var inHorizontal=(n.straight||(gx-n.x)*dx>=0)&&(gy-n.y)*dy>=0&&(gy-n.y)*dy<hp.length*uy/2;
+				if(!inVertical&&!inHorizontal)continue;
+				var coreTable=horizontalTables.get(material.top),along=Math.max(0,Math.min(w-1,Math.floor(gx))),core=(Math.min(material.top.length-1,Math.floor(material.top.anchor))*w+along)*4;
+				for(var ch=0;ch<4;ch++)clean.data[ci+ch]=coreTable[core+ch];
+			}pc.putImageData(clean,0,0);
 			// Continue the room-facing outline through the native square inside
 			// turn. The rounded exterior remains the original frame artwork.
 			if(outlineDepth){var dx=n.arms.right?1:-1,dy=n.arms.down?1:-1,ix=n.x+(dx>0?vp.length-vp.anchor:-vp.anchor)*ux,iy=n.y+(dy>0?hp.length-hp.anchor:-hp.anchor)*uy;
-				pc.strokeStyle='rgba('+outlineColor.join(',')+')';pc.lineWidth=outlineDepth;pc.lineJoin='miter';pc.beginPath();pc.moveTo(n.x+dx*rx-x0,iy-dy*outlineDepth/2-y0);pc.lineTo(ix-dx*outlineDepth/2-x0,iy-dy*outlineDepth/2-y0);pc.lineTo(ix-dx*outlineDepth/2-x0,n.y+dy*ry-y0);pc.stroke();}
+				pc.strokeStyle='rgba('+outlineColor.join(',')+')';pc.lineWidth=outlineDepth;pc.lineJoin='miter';pc.beginPath();if(n.straight){pc.moveTo(0,iy-dy*outlineDepth/2-y0);pc.lineTo(pw,iy-dy*outlineDepth/2-y0);}else{pc.moveTo(n.x+dx*rx-x0,iy-dy*outlineDepth/2-y0);pc.lineTo(ix-dx*outlineDepth/2-x0,iy-dy*outlineDepth/2-y0);pc.lineTo(ix-dx*outlineDepth/2-x0,n.y+dy*ry-y0);}pc.stroke();}
 			var pixels=pc.getImageData(0,0,pw,ph),existing=shape.getImageData(x0,y0,pw,ph);
 			for(var py=0;py<ph;py++)for(var px=0;px<pw;px++){
-				var i=(py*pw+px)*4,fade=Math.min(1,Math.max(0,(rx-Math.abs(x0+px+.5-n.x))/(rx*.35)),Math.max(0,(ry-Math.abs(y0+py+.5-n.y))/(ry*.35)));
-				var inside=(x0+px+.5-n.x)*(n.arms.right?1:-1)>=0&&(y0+py+.5-n.y)*(n.arms.down?1:-1)>=0;
-				if(inside&&pixels.data[i+3]<254)continue;
+				var i=(py*pw+px)*4,fade=Math.min(1,(n.straight?1:Math.max(0,(rx-Math.abs(x0+px+.5-n.x))/(rx*.35))),Math.max(0,(ry-Math.abs(y0+py+.5-n.y))/(ry*.35)));
+				var inside=(n.straight||(x0+px+.5-n.x)*(n.arms.right?1:-1)>=0)&&(y0+py+.5-n.y)*(n.arms.down?1:-1)>=0;
+				var globalIndex=((y0+py)*w+x0+px)*4;
+				if(inside&&(data[globalIndex+3]<254||pixels.data[i+3]<254))continue;
 				// Interpolate premultiplied pixels in one operation. Erasing then
 				// drawing a feathered patch reduces alpha twice and leaves a halo.
 				var oldAlpha=existing.data[i+3]/255*(1-fade),newAlpha=pixels.data[i+3]/255*fade,alpha=oldAlpha+newAlpha;

@@ -32,4 +32,13 @@ if((process.env.TEST_COLOR||'WG')==='WG'){
   if(color[1]>100&&reference[1]>100)assert.ok(color.every((v,i)=>Math.abs(v-reference[i])<12),'No rectangular corner seam '+[y,dy,t,color,reference]);
  }
 }
-console.log('PASS: actual project, stock frame masks, native rounded joins, continuous shadows and no quadrant seam ('+(process.env.TEST_COLOR||'WG')+').');})();
+// Corner handoffs must not introduce a gray bar across the inside edge.
+for(const x of [left+8,px-8])for(let t=20;t<=45;t++)assert.ok(Math.max(...pixel(x,bottom-t))<25,'No gray shadow at the beginning of a lower corner patch');
+// The native lower bevel is one thin edge, not a generated edge plus the
+// original typeline border. Check the full middle, including the blend.
+for(const fraction of [.1,.25,.5,.75,.9]){
+ const x=left+(px-left)*fraction;let dark=0;
+ for(let t=1;t<25;t++)if(Math.max(...pixel(x,bottom+t))<60)dark++;
+ assert.ok(dark>=2&&dark<=4,'Single thin lower border ('+dark+' pixels)');
+}
+console.log('PASS: actual project, stock frame masks, native rounded joins, continuous shadows, no patch smudges, a thin bottom edge and no quadrant seam ('+(process.env.TEST_COLOR||'WG')+').');})();
