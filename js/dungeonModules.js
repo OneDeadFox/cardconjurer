@@ -93,6 +93,17 @@
 			if(horizontal){shape.strokeStyle=horizontal.color;shape.lineWidth=horizontal.end-horizontal.start;shape.beginPath();shape.moveTo(joinX,joinY);shape.lineTo(n.x+dx*rx,joinY);shape.stroke();}
 			if(vertical){shape.strokeStyle=vertical.color;shape.lineWidth=vertical.end-vertical.start;shape.beginPath();shape.moveTo(joinX,joinY);shape.lineTo(joinX,n.y+dy*ry);shape.stroke();}
 		});
+		// Door ends are cuts across a wall, not left/right source-frame edges.
+		// Give both ends the same dark cap; the source's outer highlight must not
+		// become a pale, apparently open end on the left of each doorway.
+		doorways(modules()).forEach(function(door){
+			var horizontal=door.axis==='horizontal',x=door.x*w,y=door.y*h,p=profileAt(horizontal,x,y),u=unit(horizontal);
+			var opening=Math.min(h*.0381,door.span*(horizontal?w:h)*.5),depth=Math.max(1,h*.001);
+			var dark=null;colors(p).forEach(function(stops){stops.forEach(function(stop){var c=stop.rgba;if(c[3]>.7&&Math.max(c[0],c[1],c[2])<90&&(!dark||c[0]+c[1]+c[2]<dark[0]+dark[1]+dark[2]))dark=c;});});
+			shape.fillStyle=dark?'rgba('+dark.join(',')+')':'rgba(20,20,20,.9)';
+			if(horizontal){shape.fillRect(x-opening/2-depth,y-p.anchor*u,depth,p.length*u);shape.fillRect(x+opening/2,y-p.anchor*u,depth,p.length*u);}
+			else{shape.fillRect(x-p.anchor*u,y-opening/2-depth,p.length*u,depth);shape.fillRect(x-p.anchor*u,y+opening/2,p.length*u,depth);}
+		});
 		wallRasterCache.set(key,canvas);if(wallRasterCache.size>3)wallRasterCache.delete(wallRasterCache.keys().next().value);context.drawImage(canvas,0,0);return true;
 	}
 	// Sample a long horizontal stroke from the active pipeline artwork. This

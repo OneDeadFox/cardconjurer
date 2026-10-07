@@ -49,3 +49,15 @@ for(const [x,y] of [[48,690],[55,698],[552,690],[540,698],[552,110],[540,99]]){
  assert.deepEqual(pixel(walls.getContext('2d'),x,y),[21,22,23,255],'Inner shadow continues through rounded corner at '+x+','+y);
 }
 console.log('PASS: all three rounded corner patches retain adjoining inner shadow lines.');
+// Both sides of every doorway have dark end caps, with the gap left open.
+for(const d of ctx.DungeonModules.doorways(card.dungeonModules)){
+ const horizontal=d.axis==='horizontal',x=d.x*600,y=d.y*840;
+ const half=Math.min(840*.0381,d.span*(horizontal?600:840)*.5)/2;
+ for(const sign of [-1,1]){
+  const end=(horizontal?x:y)+sign*half;
+  const samples=[-1,0,1].map(offset=>pixel(walls.getContext('2d'),Math.floor(horizontal?end+offset:x),Math.floor(horizontal?y:end+offset))).filter(c=>c[3]>100);
+  assert.ok(samples.some(c=>Math.max(...c.slice(0,3))<100),'Dark cap on '+(sign<0?'left/top':'right/bottom')+' end');
+ }
+ assert.equal(pixel(walls.getContext('2d'),Math.round(x),Math.round(y))[3],0,'Door gap stays open');
+}
+console.log('PASS: matching dark caps at both doorway ends and unobstructed openings.');
