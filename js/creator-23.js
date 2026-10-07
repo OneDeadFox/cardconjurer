@@ -4119,7 +4119,10 @@ function writeText(textObject, targetContext) {
 					inkBounds.bottom - inkBounds.top, textWidth, ptShift[0] + permaShift[0]);
 			}
 			//if the word goes past the max line width, go to the next line
-			if (wordToWrite && lineContext.measureText(wordToWrite).width + currentX >= lineWidth && textArcRadius == 0) {
+			// An oversized word on an empty line must not create a blank line.
+			// Spaces may wrap a populated line; exact-width words already fit.
+			if (wordToWrite && lineContext.measureText(wordToWrite).width + currentX > lineWidth + .01 && textArcRadius == 0 &&
+				(textOneLine || currentX > startingCurrentX)) {
 				if (textOneLine && startingTextSize > collisionMinimumTextSize) {
 					// Does not fit beside the active neighboring field. Retry at
 					// a smaller size until it fits; CSV checks the final reduction.
