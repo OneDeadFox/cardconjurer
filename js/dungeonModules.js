@@ -47,6 +47,16 @@
 		function color(profile,index,position){var stops=colors(profile)[Math.max(0,Math.min(profile.length-1,index))],a=stops[0],b=stops[stops.length-1];for(var i=1;i<stops.length;i++){if(position<=stops[i].position){a=stops[i-1];b=stops[i];break;}}var t=Math.max(0,Math.min(1,(position-a.position)/(b.position-a.position||1)));return a.rgba.map(function(v,i){return v+(b.rgba[i]-v)*t;});}
 		var tables=new WeakMap(),sy=unit(true),sx=unit(false);
 		function table(profile,horizontal){var old=tables.get(profile),span=horizontal?w:h;if(old&&old.span===span)return old.data;var data=new Uint8ClampedArray(profile.length*span*4);for(var row=0;row<profile.length;row++)for(var position=0;position<span;position++){var relative=(position/span-(horizontal?(placement.x||0):(placement.y||0)))/(horizontal?(placement.width||1):(placement.height||1)),rgba=color(profile,row,relative),i=(row*span+position)*4;data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=rgba[3]*255;}tables.set(profile,{span:span,data:data});return data;}
+		// The texture supplies color and bevel, while the union supplies the
+		// silhouette. A right-side source strip can have a highlight instead of
+		// a dark edge; it must not remove the outline of a room or a T junction.
+		var outlineDepth=0,outlineColor=null;
+		[material.top,material.bottom].forEach(function(p){[0,1].forEach(function(end){
+			var count=0,last=null;for(var row=0;row<Math.ceil(p.length*.3);row++){
+				var c=color(p,end?p.length-1-row:row,.5);if(c[3]<.7||Math.max(c[0],c[1],c[2])>=90)break;count++;last=c;
+			}
+			if(count*sy>outlineDepth){outlineDepth=count*sy;outlineColor=last;}
+		});});
 		var horizontalTables=new Map(),verticalTables=new Map();[material.top,material.bottom].forEach(function(p){horizontalTables.set(p,table(p,true));});[material.left,material.right].filter(Boolean).forEach(function(p){verticalTables.set(p,table(p,false));});
 		for(var y=0;y<h;y++){var hp=profileAt(true,0,y),ht=horizontalTables.get(hp);for(var x=0;x<w;x++){var i=(y*w+x)*4;if(!data[i+3])continue;
 			var vp=profileAt(false,x,y),dt=distance(x,y,0,-1)/sy,db=distance(x,y,0,1)/sy,dl=distance(x,y,-1,0)/sx,dr=distance(x,y,1,0)/sx;
@@ -56,6 +66,14 @@
 			fraction=dr/Math.max(.5,vp.length-vp.anchor);if(fraction<best){profile=vp;depth=dr;side=1;position=y;span=h;lookup=verticalTables.get(vp)||table(vp,false);}
 			depth=Math.min(depth,side?profile.length-profile.anchor-.5:profile.anchor-.5);var index=side?profile.length-1-Math.floor(depth):Math.floor(depth),j=(Math.max(0,Math.min(profile.length-1,index))*span+position)*4;
 			output.data[i]=lookup[j];output.data[i+1]=lookup[j+1];output.data[i+2]=lookup[j+2];output.data[i+3]=data[i+3]*lookup[j+3]/255;
+			if(outlineDepth){
+				var boundary=Math.min(dt*sy,db*sy,dl*sx,dr*sx);
+				// Diagonal neighbors complete the square inside turns where two
+				// straight edges meet; axis-only distances leave pale square bites.
+				if(boundary>=outlineDepth)for(var ox=-1;ox<=1;ox+=2)for(var oy=-1;oy<=1;oy+=2)boundary=Math.min(boundary,distance(x,y,ox,oy));
+				if(boundary<outlineDepth){output.data[i]=outlineColor[0];output.data[i+1]=outlineColor[1];output.data[i+2]=outlineColor[2];output.data[i+3]=data[i+3];}
+			}
+
 		}}
 
 		shape.putImageData(output,0,0);

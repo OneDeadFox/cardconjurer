@@ -25,6 +25,21 @@ const pixel=(c,x,y)=>Array.from(c.getContext('2d').getImageData(x,y,1,1).data);
  assert.ok(Math.abs(vertical[0]-(220*(1-expected)+40*expected))<2&&Math.abs(vertical[2]-(40*(1-expected)+220*expected))<2,'Vertical wall uses destination X mask');assert.equal(vertical[3],255);
  for(const [x,y] of [[296,94],[306,94],[306,100],[45,footerY-5],[45,footerY],[50,footerY]])assert.equal(pixel(walls,x,y)[3],255,'Both T joins remain connected without native strokes at '+x+','+y);
  const door=ctx.DungeonModules.doorways(card.dungeonModules)[0];assert.equal(pixel(walls,Math.round(door.x*w),footerY)[3],0);
+
+ // Asymmetric artwork has a dark left bevel but a pale right edge. Geometry
+ // must still outline both sides of every wall and the inside turns of a T.
+ for(const key of ['pipelineW','pipelineG']){
+  const p=sources[key].getContext('2d');p.fillStyle='#101010';
+  for(const y of [20,90,700,760]){p.fillRect(43,y,515,1);p.fillRect(43,y+7,515,1);}
+  p.fillRect(43,20,1,748);p.fillRect(554,20,1,748);
+ }
+ await ctx.TemplateThemes.apply(card,{colorIdentity:'WG'});
+ for(const frame of card.frames)frame.image=await load(frame.src);
+ walls.getContext('2d').clearRect(0,0,w,h);ctx.DungeonModules.drawWalls(walls.getContext('2d'),fx.getContext('2d'));
+ for(const [x,y] of [[557,300],[307,300],[307,footerY-5],[309,footerY-4]]){
+  const c=pixel(walls,x,y);assert.ok(c[3]>100&&Math.max(...c.slice(0,3))<60,'Continuous shadow on pale right edges and inside T turns at '+x+','+y);
+ }
+ for(let y=footerY-3;y<=footerY+2;y++)for(let x=304;x<=307;x++)assert.ok(pixel(walls,x,y)[3]>240,'T core has no missing squares');
  await ctx.TemplateThemes.apply(card,{colorIdentity:'W'});assert.equal(card.frames[0].dungeonPipelineMaterials,undefined);
  console.log('PASS: themed import, rules family classification, serialized materials, complete wall overlays, vertical blend, visible T arms, doors, monocolor reset.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
